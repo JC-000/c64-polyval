@@ -1,9 +1,16 @@
 ; =============================================================================
 ; polyval.asm - POLYVAL GF(2^128) universal hash (RFC 8452)
-; Algorithm: POLYVAL(H, X_1..X_s) where S_0=0, S_i = (S_{i-1} XOR X_i) * H
+; Algorithm: POLYVAL(H, X_1..X_s) where S_0=0, S_i = dot(S_{i-1} XOR X_i, H)
 ; Polynomial: x^128 + x^127 + x^126 + x^121 + 1
-; Reduction constant (little-endian): byte[0] = $01, byte[15] = $C2, rest $00
-; Strategy: 4-bit nibble table lookup for GF(2^128) multiplication
+;
+; The POLYVAL dot product dot(a, b) = a * b * x^{-128} mod p, which is
+; equivalent to GHASH-style multiplication in the POLYVAL field.
+;
+; Strategy: 4-bit nibble table lookup with LEFT-shift processing.
+; Table is precomputed from H' = H * x^{-128} using left-shift doubling.
+;
+; Left-shift reduction (x^128 mod p): byte[0] ^= $01, byte[15] ^= $C2
+; Right-shift reduction (x^{-1} mod p): byte[15] ^= $E1
 ; =============================================================================
 
 ; =============================================================================
@@ -21,8 +28,8 @@ polyval_init:
 
 ; =============================================================================
 ; polyval_double - left-shift 128-bit value at polyval_acc by 1 bit
-; If carry out, XOR with reduction constant
-; Used during table precomputation
+; If carry out, XOR with left-shift reduction constant
+; Used during table precomputation and multiplication
 ; =============================================================================
 polyval_double:
         clc
@@ -44,7 +51,7 @@ polyval_double:
         rol polyval_acc+14
         rol polyval_acc+15
         bcc @no_reduce
-        ; XOR with reduction constant: byte[0] ^= $01, byte[15] ^= $C2
+        ; XOR with left-shift reduction: byte[0] ^= $01, byte[15] ^= $C2
         lda polyval_acc
         eor #$01
         sta polyval_acc
@@ -55,12 +62,87 @@ polyval_double:
         rts
 
 ; =============================================================================
+; polyval_right_shift_1 - right-shift 128-bit value at polyval_acc by 1 bit
+; If bit 0 was set, XOR with right-shift reduction: byte[15] ^= $E1
+; Used during H' = H * x^{-128} precomputation (128 right-shifts)
+; =============================================================================
+polyval_right_shift_1:
+        ; Save bit 0 for reduction
+        lda polyval_acc
+        and #$01
+        pha
+
+        ; Shift right 1 bit from MSB to LSB
+        clc
+        ror polyval_acc+15
+        ror polyval_acc+14
+        ror polyval_acc+13
+        ror polyval_acc+12
+        ror polyval_acc+11
+        ror polyval_acc+10
+        ror polyval_acc+9
+        ror polyval_acc+8
+        ror polyval_acc+7
+        ror polyval_acc+6
+        ror polyval_acc+5
+        ror polyval_acc+4
+        ror polyval_acc+3
+        ror polyval_acc+2
+        ror polyval_acc+1
+        ror polyval_acc
+
+        ; Reduce if bit 0 was set: XOR byte[15] with $E1
+        pla
+        beq @no_reduce
+        lda polyval_acc+15
+        eor #$e1
+        sta polyval_acc+15
+@no_reduce:
+        rts
+
+; =============================================================================
+; polyval_shift_left_4 - left-shift polyval_acc by 4 bits with reduction
+; Implemented as 4 sequential calls to polyval_double
+; =============================================================================
+polyval_shift_left_4:
+        jsr polyval_double
+        jsr polyval_double
+        jsr polyval_double
+        jsr polyval_double
+        rts
+
+; =============================================================================
 ; polyval_precompute_table - build htable[0..15] from H
-; htable[0] = 0, htable[1] = H, htable[2] = 2*H, etc.
+;
+; Step 1: Compute H' = H * x^{-128} by right-shifting H 128 times
+; Step 2: Build table: htable[0] = 0, htable[1] = H',
+;         even entries = double(htable[i/2]), odd = htable[i-1] XOR H'
+;
 ; Each entry is 16 bytes. Total: 256 bytes.
-; Strategy: even entries = double(htable[i/2]), odd = htable[i-1] XOR H
 ; =============================================================================
 polyval_precompute_table:
+        ; Step 1: Compute H' = H * x^{-128}
+        ; Copy H to polyval_acc, then right-shift 128 times
+        ldx #0
+@copy_h_to_acc:
+        lda polyval_h,x
+        sta polyval_acc,x
+        inx
+        cpx #16
+        bne @copy_h_to_acc
+
+        ; Right-shift 128 times
+        lda #128
+        sta pv_shift_ctr
+@shift_loop:
+        jsr polyval_right_shift_1
+        dec pv_shift_ctr
+        bne @shift_loop
+
+        ; polyval_acc now contains H' = H * x^{-128}
+        ; Copy H' to htable[1] and also back to polyval_h for table building
+        ; (We use polyval_h temporarily to store H' during table build)
+
         ; htable[0] = 0
         ldx #0
         lda #0
@@ -70,24 +152,17 @@ polyval_precompute_table:
         cpx #16
         bne @zero_entry
 
-        ; htable[1] = H
+        ; htable[1] = H'
         ldx #0
-@copy_h:
-        lda polyval_h,x
+@store_h_prime:
+        lda polyval_acc,x
         sta polyval_htable+16,x
         inx
         cpx #16
-        bne @copy_h
+        bne @store_h_prime
 
-        ; htable[2] = 2*H
-        ldx #0
-@copy_for_double:
-        lda polyval_htable+16,x
-        sta polyval_acc,x
-        inx
-        cpx #16
-        bne @copy_for_double
-
+        ; htable[2] = 2*H' (left-shift double)
+        ; polyval_acc still contains H'
         jsr polyval_double
 
         ldx #0
@@ -166,7 +241,7 @@ polyval_precompute_table:
         cpx #16
         bne @copy_prev
 
-        ; XOR with htable[1] = H
+        ; XOR with htable[1] = H'
         ldx #0
 @xor_h:
         lda polyval_acc,x
@@ -208,14 +283,18 @@ polyval_precompute_table:
         rts
 
 pv_tbl_idx:     !byte 0
+pv_shift_ctr:   !byte 0
 
 ; =============================================================================
 ; polyval_multiply - multiply polyval_acc by H using 4-bit table lookup
 ; Process each byte of the accumulator as two nibbles (32 lookups total)
 ;
 ; Algorithm: result = 0; for i = 15 downto 0:
-;   result >>= 4 (with reduction); result ^= htable[byte_high_nibble]
-;   result >>= 4 (with reduction); result ^= htable[byte_low_nibble]
+;   result <<= 4 (with reduction); result ^= htable[byte_high_nibble]
+;   result <<= 4 (with reduction); result ^= htable[byte_low_nibble]
+;
+; Uses LEFT-shift-by-4 with the table built from H' = H * x^{-128},
+; so the result is acc * H' = acc * H * x^{-128} = dot(acc, H).
 ; =============================================================================
 polyval_multiply:
         ; Save accumulator bytes (they get overwritten during computation)
@@ -253,8 +332,8 @@ polyval_multiply:
         lsr                     ; high nibble in A (0-15)
         sta pv_mul_nibble
 
-        ; Right-shift result by 4 bits (with reduction)
-        jsr polyval_shift_right_4
+        ; Left-shift result by 4 bits (with reduction)
+        jsr polyval_shift_left_4
 
         ; XOR htable[nibble] into result
         jsr polyval_xor_table_entry
@@ -264,8 +343,8 @@ polyval_multiply:
         and #$0f
         sta pv_mul_nibble
 
-        ; Right-shift result by 4 bits
-        jsr polyval_shift_right_4
+        ; Left-shift result by 4 bits
+        jsr polyval_shift_left_4
 
         ; XOR htable[nibble] into result
         jsr polyval_xor_table_entry
@@ -279,59 +358,6 @@ polyval_multiply:
 pv_mul_input:   !fill 16, 0    ; saved copy of input accumulator
 pv_mul_byte_idx: !byte 0
 pv_mul_nibble:  !byte 0
-
-; =============================================================================
-; polyval_shift_right_4 - right-shift polyval_acc by 4 bits with reduction
-; Implemented as 4 sequential single-bit right-shifts for correctness
-; =============================================================================
-polyval_shift_right_4:
-        jsr polyval_shift_right_1
-        jsr polyval_shift_right_1
-        jsr polyval_shift_right_1
-        jsr polyval_shift_right_1
-        rts
-
-; =============================================================================
-; polyval_shift_right_1 - right-shift polyval_acc by 1 bit with reduction
-; =============================================================================
-polyval_shift_right_1:
-        ; Save bit 0 for reduction
-        lda polyval_acc
-        and #$01
-        pha
-
-        ; Shift right 1 bit from MSB to LSB
-        clc
-        ror polyval_acc+15
-        ror polyval_acc+14
-        ror polyval_acc+13
-        ror polyval_acc+12
-        ror polyval_acc+11
-        ror polyval_acc+10
-        ror polyval_acc+9
-        ror polyval_acc+8
-        ror polyval_acc+7
-        ror polyval_acc+6
-        ror polyval_acc+5
-        ror polyval_acc+4
-        ror polyval_acc+3
-        ror polyval_acc+2
-        ror polyval_acc+1
-        ror polyval_acc
-
-        ; Reduce if bit 0 was set
-        pla
-        beq @no_reduce
-        lda polyval_acc+15
-        eor #$c2
-        sta polyval_acc+15
-        ; Note: byte[0] ^= $01 is implicit since the bit we just shifted in was 0
-        ; and we need bit 127 set. Actually let's be explicit:
-        lda polyval_acc
-        eor #$01
-        sta polyval_acc
-@no_reduce:
-        rts
 
 ; =============================================================================
 ; polyval_xor_table_entry - XOR htable[pv_mul_nibble] into polyval_acc
