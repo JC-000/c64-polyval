@@ -682,6 +682,8 @@ gcmsiv_decrypt:
         bne @save_tag
 
         ; Copy decrypted data to pt_buf for tag computation
+        lda gcmsiv_pt_len
+        beq @skip_copy          ; skip if zero-length plaintext
         ldx #0
 @copy_dec:
         lda gcmsiv_dec_buf,x
@@ -689,6 +691,7 @@ gcmsiv_decrypt:
         inx
         cpx gcmsiv_pt_len
         bne @copy_dec
+@skip_copy:
 
         ; Recompute tag
         jsr gcmsiv_compute_tag_base
