@@ -42,6 +42,7 @@ tools/
   polyval_reference.py  # Python reference: POLYVAL + AES-256-GCM-SIV
   test_polyval_direct.py  # direct jsr() POLYVAL unit tests
   test_gcmsiv_polyval.py  # end-to-end GCM-SIV integration tests
+  run_all_tests.py      # parallel runner for both test suites
 test/
   rfc8452_vectors.json  # RFC 8452 Appendix A + C.2 test vectors
 ```
@@ -69,8 +70,11 @@ Tests require Python 3.10+, [VICE](https://vice-emu.sourceforge.io/) (x64sc), an
 # Run Python reference self-test (no VICE needed)
 python3 tools/polyval_reference.py
 
-# Run POLYVAL regression tests (requires VICE) — 153 tests, deterministic
-python3 tools/test_polyval_direct.py [--seed N] [--verbose]
+# Run both test suites in parallel (recommended)
+python3 tools/run_all_tests.py [--seed N] [--iterations N] [--verbose]
+
+# Run POLYVAL regression tests (requires VICE) — 153+ tests, deterministic
+python3 tools/test_polyval_direct.py [--seed N] [--iterations N] [--verbose]
 
 # Run end-to-end GCM-SIV tests (requires VICE)
 python3 tools/test_gcmsiv_polyval.py [--iterations 15] [--seed N]
@@ -78,7 +82,9 @@ python3 tools/test_gcmsiv_polyval.py [--iterations 15] [--seed N]
 
 **`test_polyval_direct.py`** (153 tests): regression suite for `polyval.asm`, designed for use during performance optimization. Tests every routine individually via direct `jsr()` calls — `polyval_init`, `polyval_double`, `polyval_right_shift_1`, `polyval_shift_left_4`, `polyval_xor_table_entry`, `polyval_precompute_table`, `polyval_multiply` (in isolation), `polyval_update`, full multi-block pipeline, and multiply-vs-dot-product consistency. Deterministic seed (8452) by default; includes transient VICE connection retry logic.
 
-**`test_gcmsiv_polyval.py`** (~15 tests): verifies the full AES-256-GCM-SIV pipeline — RFC 8452 C.2 encrypt/decrypt vectors, tampered tag detection, and random roundtrip tests at boundary plaintext lengths (1-64 bytes), comparing C64 output against the Python reference.
+**`test_gcmsiv_polyval.py`** (~15 tests): verifies the full AES-256-GCM-SIV pipeline — RFC 8452 C.2 encrypt/decrypt vectors, tampered tag detection, and random roundtrip tests at boundary plaintext lengths (1-64 bytes), comparing C64 output against the Python reference. Includes transient VICE connection retry logic.
+
+**`run_all_tests.py`**: parallel test runner that launches two VICE instances simultaneously via `ViceInstanceManager` and runs both suites concurrently using `ThreadPoolExecutor`. Builds once, shares labels, captures per-suite output cleanly, and prints a combined summary with wall-clock time.
 
 ## Status
 
