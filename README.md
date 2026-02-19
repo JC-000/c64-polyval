@@ -88,4 +88,4 @@ python3 tools/test_gcmsiv_polyval.py [--iterations 15] [--seed N]
 
 ## Status
 
-The POLYVAL implementation and GCM-SIV integration are functionally complete. The long-term goal is to merge this into [c64-aes256-ecdsa](https://github.com/JC-000/c64-aes256-ecdsa), replacing the simplified CBC-MAC with true POLYVAL.
+The POLYVAL implementation and GCM-SIV integration are functionally complete, passing all 232 tests (217 POLYVAL + 15 GCM-SIV) including all RFC 8452 C.2 vectors for both encryption and decryption. The long-term goal is to merge this into [c64-aes256-ecdsa](https://github.com/JC-000/c64-aes256-ecdsa), replacing the simplified CBC-MAC with true POLYVAL.
