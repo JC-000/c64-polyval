@@ -19,7 +19,7 @@ Tested routines:
   Full POLYVAL pipeline   - init + precompute + multi-block update
 
 Usage:
-    python3 tools/test_polyval_direct.py [--seed S] [--verbose]
+    python3 tools/test_polyval_direct.py [--seed S] [--iterations N] [--verbose]
 
 Requires: Python 3.10+, c64_test_harness, VICE x64sc
 """
@@ -63,12 +63,13 @@ PRG_PATH = os.path.join(PROJECT_ROOT, "build", "polyval.prg")
 LABELS_PATH = os.path.join(PROJECT_ROOT, "build", "labels.txt")
 
 DEFAULT_SEED = 8452  # deterministic by default (RFC number)
+DEFAULT_ITERATIONS = 10  # random cases per test group
 
 VERBOSE = False
 
 # Max retries for transient VICE connection failures
 JSR_RETRIES = 3
-JSR_RETRY_DELAY = 1.0
+JSR_RETRY_DELAY = 0.3
 
 
 # ---------------------------------------------------------------------------
@@ -77,7 +78,6 @@ JSR_RETRY_DELAY = 1.0
 
 def robust_jsr(transport, addr, timeout=10.0, retries=JSR_RETRIES):
     """Call jsr() with retry logic for transient VICE connection failures."""
-    import time as _time
     for attempt in range(retries):
         try:
             return jsr(transport, addr, timeout=timeout)
@@ -85,7 +85,7 @@ def robust_jsr(transport, addr, timeout=10.0, retries=JSR_RETRIES):
             if attempt < retries - 1:
                 if VERBOSE:
                     print(f"  [retry {attempt+1}/{retries}] jsr(${addr:04X}) failed: {e}")
-                _time.sleep(JSR_RETRY_DELAY)
+                time.sleep(JSR_RETRY_DELAY)
             else:
                 raise
 
@@ -165,7 +165,7 @@ class TestResults:
 # Test: polyval_init
 # ---------------------------------------------------------------------------
 
-def test_init(transport, labels, results: TestResults):
+def test_init(transport, labels, results: TestResults, **_kwargs):
     """polyval_init must zero all 16 bytes of the accumulator."""
     print("\n[polyval_init]")
 
@@ -180,7 +180,7 @@ def test_init(transport, labels, results: TestResults):
 # Test: polyval_double
 # ---------------------------------------------------------------------------
 
-def test_double(transport, labels, results: TestResults):
+def test_double(transport, labels, results: TestResults, iterations=8):
     """polyval_double: left-shift by 1 with reduction when MSB carries out."""
     print("\n[polyval_double]")
 
@@ -203,7 +203,7 @@ def test_double(transport, labels, results: TestResults):
         results.check(f"double: {desc}", read_acc(transport, labels), expected)
 
     # Random cases
-    for i in range(8):
+    for i in range(iterations):
         val = random_block()
         write_acc(transport, labels, val)
         robust_jsr(transport, labels["polyval_double"], timeout=5.0)
@@ -216,7 +216,7 @@ def test_double(transport, labels, results: TestResults):
 # Test: polyval_right_shift_1
 # ---------------------------------------------------------------------------
 
-def test_right_shift(transport, labels, results: TestResults):
+def test_right_shift(transport, labels, results: TestResults, iterations=8):
     """polyval_right_shift_1: right-shift by 1 with $E1 reduction on LSB."""
     print("\n[polyval_right_shift_1]")
 
@@ -238,7 +238,7 @@ def test_right_shift(transport, labels, results: TestResults):
         results.check(f"rshift: {desc}", read_acc(transport, labels), expected)
 
     # Random cases
-    for i in range(8):
+    for i in range(iterations):
         val = random_block()
         write_acc(transport, labels, val)
         robust_jsr(transport, labels["polyval_right_shift_1"], timeout=5.0)
@@ -251,7 +251,7 @@ def test_right_shift(transport, labels, results: TestResults):
 # Test: polyval_shift_left_4
 # ---------------------------------------------------------------------------
 
-def test_shift_left_4(transport, labels, results: TestResults):
+def test_shift_left_4(transport, labels, results: TestResults, iterations=6):
     """polyval_shift_left_4: must equal 4 consecutive doubles."""
     print("\n[polyval_shift_left_4]")
 
@@ -274,7 +274,7 @@ def test_shift_left_4(transport, labels, results: TestResults):
                       expected)
 
     # Random cases
-    for i in range(6):
+    for i in range(iterations):
         val = random_block()
         write_acc(transport, labels, val)
         robust_jsr(transport, labels["polyval_shift_left_4"], timeout=5.0)
@@ -290,7 +290,7 @@ def test_shift_left_4(transport, labels, results: TestResults):
 # Test: polyval_precompute_table
 # ---------------------------------------------------------------------------
 
-def test_precompute_table(transport, labels, results: TestResults):
+def test_precompute_table(transport, labels, results: TestResults, iterations=3):
     """polyval_precompute_table: verify all 16 entries for multiple H values."""
     print("\n[polyval_precompute_table]")
 
@@ -301,8 +301,8 @@ def test_precompute_table(transport, labels, results: TestResults):
         ("00" * 16, "H = 0"),
     ]
 
-    # Add 3 random H values
-    for i in range(3):
+    # Add random H values
+    for i in range(iterations):
         h_values.append((random_block().hex(), f"random H #{i+1}"))
 
     for h_hex, desc in h_values:
@@ -330,7 +330,7 @@ def test_precompute_table(transport, labels, results: TestResults):
 # Test: polyval_xor_table_entry
 # ---------------------------------------------------------------------------
 
-def test_xor_table_entry(transport, labels, results: TestResults):
+def test_xor_table_entry(transport, labels, results: TestResults, **_kwargs):
     """polyval_xor_table_entry: XOR htable[nibble] into acc."""
     print("\n[polyval_xor_table_entry]")
 
@@ -364,7 +364,7 @@ def test_xor_table_entry(transport, labels, results: TestResults):
 # Test: polyval_multiply (in isolation)
 # ---------------------------------------------------------------------------
 
-def test_multiply_isolated(transport, labels, results: TestResults):
+def test_multiply_isolated(transport, labels, results: TestResults, iterations=5):
     """polyval_multiply: test the multiply in isolation.
 
     polyval_multiply reads polyval_acc, multiplies by H using the
@@ -396,7 +396,7 @@ def test_multiply_isolated(transport, labels, results: TestResults):
             b'\x00' * 16,
         ]
         # Add random acc values
-        for _ in range(5):
+        for _ in range(iterations):
             acc_values.append(random_block())
 
         for acc_idx, acc_val in enumerate(acc_values):
@@ -415,7 +415,7 @@ def test_multiply_isolated(transport, labels, results: TestResults):
 # Test: polyval_update
 # ---------------------------------------------------------------------------
 
-def test_update(transport, labels, results: TestResults):
+def test_update(transport, labels, results: TestResults, iterations=5):
     """polyval_update: XOR polyval_temp into acc, then multiply by H."""
     print("\n[polyval_update]")
 
@@ -431,7 +431,7 @@ def test_update(transport, labels, results: TestResults):
     ]
 
     # Add random cases
-    for i in range(5):
+    for i in range(iterations):
         cases.append((random_block(), random_block(), f"random #{i+1}"))
 
     for acc_val, block, desc in cases:
@@ -449,7 +449,7 @@ def test_update(transport, labels, results: TestResults):
 # Test: full POLYVAL pipeline
 # ---------------------------------------------------------------------------
 
-def test_full_pipeline(transport, labels, results: TestResults):
+def test_full_pipeline(transport, labels, results: TestResults, iterations=5):
     """Full POLYVAL(H, X1, ..., Xn) via init + precompute + update loop."""
     print("\n[full POLYVAL pipeline]")
 
@@ -488,28 +488,28 @@ def test_full_pipeline(transport, labels, results: TestResults):
                   "zero block")
 
     # 5. Random: 1 block
-    for i in range(5):
+    for i in range(iterations):
         h = random_block()
         blocks = [random_block()]
         _run_pipeline(transport, labels, h, blocks, results,
                       f"random 1-block #{i+1}")
 
     # 6. Random: 2 blocks
-    for i in range(5):
+    for i in range(iterations):
         h = random_block()
         blocks = [random_block(), random_block()]
         _run_pipeline(transport, labels, h, blocks, results,
                       f"random 2-block #{i+1}")
 
     # 7. Random: 3 blocks
-    for i in range(3):
+    for i in range(max(1, iterations // 2)):
         h = random_block()
         blocks = [random_block() for _ in range(3)]
         _run_pipeline(transport, labels, h, blocks, results,
                       f"random 3-block #{i+1}")
 
     # 8. Random: 4 blocks
-    for i in range(3):
+    for i in range(max(1, iterations // 2)):
         h = random_block()
         blocks = [random_block() for _ in range(4)]
         _run_pipeline(transport, labels, h, blocks, results,
@@ -551,7 +551,7 @@ def _run_pipeline(transport, labels, h: bytes, blocks: list[bytes],
 # Test: multiply consistency (table vs dot product)
 # ---------------------------------------------------------------------------
 
-def test_multiply_vs_dot(transport, labels, results: TestResults):
+def test_multiply_vs_dot(transport, labels, results: TestResults, iterations=10):
     """Verify polyval_multiply matches polyval_dot for random inputs.
 
     polyval_multiply computes dot(acc, H) using the table.
@@ -559,7 +559,7 @@ def test_multiply_vs_dot(transport, labels, results: TestResults):
     """
     print("\n[multiply vs dot product consistency]")
 
-    for i in range(10):
+    for i in range(iterations):
         h = random_block()
         acc_val = random_block()
 
@@ -595,10 +595,17 @@ def main():
             seed = int(sys.argv[idx + 1])
     random.seed(seed)
 
+    iterations = DEFAULT_ITERATIONS
+    if "--iterations" in sys.argv:
+        idx = sys.argv.index("--iterations")
+        if idx + 1 < len(sys.argv):
+            iterations = int(sys.argv[idx + 1])
+
     VERBOSE = "--verbose" in sys.argv or "-v" in sys.argv
 
     print(f"POLYVAL Direct Regression Test")
     print(f"Seed: {seed} (reproduce with --seed {seed})")
+    print(f"Iterations: {iterations} random cases per test group")
 
     # Build
     print("\n=== Building ===")
@@ -652,7 +659,7 @@ def main():
 
         # Wait for program to initialize
         print("  Waiting for main menu...")
-        grid = wait_for_text(transport, "Q=QUIT", timeout=60.0)
+        grid = wait_for_text(transport, "Q=QUIT", timeout=60.0, verbose=False)
         if grid is None:
             print("FATAL: Main menu did not appear")
             dump_screen(transport, "startup")
@@ -677,7 +684,7 @@ def main():
 
         for group_name, test_fn in test_groups:
             try:
-                test_fn(transport, labels, results)
+                test_fn(transport, labels, results, iterations=iterations)
             except Exception as e:
                 results.fail(f"{group_name}: EXCEPTION",
                              f"    {type(e).__name__}: {e}")

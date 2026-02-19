@@ -24,7 +24,6 @@ Requires: Python 3.10+, c64_test_harness, VICE x64sc
 import json
 import os
 import random
-import struct
 import subprocess
 import sys
 import time
@@ -42,8 +41,6 @@ from c64_test_harness import (
     write_bytes,
     jsr,  # used via robust_jsr wrapper
     wait_for_text,
-    send_key,
-    send_text,
 )
 
 # ---------------------------------------------------------------------------
@@ -60,7 +57,7 @@ MAX_PT_LEN = 64  # C64 buffer limit
 
 # Max retries for transient VICE connection failures
 JSR_RETRIES = 3
-JSR_RETRY_DELAY = 1.0
+JSR_RETRY_DELAY = 0.3
 
 
 # ---------------------------------------------------------------------------
@@ -440,7 +437,7 @@ def main():
 
         # Wait for main menu
         print("  Waiting for main menu...")
-        grid = wait_for_text(transport, "Q=QUIT", timeout=60.0)
+        grid = wait_for_text(transport, "Q=QUIT", timeout=60.0, verbose=False)
         if grid is None:
             print("FATAL: Main menu did not appear")
             dump_screen(transport, "startup")
