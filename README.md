@@ -78,7 +78,7 @@ python3 tools/test_gcmsiv_polyval.py [--iterations 15] [--seed N]
 
 **`test_polyval_direct.py`** (153 tests): regression suite for `polyval.asm`, designed for use during performance optimization. Tests every routine individually via direct `jsr()` calls — `polyval_init`, `polyval_double`, `polyval_right_shift_1`, `polyval_shift_left_4`, `polyval_xor_table_entry`, `polyval_precompute_table`, `polyval_multiply` (in isolation), `polyval_update`, full multi-block pipeline, and multiply-vs-dot-product consistency. Deterministic seed (8452) by default; includes transient VICE connection retry logic.
 
-**`test_gcmsiv_polyval.py`** (~15 tests): verifies the full AES-256-GCM-SIV pipeline — RFC 8452 C.2 encrypt/decrypt vectors, tampered tag detection, and random roundtrip tests at boundary plaintext lengths (1-64 bytes), comparing C64 output against the Python reference.
+**`test_gcmsiv_polyval.py`** (~15 tests): verifies the full AES-256-GCM-SIV pipeline — RFC 8452 C.2 encrypt/decrypt vectors, tampered tag detection, and random roundtrip tests at boundary plaintext lengths (1-64 bytes), comparing C64 output against the Python reference. Includes transient VICE connection retry logic.
 
 ## Status
 

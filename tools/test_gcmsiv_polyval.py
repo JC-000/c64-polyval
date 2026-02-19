@@ -27,6 +27,7 @@ import random
 import struct
 import subprocess
 import sys
+import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__))))
 from polyval_reference import gcmsiv_encrypt as py_encrypt, gcmsiv_decrypt as py_decrypt
@@ -39,7 +40,7 @@ from c64_test_harness import (
     dump_screen,
     read_bytes,
     write_bytes,
-    jsr,
+    jsr,  # used via robust_jsr wrapper
     wait_for_text,
     send_key,
     send_text,
@@ -57,10 +58,25 @@ VECTORS_PATH = os.path.join(PROJECT_ROOT, "test", "rfc8452_vectors.json")
 DEFAULT_ITERATIONS = 15
 MAX_PT_LEN = 64  # C64 buffer limit
 
+# Max retries for transient VICE connection failures
+JSR_RETRIES = 3
+JSR_RETRY_DELAY = 1.0
+
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def robust_jsr(transport, addr, timeout=10.0, retries=JSR_RETRIES):
+    """Call jsr() with retry logic for transient VICE connection failures."""
+    for attempt in range(retries):
+        try:
+            return jsr(transport, addr, timeout=timeout)
+        except Exception as e:
+            if attempt < retries - 1:
+                time.sleep(JSR_RETRY_DELAY)
+            else:
+                raise
 
 def random_bytes(n: int) -> bytes:
     return bytes(random.randint(0, 255) for _ in range(n))
@@ -69,7 +85,7 @@ def random_bytes(n: int) -> bytes:
 def setup_key_and_expand(transport: ViceTransport, labels: Labels, key: bytes):
     """Write 32-byte key and call aes_key_expansion."""
     write_bytes(transport, labels["key_data"], key)
-    jsr(transport, labels["aes_key_expansion"], timeout=10.0)
+    robust_jsr(transport, labels["aes_key_expansion"], timeout=10.0)
 
 
 def c64_gcmsiv_encrypt(transport: ViceTransport, labels: Labels,
@@ -94,7 +110,7 @@ def c64_gcmsiv_encrypt(transport: ViceTransport, labels: Labels,
     write_bytes(transport, labels["gcmsiv_pt_len"], bytes([len(plaintext)]))
 
     # Run GCM-SIV encrypt
-    jsr(transport, labels["gcmsiv_encrypt"], timeout=120.0)
+    robust_jsr(transport, labels["gcmsiv_encrypt"], timeout=120.0)
 
     # Read results
     ct = read_bytes(transport, labels["gcmsiv_ct_buf"], len(plaintext))
@@ -132,7 +148,7 @@ def c64_gcmsiv_decrypt(transport: ViceTransport, labels: Labels,
     write_bytes(transport, labels["gcmsiv_tag"], tag)
 
     # Run GCM-SIV decrypt
-    jsr(transport, labels["gcmsiv_decrypt"], timeout=120.0)
+    robust_jsr(transport, labels["gcmsiv_decrypt"], timeout=120.0)
 
     # Read results
     pt = read_bytes(transport, labels["gcmsiv_dec_buf"], len(ciphertext))
