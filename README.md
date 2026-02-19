@@ -43,6 +43,7 @@ tools/
   test_polyval_direct.py  # direct jsr() POLYVAL unit tests
   test_gcmsiv_polyval.py  # end-to-end GCM-SIV integration tests
   run_all_tests.py      # parallel runner for both test suites
+  benchmark_polyval.py  # cycle-accurate CIA timer benchmarks
 test/
   rfc8452_vectors.json  # RFC 8452 Appendix A + C.2 test vectors
 ```
@@ -85,6 +86,25 @@ python3 tools/test_gcmsiv_polyval.py [--iterations 15] [--seed N]
 **`test_gcmsiv_polyval.py`** (~15 tests): verifies the full AES-256-GCM-SIV pipeline — RFC 8452 C.2 encrypt/decrypt vectors, tampered tag detection, and random roundtrip tests at boundary plaintext lengths (1-64 bytes), comparing C64 output against the Python reference. Includes transient VICE connection retry logic.
 
 **`run_all_tests.py`**: parallel test runner that launches two VICE instances simultaneously via `ViceInstanceManager` and runs both suites concurrently using `ThreadPoolExecutor`. Builds once, shares labels, captures per-suite output cleanly, and prints a combined summary with wall-clock time.
+
+## Benchmarks
+
+Cycle-accurate measurements using the C64's CIA #1 Timer A hardware (IRQs disabled via SEI for deterministic results):
+
+```bash
+python3 tools/benchmark_polyval.py [--samples N] [--verbose]
+```
+
+| Routine | Cycles | Description |
+|---|---:|---|
+| `polyval_double` | 101 | Left-shift 128 bits + reduction |
+| `polyval_shift_left_4` | 490 | Left-shift 4 bits (4x double) |
+| `polyval_xor_table_entry` | 385 | XOR htable[nibble] into accumulator |
+| `polyval_precompute_table` | 32,510 | Build htable[0..15] from H |
+| `polyval_multiply` | 31,157 | 4-bit nibble table multiply |
+| `polyval_update` | 31,485 | XOR block + multiply (full per-block cost) |
+
+The XOR loop overhead (update - multiply) is 329 cycles. A full POLYVAL hash of N blocks costs approximately 32,510 + N * 31,485 cycles (precompute + N updates).
 
 ## Status
 
