@@ -121,7 +121,7 @@ mc_b2:  !byte 0
 mc_b3:  !byte 0
 
 ; POLYVAL buffers
-polyval_acc:     !fill 16, 0   ; 128-bit accumulator
+; polyval_acc is in zero page ($10-$1F), defined in constants.asm
 polyval_h:       !fill 16, 0   ; 128-bit hash key H
 polyval_temp:    !fill 16, 0   ; scratch space for current block
 polyval_htable:  !fill 256, 0  ; 4-bit table: H*{0..15}, 16 entries * 16 bytes
