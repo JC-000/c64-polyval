@@ -119,6 +119,56 @@ def polyval_right_shift_1(val: int) -> int:
     return val
 
 
+def polyval_shift_left_4(val: int) -> int:
+    """Left-shift a 128-bit field element by 4 bits, with reduction.
+
+    Equivalent to 4 consecutive calls to polyval_double.
+    Used during nibble-based multiplication.
+    """
+    for _ in range(4):
+        val = polyval_double(val)
+    return val
+
+
+def polyval_shift_left_4_single_pass(val: int) -> int:
+    """Left-shift 128-bit field element by 4 bits using single-pass nibble combine.
+
+    Alternative algorithm: shift each byte's nibbles and combine with neighbor.
+    For reference/validation only - not used in the assembly implementation
+    because the 6502 cycle cost of nibble combining exceeds 4x ROL.
+
+    Uses a 16-entry reduction table for bits that overflow past bit 127.
+    """
+    # The 4-bit overflow (bits 128-131 after shift) indexes a reduction table.
+    # Each entry is the XOR-reduction of that overflow value.
+    # When bit 127+k overflows, it reduces as x^(128+k) mod p.
+    # x^128 mod p = POLYVAL_LEFT_REDUCE = x^127 + x^126 + x^121 + 1
+    # x^129 mod p = double(x^128 mod p), etc.
+    reduce_table = [0] * 16
+    # Build per-bit reductions: what does x^(128+k) reduce to?
+    bit_reduce = [0] * 4
+    r = POLYVAL_LEFT_REDUCE
+    for k in range(4):
+        bit_reduce[k] = r
+        # Next: multiply by x (left shift with reduction)
+        carry = (r >> 127) & 1
+        r = (r << 1) & MASK128
+        if carry:
+            r ^= POLYVAL_LEFT_REDUCE
+    for i in range(16):
+        v = 0
+        for bit in range(4):
+            if (i >> bit) & 1:
+                v ^= bit_reduce[bit]
+        reduce_table[i] = v
+
+    # Shift left by 4
+    shifted = (val << 4) & MASK128
+    overflow = (val >> 124) & 0x0F
+
+    return shifted ^ reduce_table[overflow]
+
+
 def polyval_precompute_table(h: int) -> list:
     """Build the 4-bit multiplication table htable[0..15] from H.
 

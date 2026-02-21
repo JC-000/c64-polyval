@@ -57,9 +57,12 @@ The core POLYVAL routines in `src/polyval.asm`:
 | `polyval_init` | Zero the 128-bit accumulator |
 | `polyval_double` | Left-shift 128 bits with reduction (x^128 mod p) |
 | `polyval_right_shift_1` | Right-shift 128 bits with reduction (x^{-1} mod p) |
+| `polyval_shift_left_4` | Left-shift 4 bits with reduction (4 inline doublings) |
 | `polyval_precompute_table` | Build htable[0..15] from H via H' = H * x^{-128} |
 | `polyval_multiply` | 4-bit nibble table multiply (32 lookups per 128-bit multiply) |
 | `polyval_update` | XOR block into accumulator, then multiply by H |
+
+**Performance optimization:** The 128-bit accumulator (`polyval_acc`) is allocated in zero page ($10-$1F), reducing ROL/LDA/STA cycle counts across all routines. The `polyval_shift_left_4` routine inlines 4 doublings directly, eliminating JSR/RTS overhead. Together these yield a ~16% speedup on the multiply hot path.
 
 The dot product `dot(a, b) = a * b * x^{-128} mod p` is computed via the precomputed table built from H' = H * x^{-128}, so that `acc * H' = acc * H * x^{-128} = dot(acc, H)`.
 
@@ -97,14 +100,14 @@ python3 tools/benchmark_polyval.py [--samples N] [--verbose]
 
 | Routine | Cycles | Description |
 |---|---:|---|
-| `polyval_double` | 101 | Left-shift 128 bits + reduction |
-| `polyval_shift_left_4` | 490 | Left-shift 4 bits (4x double) |
-| `polyval_xor_table_entry` | 385 | XOR htable[nibble] into accumulator |
-| `polyval_precompute_table` | 32,510 | Build htable[0..15] from H |
-| `polyval_multiply` | 31,157 | 4-bit nibble table multiply |
-| `polyval_update` | 31,485 | XOR block + multiply (full per-block cost) |
+| `polyval_double` | 85 | Left-shift 128 bits + reduction |
+| `polyval_shift_left_4` | 370 | Left-shift 4 bits (4 inline doublings) |
+| `polyval_xor_table_entry` | 353 | XOR htable[nibble] into accumulator |
+| `polyval_precompute_table` | 29,375 | Build htable[0..15] from H |
+| `polyval_multiply` | 26,074 | 4-bit nibble table multiply |
+| `polyval_update` | 26,439 | XOR block + multiply (full per-block cost) |
 
-The XOR loop overhead (update - multiply) is 329 cycles. A full POLYVAL hash of N blocks costs approximately 32,510 + N * 31,485 cycles (precompute + N updates).
+The XOR loop overhead (update - multiply) is 365 cycles. A full POLYVAL hash of N blocks costs approximately 29,375 + N * 26,439 cycles (precompute + N updates).
 
 ## Status
 

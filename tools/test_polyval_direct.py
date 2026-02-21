@@ -71,6 +71,33 @@ VERBOSE = False
 JSR_RETRIES = 3
 JSR_RETRY_DELAY = 0.3
 
+# ZP staging wrapper: polyval_acc lives in ZP ($10-$1F) which BASIC/KERNAL
+# modifies between jsr() calls. This wrapper copies a staging buffer to/from
+# ZP around each routine call so tests can reliably read/write polyval_acc.
+ZP_WRAPPER_ADDR = 0xC040
+ZP_STAGING_ADDR = 0xC100  # 16-byte staging buffer
+
+# Wrapper code at $C040 (24 bytes):
+#   Copy staging ($C100) → ZP ($10-$1F)
+#   JSR target (patched)
+#   Copy ZP ($10-$1F) → staging ($C100)
+#   RTS
+ZP_WRAPPER_CODE = bytes([
+    0xA2, 0x0F,             # $C040: LDX #15
+    0xBD, 0x00, 0xC1,       # $C042: LDA $C100,X
+    0x95, 0x10,             # $C045: STA $10,X
+    0xCA,                   # $C047: DEX
+    0x10, 0xF8,             # $C048: BPL $C042
+    0x20, 0x00, 0x00,       # $C04A: JSR $0000 (patched)
+    0xA2, 0x0F,             # $C04D: LDX #15
+    0xB5, 0x10,             # $C04F: LDA $10,X
+    0x9D, 0x00, 0xC1,       # $C051: STA $C100,X
+    0xCA,                   # $C054: DEX
+    0x10, 0xF8,             # $C055: BPL $C04F
+    0x60,                   # $C057: RTS
+])
+ZP_WRAPPER_JSR_OFFSET = 0x0B  # offset of JSR operand low byte
+
 
 # ---------------------------------------------------------------------------
 # Low-level C64 helpers
@@ -90,15 +117,29 @@ def robust_jsr(transport, addr, timeout=10.0, retries=JSR_RETRIES):
                 raise
 
 
+def install_zp_wrapper(transport):
+    """Install ZP staging wrapper at $C040 and clear staging buffer."""
+    write_bytes(transport, ZP_WRAPPER_ADDR, ZP_WRAPPER_CODE)
+    write_bytes(transport, ZP_STAGING_ADDR, b'\x00' * 16)
+
+
+def zp_jsr(transport, addr, timeout=10.0, retries=JSR_RETRIES):
+    """JSR via ZP wrapper: staging↔ZP copy around the call."""
+    lo = addr & 0xFF
+    hi = (addr >> 8) & 0xFF
+    write_bytes(transport, ZP_WRAPPER_ADDR + ZP_WRAPPER_JSR_OFFSET, bytes([lo, hi]))
+    return robust_jsr(transport, ZP_WRAPPER_ADDR, timeout=timeout, retries=retries)
+
+
 def write_acc(transport, labels, val: bytes):
-    """Write 16 bytes to polyval_acc."""
+    """Write 16 bytes to staging buffer (copied to ZP by wrapper)."""
     assert len(val) == 16
-    write_bytes(transport, labels["polyval_acc"], val)
+    write_bytes(transport, ZP_STAGING_ADDR, val)
 
 
 def read_acc(transport, labels) -> bytes:
-    """Read 16 bytes from polyval_acc."""
-    return read_bytes(transport, labels["polyval_acc"], 16)
+    """Read 16 bytes from staging buffer (copied from ZP by wrapper)."""
+    return read_bytes(transport, ZP_STAGING_ADDR, 16)
 
 
 def write_h(transport, labels, val: bytes):
@@ -171,7 +212,7 @@ def test_init(transport, labels, results: TestResults, **_kwargs):
 
     # Fill acc with non-zero pattern, then init
     write_acc(transport, labels, bytes(range(0x10, 0x20)))
-    robust_jsr(transport, labels["polyval_init"], timeout=5.0)
+    zp_jsr(transport, labels["polyval_init"], timeout=5.0)
     results.check("init zeros accumulator", read_acc(transport, labels),
                   b'\x00' * 16)
 
@@ -198,7 +239,7 @@ def test_double(transport, labels, results: TestResults, iterations=8):
 
     for val, desc in cases:
         write_acc(transport, labels, val)
-        robust_jsr(transport, labels["polyval_double"], timeout=5.0)
+        zp_jsr(transport, labels["polyval_double"], timeout=5.0)
         expected = int_to_bytes(py_double(bytes_to_int(val)))
         results.check(f"double: {desc}", read_acc(transport, labels), expected)
 
@@ -206,7 +247,7 @@ def test_double(transport, labels, results: TestResults, iterations=8):
     for i in range(iterations):
         val = random_block()
         write_acc(transport, labels, val)
-        robust_jsr(transport, labels["polyval_double"], timeout=5.0)
+        zp_jsr(transport, labels["polyval_double"], timeout=5.0)
         expected = int_to_bytes(py_double(bytes_to_int(val)))
         results.check(f"double: random #{i+1}", read_acc(transport, labels),
                       expected, context=f"input: {val.hex()}")
@@ -233,7 +274,7 @@ def test_right_shift(transport, labels, results: TestResults, iterations=8):
 
     for val, desc in cases:
         write_acc(transport, labels, val)
-        robust_jsr(transport, labels["polyval_right_shift_1"], timeout=5.0)
+        zp_jsr(transport, labels["polyval_right_shift_1"], timeout=5.0)
         expected = int_to_bytes(py_right_shift_1(bytes_to_int(val)))
         results.check(f"rshift: {desc}", read_acc(transport, labels), expected)
 
@@ -241,7 +282,7 @@ def test_right_shift(transport, labels, results: TestResults, iterations=8):
     for i in range(iterations):
         val = random_block()
         write_acc(transport, labels, val)
-        robust_jsr(transport, labels["polyval_right_shift_1"], timeout=5.0)
+        zp_jsr(transport, labels["polyval_right_shift_1"], timeout=5.0)
         expected = int_to_bytes(py_right_shift_1(bytes_to_int(val)))
         results.check(f"rshift: random #{i+1}", read_acc(transport, labels),
                       expected, context=f"input: {val.hex()}")
@@ -264,7 +305,7 @@ def test_shift_left_4(transport, labels, results: TestResults, iterations=6):
 
     for val in cases:
         write_acc(transport, labels, val)
-        robust_jsr(transport, labels["polyval_shift_left_4"], timeout=5.0)
+        zp_jsr(transport, labels["polyval_shift_left_4"], timeout=5.0)
         # Python: apply double 4 times
         v = bytes_to_int(val)
         for _ in range(4):
@@ -277,7 +318,7 @@ def test_shift_left_4(transport, labels, results: TestResults, iterations=6):
     for i in range(iterations):
         val = random_block()
         write_acc(transport, labels, val)
-        robust_jsr(transport, labels["polyval_shift_left_4"], timeout=5.0)
+        zp_jsr(transport, labels["polyval_shift_left_4"], timeout=5.0)
         v = bytes_to_int(val)
         for _ in range(4):
             v = py_double(v)
@@ -308,7 +349,7 @@ def test_precompute_table(transport, labels, results: TestResults, iterations=3)
     for h_hex, desc in h_values:
         h = bytes.fromhex(h_hex) if isinstance(h_hex, str) else h_hex
         write_h(transport, labels, h)
-        robust_jsr(transport, labels["polyval_precompute_table"], timeout=30.0)
+        zp_jsr(transport, labels["polyval_precompute_table"], timeout=30.0)
         c64_table = read_htable(transport, labels)
         py_table = py_precompute_table(bytes_to_int(h))
 
@@ -337,14 +378,14 @@ def test_xor_table_entry(transport, labels, results: TestResults, **_kwargs):
     # First precompute a known table
     h = bytes.fromhex("25629347589242761d31f826ba4b757b")
     write_h(transport, labels, h)
-    robust_jsr(transport, labels["polyval_precompute_table"], timeout=30.0)
+    zp_jsr(transport, labels["polyval_precompute_table"], timeout=30.0)
     py_table = py_precompute_table(bytes_to_int(h))
 
     # Test nibble 0 (should be no-op since htable[0] = 0)
     acc_val = random_block()
     write_acc(transport, labels, acc_val)
     write_bytes(transport, labels["pv_mul_nibble"], b'\x00')
-    robust_jsr(transport, labels["polyval_xor_table_entry"], timeout=5.0)
+    zp_jsr(transport, labels["polyval_xor_table_entry"], timeout=5.0)
     results.check("xor_table: nibble 0 (no-op)", read_acc(transport, labels),
                   acc_val)
 
@@ -353,7 +394,7 @@ def test_xor_table_entry(transport, labels, results: TestResults, **_kwargs):
         acc_val = random_block()
         write_acc(transport, labels, acc_val)
         write_bytes(transport, labels["pv_mul_nibble"], bytes([nibble]))
-        robust_jsr(transport, labels["polyval_xor_table_entry"], timeout=5.0)
+        zp_jsr(transport, labels["polyval_xor_table_entry"], timeout=5.0)
 
         expected = int_to_bytes(bytes_to_int(acc_val) ^ py_table[nibble])
         results.check(f"xor_table: nibble {nibble}", read_acc(transport, labels),
@@ -386,7 +427,7 @@ def test_multiply_isolated(transport, labels, results: TestResults, iterations=5
     for h_idx, h in enumerate(h_keys):
         # Precompute table for this H
         write_h(transport, labels, h)
-        robust_jsr(transport, labels["polyval_precompute_table"], timeout=30.0)
+        zp_jsr(transport, labels["polyval_precompute_table"], timeout=30.0)
         py_table = py_precompute_table(bytes_to_int(h))
 
         # Test with several accumulator values
@@ -401,7 +442,7 @@ def test_multiply_isolated(transport, labels, results: TestResults, iterations=5
 
         for acc_idx, acc_val in enumerate(acc_values):
             write_acc(transport, labels, acc_val)
-            robust_jsr(transport, labels["polyval_multiply"], timeout=30.0)
+            zp_jsr(transport, labels["polyval_multiply"], timeout=30.0)
 
             expected = int_to_bytes(
                 py_multiply_table(bytes_to_int(acc_val), py_table)
@@ -421,7 +462,7 @@ def test_update(transport, labels, results: TestResults, iterations=5):
 
     h = bytes.fromhex("25629347589242761d31f826ba4b757b")
     write_h(transport, labels, h)
-    robust_jsr(transport, labels["polyval_precompute_table"], timeout=30.0)
+    zp_jsr(transport, labels["polyval_precompute_table"], timeout=30.0)
     py_table = py_precompute_table(bytes_to_int(h))
 
     cases = [
@@ -437,7 +478,7 @@ def test_update(transport, labels, results: TestResults, iterations=5):
     for acc_val, block, desc in cases:
         write_acc(transport, labels, acc_val)
         write_temp(transport, labels, block)
-        robust_jsr(transport, labels["polyval_update"], timeout=30.0)
+        zp_jsr(transport, labels["polyval_update"], timeout=30.0)
 
         xored = bytes_to_int(acc_val) ^ bytes_to_int(block)
         expected = int_to_bytes(py_multiply_table(xored, py_table))
@@ -460,12 +501,12 @@ def test_full_pipeline(transport, labels, results: TestResults, iterations=5):
     expected = bytes.fromhex("f7a3b47b846119fae5b7866cf5e5b77e")
 
     write_h(transport, labels, h)
-    robust_jsr(transport, labels["polyval_precompute_table"], timeout=30.0)
-    robust_jsr(transport, labels["polyval_init"], timeout=5.0)
+    zp_jsr(transport, labels["polyval_precompute_table"], timeout=30.0)
+    zp_jsr(transport, labels["polyval_init"], timeout=5.0)
     write_temp(transport, labels, x1)
-    robust_jsr(transport, labels["polyval_update"], timeout=30.0)
+    zp_jsr(transport, labels["polyval_update"], timeout=30.0)
     write_temp(transport, labels, x2)
-    robust_jsr(transport, labels["polyval_update"], timeout=30.0)
+    zp_jsr(transport, labels["polyval_update"], timeout=30.0)
     results.check("RFC 8452 Appendix A: POLYVAL(H, X1, X2)",
                   read_acc(transport, labels), expected)
 
@@ -518,13 +559,13 @@ def test_full_pipeline(transport, labels, results: TestResults, iterations=5):
     # 9. Same H, sequential blocks (tests accumulator chaining)
     h = random_block()
     write_h(transport, labels, h)
-    robust_jsr(transport, labels["polyval_precompute_table"], timeout=30.0)
-    robust_jsr(transport, labels["polyval_init"], timeout=5.0)
+    zp_jsr(transport, labels["polyval_precompute_table"], timeout=30.0)
+    zp_jsr(transport, labels["polyval_init"], timeout=5.0)
 
     blocks = [random_block() for _ in range(6)]
     for block in blocks:
         write_temp(transport, labels, block)
-        robust_jsr(transport, labels["polyval_update"], timeout=30.0)
+        zp_jsr(transport, labels["polyval_update"], timeout=30.0)
 
     expected = polyval(h, *blocks)
     results.check("chained 6-block (single precompute)",
@@ -536,11 +577,11 @@ def _run_pipeline(transport, labels, h: bytes, blocks: list[bytes],
                   results: TestResults, desc: str):
     """Helper: run full POLYVAL pipeline and check result."""
     write_h(transport, labels, h)
-    robust_jsr(transport, labels["polyval_precompute_table"], timeout=30.0)
-    robust_jsr(transport, labels["polyval_init"], timeout=5.0)
+    zp_jsr(transport, labels["polyval_precompute_table"], timeout=30.0)
+    zp_jsr(transport, labels["polyval_init"], timeout=5.0)
     for block in blocks:
         write_temp(transport, labels, block)
-        robust_jsr(transport, labels["polyval_update"], timeout=30.0)
+        zp_jsr(transport, labels["polyval_update"], timeout=30.0)
 
     expected = polyval(h, *blocks)
     results.check(f"pipeline: {desc}", read_acc(transport, labels), expected,
@@ -565,11 +606,11 @@ def test_multiply_vs_dot(transport, labels, results: TestResults, iterations=10)
 
         # Set up table
         write_h(transport, labels, h)
-        robust_jsr(transport, labels["polyval_precompute_table"], timeout=30.0)
+        zp_jsr(transport, labels["polyval_precompute_table"], timeout=30.0)
 
         # Multiply on C64
         write_acc(transport, labels, acc_val)
-        robust_jsr(transport, labels["polyval_multiply"], timeout=30.0)
+        zp_jsr(transport, labels["polyval_multiply"], timeout=30.0)
         c64_result = read_acc(transport, labels)
 
         # Compare against bit-by-bit dot product
@@ -665,6 +706,10 @@ def main():
             dump_screen(transport, "startup")
             sys.exit(1)
         print("  Ready")
+
+        # Install ZP staging wrapper for polyval_acc
+        install_zp_wrapper(transport)
+        print("  ZP staging wrapper installed")
 
         # Run all tests
         results = TestResults()

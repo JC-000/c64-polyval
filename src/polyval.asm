@@ -102,13 +102,113 @@ polyval_right_shift_1:
 
 ; =============================================================================
 ; polyval_shift_left_4 - left-shift polyval_acc by 4 bits with reduction
-; Implemented as 4 sequential calls to polyval_double
+; Inlined: 4 sequential doublings (ZP ROL = 5 cy vs ABS ROL = 6 cy)
 ; =============================================================================
 polyval_shift_left_4:
-        jsr polyval_double
-        jsr polyval_double
-        jsr polyval_double
-        jsr polyval_double
+        ; --- doubling 1 ---
+        clc
+        rol polyval_acc
+        rol polyval_acc+1
+        rol polyval_acc+2
+        rol polyval_acc+3
+        rol polyval_acc+4
+        rol polyval_acc+5
+        rol polyval_acc+6
+        rol polyval_acc+7
+        rol polyval_acc+8
+        rol polyval_acc+9
+        rol polyval_acc+10
+        rol polyval_acc+11
+        rol polyval_acc+12
+        rol polyval_acc+13
+        rol polyval_acc+14
+        rol polyval_acc+15
+        bcc +
+        lda polyval_acc
+        eor #$01
+        sta polyval_acc
+        lda polyval_acc+15
+        eor #$c2
+        sta polyval_acc+15
++
+        ; --- doubling 2 ---
+        clc
+        rol polyval_acc
+        rol polyval_acc+1
+        rol polyval_acc+2
+        rol polyval_acc+3
+        rol polyval_acc+4
+        rol polyval_acc+5
+        rol polyval_acc+6
+        rol polyval_acc+7
+        rol polyval_acc+8
+        rol polyval_acc+9
+        rol polyval_acc+10
+        rol polyval_acc+11
+        rol polyval_acc+12
+        rol polyval_acc+13
+        rol polyval_acc+14
+        rol polyval_acc+15
+        bcc +
+        lda polyval_acc
+        eor #$01
+        sta polyval_acc
+        lda polyval_acc+15
+        eor #$c2
+        sta polyval_acc+15
++
+        ; --- doubling 3 ---
+        clc
+        rol polyval_acc
+        rol polyval_acc+1
+        rol polyval_acc+2
+        rol polyval_acc+3
+        rol polyval_acc+4
+        rol polyval_acc+5
+        rol polyval_acc+6
+        rol polyval_acc+7
+        rol polyval_acc+8
+        rol polyval_acc+9
+        rol polyval_acc+10
+        rol polyval_acc+11
+        rol polyval_acc+12
+        rol polyval_acc+13
+        rol polyval_acc+14
+        rol polyval_acc+15
+        bcc +
+        lda polyval_acc
+        eor #$01
+        sta polyval_acc
+        lda polyval_acc+15
+        eor #$c2
+        sta polyval_acc+15
++
+        ; --- doubling 4 ---
+        clc
+        rol polyval_acc
+        rol polyval_acc+1
+        rol polyval_acc+2
+        rol polyval_acc+3
+        rol polyval_acc+4
+        rol polyval_acc+5
+        rol polyval_acc+6
+        rol polyval_acc+7
+        rol polyval_acc+8
+        rol polyval_acc+9
+        rol polyval_acc+10
+        rol polyval_acc+11
+        rol polyval_acc+12
+        rol polyval_acc+13
+        rol polyval_acc+14
+        rol polyval_acc+15
+        bcc +
+        lda polyval_acc
+        eor #$01
+        sta polyval_acc
+        lda polyval_acc+15
+        eor #$c2
+        sta polyval_acc+15
++
         rts
 
 ; =============================================================================
