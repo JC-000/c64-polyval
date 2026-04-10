@@ -13,6 +13,91 @@
 ; Right-shift reduction (x^{-1} mod p): byte[15] ^= $E1
 ; =============================================================================
 
+; -----------------------------------------------------------------------------
+; Unroll macros for hot 16-byte ZP loops (polyval_acc at $10-$1F)
+; -----------------------------------------------------------------------------
+
+; XOR htable[nibble*16 .. nibble*16+15] into polyval_acc.
+; Entry: Y = nibble*16. Uses htable+k,y so Y stays constant (saves 16 INYs).
+!macro pv_unroll_xor_htable_16 {
+        lda polyval_acc+0  : eor polyval_htable+0,y  : sta polyval_acc+0
+        lda polyval_acc+1  : eor polyval_htable+1,y  : sta polyval_acc+1
+        lda polyval_acc+2  : eor polyval_htable+2,y  : sta polyval_acc+2
+        lda polyval_acc+3  : eor polyval_htable+3,y  : sta polyval_acc+3
+        lda polyval_acc+4  : eor polyval_htable+4,y  : sta polyval_acc+4
+        lda polyval_acc+5  : eor polyval_htable+5,y  : sta polyval_acc+5
+        lda polyval_acc+6  : eor polyval_htable+6,y  : sta polyval_acc+6
+        lda polyval_acc+7  : eor polyval_htable+7,y  : sta polyval_acc+7
+        lda polyval_acc+8  : eor polyval_htable+8,y  : sta polyval_acc+8
+        lda polyval_acc+9  : eor polyval_htable+9,y  : sta polyval_acc+9
+        lda polyval_acc+10 : eor polyval_htable+10,y : sta polyval_acc+10
+        lda polyval_acc+11 : eor polyval_htable+11,y : sta polyval_acc+11
+        lda polyval_acc+12 : eor polyval_htable+12,y : sta polyval_acc+12
+        lda polyval_acc+13 : eor polyval_htable+13,y : sta polyval_acc+13
+        lda polyval_acc+14 : eor polyval_htable+14,y : sta polyval_acc+14
+        lda polyval_acc+15 : eor polyval_htable+15,y : sta polyval_acc+15
+}
+
+; Copy polyval_acc -> pv_mul_input (absolute dest).
+!macro pv_unroll_save_acc_16 {
+        lda polyval_acc+0  : sta pv_mul_input+0
+        lda polyval_acc+1  : sta pv_mul_input+1
+        lda polyval_acc+2  : sta pv_mul_input+2
+        lda polyval_acc+3  : sta pv_mul_input+3
+        lda polyval_acc+4  : sta pv_mul_input+4
+        lda polyval_acc+5  : sta pv_mul_input+5
+        lda polyval_acc+6  : sta pv_mul_input+6
+        lda polyval_acc+7  : sta pv_mul_input+7
+        lda polyval_acc+8  : sta pv_mul_input+8
+        lda polyval_acc+9  : sta pv_mul_input+9
+        lda polyval_acc+10 : sta pv_mul_input+10
+        lda polyval_acc+11 : sta pv_mul_input+11
+        lda polyval_acc+12 : sta pv_mul_input+12
+        lda polyval_acc+13 : sta pv_mul_input+13
+        lda polyval_acc+14 : sta pv_mul_input+14
+        lda polyval_acc+15 : sta pv_mul_input+15
+}
+
+; Zero polyval_acc. A must already hold 0.
+!macro pv_unroll_clear_acc_16 {
+        sta polyval_acc+0
+        sta polyval_acc+1
+        sta polyval_acc+2
+        sta polyval_acc+3
+        sta polyval_acc+4
+        sta polyval_acc+5
+        sta polyval_acc+6
+        sta polyval_acc+7
+        sta polyval_acc+8
+        sta polyval_acc+9
+        sta polyval_acc+10
+        sta polyval_acc+11
+        sta polyval_acc+12
+        sta polyval_acc+13
+        sta polyval_acc+14
+        sta polyval_acc+15
+}
+
+; XOR polyval_temp (absolute) into polyval_acc (ZP).
+!macro pv_unroll_xor_temp_16 {
+        lda polyval_acc+0  : eor polyval_temp+0  : sta polyval_acc+0
+        lda polyval_acc+1  : eor polyval_temp+1  : sta polyval_acc+1
+        lda polyval_acc+2  : eor polyval_temp+2  : sta polyval_acc+2
+        lda polyval_acc+3  : eor polyval_temp+3  : sta polyval_acc+3
+        lda polyval_acc+4  : eor polyval_temp+4  : sta polyval_acc+4
+        lda polyval_acc+5  : eor polyval_temp+5  : sta polyval_acc+5
+        lda polyval_acc+6  : eor polyval_temp+6  : sta polyval_acc+6
+        lda polyval_acc+7  : eor polyval_temp+7  : sta polyval_acc+7
+        lda polyval_acc+8  : eor polyval_temp+8  : sta polyval_acc+8
+        lda polyval_acc+9  : eor polyval_temp+9  : sta polyval_acc+9
+        lda polyval_acc+10 : eor polyval_temp+10 : sta polyval_acc+10
+        lda polyval_acc+11 : eor polyval_temp+11 : sta polyval_acc+11
+        lda polyval_acc+12 : eor polyval_temp+12 : sta polyval_acc+12
+        lda polyval_acc+13 : eor polyval_temp+13 : sta polyval_acc+13
+        lda polyval_acc+14 : eor polyval_temp+14 : sta polyval_acc+14
+        lda polyval_acc+15 : eor polyval_temp+15 : sta polyval_acc+15
+}
+
 ; =============================================================================
 ; polyval_init - zero the 128-bit accumulator
 ; =============================================================================
@@ -397,23 +482,12 @@ pv_shift_ctr:   !byte 0
 ; so the result is acc * H' = acc * H * x^{-128} = dot(acc, H).
 ; =============================================================================
 polyval_multiply:
-        ; Save accumulator bytes (they get overwritten during computation)
-        ldx #0
-@save_acc:
-        lda polyval_acc,x
-        sta pv_mul_input,x
-        inx
-        cpx #16
-        bne @save_acc
+        ; Unrolled 16-byte save: eliminates per-call loop overhead in hot path.
+        +pv_unroll_save_acc_16
 
-        ; Clear result
-        ldx #0
+        ; Unrolled 16-byte clear: eliminates per-call loop overhead in hot path.
         lda #0
-@clear_result:
-        sta polyval_acc,x
-        inx
-        cpx #16
-        bne @clear_result
+        +pv_unroll_clear_acc_16
 
         ; Process bytes from MSB (byte 15) to LSB (byte 0)
         lda #15
@@ -470,17 +544,10 @@ polyval_xor_table_entry:
         asl
         asl
         asl                     ; * 16
-        tay                     ; Y = offset into htable
+        tay                     ; Y = offset into htable (nibble*16)
 
-        ldx #0
-@xor_loop:
-        lda polyval_acc,x
-        eor polyval_htable,y
-        sta polyval_acc,x
-        iny
-        inx
-        cpx #16
-        bne @xor_loop
+        ; Unrolled 16-byte XOR from htable: Y stays constant, saves 16 INYs.
+        +pv_unroll_xor_htable_16
 @skip:
         rts
 
@@ -489,15 +556,8 @@ polyval_xor_table_entry:
 ; polyval_temp contains the 16-byte block
 ; =============================================================================
 polyval_update:
-        ; XOR block into accumulator
-        ldx #0
-@xor_loop:
-        lda polyval_acc,x
-        eor polyval_temp,x
-        sta polyval_acc,x
-        inx
-        cpx #16
-        bne @xor_loop
+        ; Unrolled 16-byte XOR of block into accumulator: hot-path loop removal.
+        +pv_unroll_xor_temp_16
 
         ; Multiply accumulator by H
         jsr polyval_multiply
