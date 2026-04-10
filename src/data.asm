@@ -124,4 +124,6 @@ mc_b3:  !byte 0
 ; polyval_acc is in zero page ($10-$1F), defined in constants.asm
 polyval_h:       !fill 16, 0   ; 128-bit hash key H
 polyval_temp:    !fill 16, 0   ; scratch space for current block
+; page-aligned: absolute,y loads in pv_unroll_xor_htable_16 must not cross page
+!align 255, 0, 0
 polyval_htable:  !fill 256, 0  ; 4-bit table: H*{0..15}, 16 entries * 16 bytes
