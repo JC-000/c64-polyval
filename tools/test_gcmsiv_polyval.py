@@ -298,7 +298,11 @@ def test_random_roundtrip(transport: BinaryViceTransport, labels: Labels,
 
 
 def test_tampered_tag(transport: BinaryViceTransport, labels: Labels) -> bool:
-    """Verify that a tampered tag causes verification failure."""
+    """Verify that a tampered tag (single bit in byte 0) causes failure.
+
+    This is the legacy smoke test retained for backward-compatible output.
+    The expanded bit-flip coverage lives in test_tampered_tag_bitflips.
+    """
     print("\n--- Tampered tag detection ---")
 
     key = random_bytes(32)
@@ -320,6 +324,167 @@ def test_tampered_tag(transport: BinaryViceTransport, labels: Labels) -> bool:
     else:
         print("  FAIL: tampered tag was accepted!")
         return False
+
+
+# ---------------------------------------------------------------------------
+# P4 - Expanded negative tests
+# ---------------------------------------------------------------------------
+
+def _assert_rejected(transport, labels, key, nonce, ct, bad_tag, desc):
+    """Call decrypt and assert it rejects. Returns bool."""
+    _, valid = c64_gcmsiv_decrypt(transport, labels, key, nonce, ct, bad_tag)
+    if not valid:
+        print(f"    PASS: {desc}")
+        return True
+    print(f"    FAIL: {desc} -- accepted!")
+    return False
+
+
+def test_tampered_tag_bitflips(transport, labels) -> list:
+    """Flip each of the 16 tag bytes (XOR 0x01), plus each of the 8 bits
+    in tag byte 0 individually. 16 + 8 = 24 subtests.
+    Returns list[bool] of per-subtest results.
+    """
+    print("\n--- Tag bit-flip coverage (16 bytes + 8 bits in byte 0) ---")
+    key = random_bytes(32)
+    nonce = random_bytes(12)
+    pt = random_bytes(32)
+    ct, tag = c64_gcmsiv_encrypt(transport, labels, key, nonce, pt)
+
+    # Oracle: cryptography lib (via py_encrypt, validated at startup)
+    # agrees this tag is valid for (key, nonce, pt).
+    py_ct, py_tag = py_encrypt(key, nonce, pt)
+    assert tag == py_tag and ct == py_ct, "oracle drift"
+
+    results = []
+    for i in range(16):
+        bad = bytearray(tag)
+        bad[i] ^= 0x01
+        results.append(_assert_rejected(
+            transport, labels, key, nonce, ct, bytes(bad),
+            f"byte[{i}] LSB flip"))
+
+    for bit in range(8):
+        bad = bytearray(tag)
+        bad[0] ^= (1 << bit)
+        results.append(_assert_rejected(
+            transport, labels, key, nonce, ct, bytes(bad),
+            f"byte[0] bit{bit} flip"))
+    return results
+
+
+def test_wrong_key(transport, labels) -> list:
+    """5 random (key,nonce,pt) tuples. Encrypt, then flip one random bit in
+    the key and assert decrypt rejects."""
+    print("\n--- Wrong key rejection (5 vectors) ---")
+    results = []
+    for i in range(5):
+        key = random_bytes(32)
+        nonce = random_bytes(12)
+        pt = random_bytes(16)
+        ct, tag = c64_gcmsiv_encrypt(transport, labels, key, nonce, pt)
+        # Oracle check
+        py_ct, py_tag = py_encrypt(key, nonce, pt)
+        if (ct, tag) != (py_ct, py_tag):
+            print(f"    FAIL[{i}]: oracle drift on encrypt")
+            results.append(False)
+            continue
+        byte_idx = random.randint(0, 31)
+        bit_idx = random.randint(0, 7)
+        bad_key = bytearray(key)
+        bad_key[byte_idx] ^= (1 << bit_idx)
+        results.append(_assert_rejected(
+            transport, labels, bytes(bad_key), nonce, ct, tag,
+            f"vec{i} key byte[{byte_idx}] bit{bit_idx}"))
+    return results
+
+
+def test_tampered_ciphertext(transport, labels) -> list:
+    """5 vectors, 3 positions each (first, middle, last byte). 15 subtests."""
+    print("\n--- Tampered ciphertext rejection (5 vectors x 3 positions) ---")
+    results = []
+    for i in range(5):
+        key = random_bytes(32)
+        nonce = random_bytes(12)
+        pt_len = random.choice([32, 48, 64])
+        pt = random_bytes(pt_len)
+        ct, tag = c64_gcmsiv_encrypt(transport, labels, key, nonce, pt)
+        assert (ct, tag) == py_encrypt(key, nonce, pt), "oracle drift"
+
+        positions = [0, pt_len // 2, pt_len - 1]
+        for pos in positions:
+            bad_ct = bytearray(ct)
+            bad_ct[pos] ^= 0x55
+            results.append(_assert_rejected(
+                transport, labels, key, nonce, bytes(bad_ct), tag,
+                f"vec{i} ct[{pos}] flip (len={pt_len})"))
+    return results
+
+
+def test_tampered_nonce(transport, labels) -> list:
+    """5 vectors, 3 nonce-byte positions each (0, 5, 11). 15 subtests."""
+    print("\n--- Tampered nonce rejection (5 vectors x 3 positions) ---")
+    results = []
+    for i in range(5):
+        key = random_bytes(32)
+        nonce = random_bytes(12)
+        pt = random_bytes(16)
+        ct, tag = c64_gcmsiv_encrypt(transport, labels, key, nonce, pt)
+        assert (ct, tag) == py_encrypt(key, nonce, pt), "oracle drift"
+
+        for pos in (0, 5, 11):
+            bad_nonce = bytearray(nonce)
+            bad_nonce[pos] ^= 0x01
+            results.append(_assert_rejected(
+                transport, labels, key, bytes(bad_nonce), ct, tag,
+                f"vec{i} nonce[{pos}] flip"))
+    return results
+
+
+def test_all_zero_tag(transport, labels) -> list:
+    """5 vectors, each with tag replaced by 16 zero bytes."""
+    print("\n--- All-zero tag rejection (5 vectors) ---")
+    results = []
+    for i in range(5):
+        key = random_bytes(32)
+        nonce = random_bytes(12)
+        pt = random_bytes(16)
+        ct, _tag = c64_gcmsiv_encrypt(transport, labels, key, nonce, pt)
+        results.append(_assert_rejected(
+            transport, labels, key, nonce, ct, b"\x00" * 16,
+            f"vec{i} zero-tag"))
+    return results
+
+
+def test_all_ones_tag(transport, labels) -> list:
+    """5 vectors, each with tag replaced by 16 0xFF bytes."""
+    print("\n--- All-ones tag rejection (5 vectors) ---")
+    results = []
+    for i in range(5):
+        key = random_bytes(32)
+        nonce = random_bytes(12)
+        pt = random_bytes(16)
+        ct, _tag = c64_gcmsiv_encrypt(transport, labels, key, nonce, pt)
+        results.append(_assert_rejected(
+            transport, labels, key, nonce, ct, b"\xff" * 16,
+            f"vec{i} ones-tag"))
+    return results
+
+
+def test_tag_equals_pt_block(transport, labels) -> list:
+    """5 vectors with tag replaced by pt[0:16]."""
+    print("\n--- Tag-is-plaintext-block rejection (5 vectors) ---")
+    results = []
+    for i in range(5):
+        key = random_bytes(32)
+        nonce = random_bytes(12)
+        pt = random_bytes(32)
+        ct, _tag = c64_gcmsiv_encrypt(transport, labels, key, nonce, pt)
+        bad_tag = pt[0:16]
+        results.append(_assert_rejected(
+            transport, labels, key, nonce, ct, bad_tag,
+            f"vec{i} tag=pt[0:16]"))
+    return results
 
 
 # ---------------------------------------------------------------------------
@@ -358,9 +523,23 @@ def run_tests(transport: BinaryViceTransport, labels: Labels,
     for v in all_vectors:
         record(test_rfc_vector_decrypt(transport, labels, v))
 
-    # 3. Tampered tag test
+    # 3. Tampered tag test (legacy smoke)
     print("\n=== Tampered Tag Detection ===")
     record(test_tampered_tag(transport, labels))
+
+    def record_many(results):
+        for r in results:
+            record(r)
+
+    # 3a. Expanded negative tests (P4)
+    print("\n=== Expanded Negative Tests ===")
+    record_many(test_tampered_tag_bitflips(transport, labels))
+    record_many(test_wrong_key(transport, labels))
+    record_many(test_tampered_ciphertext(transport, labels))
+    record_many(test_tampered_nonce(transport, labels))
+    record_many(test_all_zero_tag(transport, labels))
+    record_many(test_all_ones_tag(transport, labels))
+    record_many(test_tag_equals_pt_block(transport, labels))
 
     # 4. Random roundtrip tests
     print("\n=== Random Roundtrip Tests ===")
