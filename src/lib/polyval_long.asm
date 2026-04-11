@@ -977,9 +977,9 @@ polyval_multiply_core:
         rts
 
 
-; pv_mul_input now lives in zero page ($20-$2F) - see constants.asm
-pv_mul_byte_idx: !byte 0
-pv_mul_nibble:  !byte 0
+; pv_mul_input lives in zero page ($20-$2F); pv_mul_nibble lives in zero
+; page ($30) - see constants_lib.asm. pv_mul_byte_idx was used by earlier
+; Tier 1 unrolled multiply; the fused Shoup-8 hot path no longer needs it.
 
 ; =============================================================================
 ; polyval_xor_table_entry - XOR htable[pv_mul_nibble] into polyval_acc

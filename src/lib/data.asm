@@ -25,11 +25,11 @@
 ;   polyval_htable8     4096     8-bit Shoup window, 16 page-aligned slices
 ;   polyval_reduce8     4096     8-bit reduction table, 16 page-aligned slices
 ;
-;   key_data              32     AES-256 key
+;   aes_current_key              32     AES-256 key
 ;   aes_state             16     AES working state
-;   expanded_key         240     AES round keys (14+1 * 16)
+;   aes_expanded_key         240     AES round keys (14+1 * 16)
 ;
-;   mc_a0..mc_b3           8     MixColumns scratch
+;   aes_mc_a0..aes_mc_b3           8     MixColumns scratch
 ;
 ;   gcmsiv_*               ...   GCM-SIV derived keys, buffers, scratch
 ;
@@ -103,24 +103,24 @@ polyval_reduce8_s15: !fill 256, 0
 }       ; !if POLYVAL_PROFILE = POLYVAL_PROFILE_LONG
 
 ; --- AES state -------------------------------------------------------------
-key_data:
+aes_current_key:
         !fill 32, 0
 
 aes_state:
         !fill 16, 0
 
-expanded_key:
+aes_expanded_key:
         !fill 240, 0            ; 15 round keys * 16 bytes
 
 ; mix columns temp storage
-mc_a0:  !byte 0
-mc_a1:  !byte 0
-mc_a2:  !byte 0
-mc_a3:  !byte 0
-mc_b0:  !byte 0
-mc_b1:  !byte 0
-mc_b2:  !byte 0
-mc_b3:  !byte 0
+aes_mc_a0:  !byte 0
+aes_mc_a1:  !byte 0
+aes_mc_a2:  !byte 0
+aes_mc_a3:  !byte 0
+aes_mc_b0:  !byte 0
+aes_mc_b1:  !byte 0
+aes_mc_b2:  !byte 0
+aes_mc_b3:  !byte 0
 
 ; --- GCM-SIV state ---------------------------------------------------------
 gcmsiv_nonce:       !fill 12, 0     ; 96-bit nonce
@@ -144,84 +144,3 @@ gcmsiv_exp_enc_key: !fill 256, 0    ; expanded derived encryption key
 gcmsiv_saved_exp:   !fill 256, 0    ; saved original expanded key
 
 POLYVAL_LIB_MEM_END = *
-
-; =============================================================================
-; App-owned buffers (demo app — disk I/O, input line, etc.)
-; Placed after the library region. These will move to a dedicated app data
-; translation unit in a later phase.
-; =============================================================================
-
-; encryption buffers
-input_buffer:
-        !fill input_buf_size, 0
-
-encrypt_buffer:
-        !fill encrypt_buf_size, 0
-
-input_length:
-        !byte 0
-
-encrypt_length:
-        !byte 0
-
-input_index:
-        !byte 0
-
-; disk I/O variables
-drive_number:
-        !byte 8
-
-filename_buf:
-        !fill 17, 0
-
-actual_filename:
-        !fill 17, 0
-
-filename_len:
-        !byte 0
-
-filename_suffix:
-        !byte 0
-
-using_default_name:
-        !byte 0
-
-file_exists_flag:
-        !byte 0
-
-cmd_buffer:
-        !fill 24, 0
-
-write_fname_buf:
-        !fill 32, 0
-
-write_fname_len:
-        !byte 0
-
-read_fname_buf:
-        !fill 32, 0
-
-read_fname_len:
-        !byte 0
-
-key_read_buf:
-        !fill 32, 0
-
-decimal_flag:
-        !byte 0
-
-save_byte_index:
-        !byte 0
-
-read_byte_index:
-        !byte 0
-
-read_temp_byte:
-        !byte 0
-
-disk_error_code:
-        !byte 0, 0
-
-default_gcm_filename:
-        !text "AESGCM"
-        !byte 0

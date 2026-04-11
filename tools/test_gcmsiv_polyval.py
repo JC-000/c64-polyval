@@ -81,7 +81,7 @@ def random_bytes(n: int) -> bytes:
 
 def setup_key_and_expand(transport: BinaryViceTransport, labels: Labels, key: bytes):
     """Write 32-byte key and call aes_key_expansion."""
-    write_bytes(transport, labels["key_data"], key)
+    write_bytes(transport, labels["aes_current_key"], key)
     robust_jsr(transport, labels["aes_key_expansion"], timeout=10.0)
 
 
@@ -95,7 +95,7 @@ def c64_gcmsiv_encrypt(transport: BinaryViceTransport, labels: Labels,
     setup_key_and_expand(transport, labels, key)
 
     # Save expanded key to gcmsiv_saved_exp (gcmsiv_encrypt expects this)
-    exp_key = read_bytes(transport, labels["expanded_key"], 240)
+    exp_key = read_bytes(transport, labels["aes_expanded_key"], 240)
     write_bytes(transport, labels["gcmsiv_saved_exp"], exp_key)
     write_bytes(transport, labels["gcmsiv_saved_key"], key)
 
@@ -113,8 +113,8 @@ def c64_gcmsiv_encrypt(transport: BinaryViceTransport, labels: Labels,
     ct = read_bytes(transport, labels["gcmsiv_ct_buf"], len(plaintext))
     tag = read_bytes(transport, labels["gcmsiv_tag"], 16)
 
-    # Restore original key (gcmsiv_encrypt may clobber expanded_key)
-    write_bytes(transport, labels["expanded_key"], exp_key)
+    # Restore original key (gcmsiv_encrypt may clobber aes_expanded_key)
+    write_bytes(transport, labels["aes_expanded_key"], exp_key)
 
     return ct, tag
 
@@ -130,7 +130,7 @@ def c64_gcmsiv_decrypt(transport: BinaryViceTransport, labels: Labels,
     setup_key_and_expand(transport, labels, key)
 
     # Save expanded key
-    exp_key = read_bytes(transport, labels["expanded_key"], 240)
+    exp_key = read_bytes(transport, labels["aes_expanded_key"], 240)
     write_bytes(transport, labels["gcmsiv_saved_exp"], exp_key)
     write_bytes(transport, labels["gcmsiv_saved_key"], key)
 
@@ -152,7 +152,7 @@ def c64_gcmsiv_decrypt(transport: BinaryViceTransport, labels: Labels,
     tag_valid = read_bytes(transport, labels["gcmsiv_tag_valid"], 1)[0]
 
     # Restore original key
-    write_bytes(transport, labels["expanded_key"], exp_key)
+    write_bytes(transport, labels["aes_expanded_key"], exp_key)
 
     return pt, tag_valid == 1
 
@@ -410,7 +410,7 @@ def main():
     # Load labels
     labels = Labels.from_file(LABELS_PATH)
     required_labels = [
-        "key_data", "expanded_key", "aes_key_expansion",
+        "aes_current_key", "aes_expanded_key", "aes_key_expansion",
         "gcmsiv_nonce", "gcmsiv_pt_buf", "gcmsiv_pt_len",
         "gcmsiv_ct_buf", "gcmsiv_tag", "gcmsiv_tag_valid",
         "gcmsiv_dec_buf", "gcmsiv_encrypt", "gcmsiv_decrypt",

@@ -19,16 +19,13 @@
 !ifndef zp_tmp4      { zp_tmp4      = $09 }   ; aes temp
 !ifndef polyval_acc  { polyval_acc  = $10 }   ; 16-byte POLYVAL accumulator ($10-$1F)
 !ifndef pv_mul_input { pv_mul_input = $20 }   ; 16-byte multiply input scratch ($20-$2F)
+!ifndef pv_mul_nibble { pv_mul_nibble = $30 } ; 1-byte nibble parameter for polyval_xor_table_entry
 
 ; aes constants
 aes_block_size  = 16            ; 128 bits = 16 bytes
 aes_key_size    = 32            ; 256 bits = 32 bytes
 aes_rounds      = 14            ; aes-256 uses 14 rounds
 aes_expanded_key_size = 240     ; (14+1) * 16 = 240 bytes
-
-; buffer sizes (referenced by data.asm and aes_encrypt.asm)
-input_buf_size  = 64            ; max input text size
-encrypt_buf_size = 80           ; encrypted output size (input + up to 16 pad)
 
 ; =============================================================================
 ; POLYVAL build profile selector

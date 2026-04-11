@@ -881,10 +881,10 @@ polyval_multiply:
 
         rts
 
-; pv_mul_input lives in zero page ($20-$2F) - see constants.asm.
-; Shared ZP slot with LONG profile so the ABI is identical.
-pv_mul_byte_idx: !byte 0
-pv_mul_nibble:  !byte 0
+; pv_mul_input lives in zero page ($20-$2F); pv_mul_nibble lives in zero
+; page ($30) - see constants_lib.asm. Shared ZP slots with LONG profile so
+; the ABI is identical. pv_mul_byte_idx was used by earlier unrolled
+; multiply; the fused Tier 1 hot path no longer needs it.
 
 ; =============================================================================
 ; polyval_xor_table_entry - XOR htable[pv_mul_nibble] into polyval_acc

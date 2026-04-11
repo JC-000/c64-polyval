@@ -25,6 +25,11 @@ save            = $ffd8         ; save file
 
 kbd_buffer      = $c6           ; keyboard buffer count
 
+; buffer sizes for demo-app input/encryption staging (consumed by
+; data_app.asm + main_loop.asm)
+input_buf_size  = 64            ; max input text size
+encrypt_buf_size = 80           ; encrypted output size (input + up to 16 pad)
+
 ; petscii codes
 petscii_1       = $31           ; '1' key
 petscii_2       = $32           ; '2' key

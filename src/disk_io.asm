@@ -381,7 +381,7 @@ build_read_filename:
 verify_key_match:
         ldx #0
 @loop:
-        lda key_data,x
+        lda aes_current_key,x
         cmp key_read_buf,x
         bne @mismatch
         inx

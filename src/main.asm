@@ -36,5 +36,6 @@
 
 ; --- Data and tables ---
 !source "lib/data.asm"
+!source "data_app.asm"
 !source "lib/tables.asm"
 !source "strings.asm"

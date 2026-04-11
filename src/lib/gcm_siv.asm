@@ -9,7 +9,7 @@
 
 ; =============================================================================
 ; gcmsiv_encrypt - perform AES-256-GCM-SIV encryption
-; Uses key_data as the 256-bit key
+; Uses aes_current_key as the 256-bit key
 ; Input: gcmsiv_pt_buf (plaintext), gcmsiv_pt_len (length), gcmsiv_nonce (12 bytes)
 ; Output: gcmsiv_ct_buf (ciphertext), gcmsiv_tag (16 bytes)
 ; =============================================================================
@@ -137,10 +137,10 @@ gcmsiv_derive_keys:
         ; Save original key, install derived key, expand, restore
         ldx #0
 @save_key:
-        lda key_data,x
+        lda aes_current_key,x
         sta gcmsiv_saved_key,x
         lda gcmsiv_enc_key,x
-        sta key_data,x
+        sta aes_current_key,x
         inx
         cpx #32
         bne @save_key
@@ -150,7 +150,7 @@ gcmsiv_derive_keys:
         ; Copy expanded key to gcmsiv_exp_enc_key
         ldx #0
 @copy_exp:
-        lda expanded_key,x
+        lda aes_expanded_key,x
         sta gcmsiv_exp_enc_key,x
         inx
         bne @copy_exp            ; copies 256 bytes
@@ -159,7 +159,7 @@ gcmsiv_derive_keys:
         ldx #0
 @restore_key:
         lda gcmsiv_saved_key,x
-        sta key_data,x
+        sta aes_current_key,x
         inx
         cpx #32
         bne @restore_key
@@ -331,12 +331,12 @@ gcmsiv_finalize_tag:
         rts
 
 ; =============================================================================
-; gcmsiv_install_enc_key - install derived enc key into expanded_key
+; gcmsiv_install_enc_key - install derived enc key into aes_expanded_key
 ; =============================================================================
 gcmsiv_install_enc_key:
         ldx #0
 @save:
-        lda expanded_key,x
+        lda aes_expanded_key,x
         sta gcmsiv_saved_exp,x
         inx
         bne @save
@@ -344,7 +344,7 @@ gcmsiv_install_enc_key:
         ldx #0
 @install:
         lda gcmsiv_exp_enc_key,x
-        sta expanded_key,x
+        sta aes_expanded_key,x
         inx
         bne @install
         rts
@@ -356,7 +356,7 @@ gcmsiv_restore_orig_key:
         ldx #0
 @restore:
         lda gcmsiv_saved_exp,x
-        sta expanded_key,x
+        sta aes_expanded_key,x
         inx
         bne @restore
         rts
