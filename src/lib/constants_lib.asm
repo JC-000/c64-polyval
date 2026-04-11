@@ -4,18 +4,21 @@
 ; =============================================================================
 
 ; zero page variables used by library code
-zp_ptr          = $fb           ; 2-byte pointer
-zp_temp         = $fd           ; temp storage
-zp_count        = $fe           ; loop counter
-zp_ptr2         = $02           ; second pointer (2 bytes)
-zp_round        = $04           ; aes round counter
-zp_col          = $05           ; aes column counter
-zp_tmp1         = $06           ; aes temp
-zp_tmp2         = $07           ; aes temp
-zp_tmp3         = $08           ; aes temp
-zp_tmp4         = $09           ; aes temp
-polyval_acc     = $10           ; 16-byte POLYVAL accumulator ($10-$1F)
-pv_mul_input    = $20           ; 16-byte multiply input scratch ($20-$2F)
+; Each ZP equate is wrapped in !ifndef so a host project can pre-define its
+; own ZP layout before !source'ing this file. Defaults preserve the
+; standalone demo-app layout.
+!ifndef zp_ptr       { zp_ptr       = $fb }   ; 2-byte pointer
+!ifndef zp_temp      { zp_temp      = $fd }   ; temp storage
+!ifndef zp_count     { zp_count     = $fe }   ; loop counter
+!ifndef zp_ptr2      { zp_ptr2      = $02 }   ; second pointer (2 bytes)
+!ifndef zp_round     { zp_round     = $04 }   ; aes round counter
+!ifndef zp_col       { zp_col       = $05 }   ; aes column counter
+!ifndef zp_tmp1      { zp_tmp1      = $06 }   ; aes temp
+!ifndef zp_tmp2      { zp_tmp2      = $07 }   ; aes temp
+!ifndef zp_tmp3      { zp_tmp3      = $08 }   ; aes temp
+!ifndef zp_tmp4      { zp_tmp4      = $09 }   ; aes temp
+!ifndef polyval_acc  { polyval_acc  = $10 }   ; 16-byte POLYVAL accumulator ($10-$1F)
+!ifndef pv_mul_input { pv_mul_input = $20 }   ; 16-byte multiply input scratch ($20-$2F)
 
 ; aes constants
 aes_block_size  = 16            ; 128 bits = 16 bytes
