@@ -78,6 +78,136 @@
         sta polyval_acc+15
 }
 
+; Inlined body of polyval_shift_left_4: 4 sequential left-doublings with
+; sparse-polynomial reduction. Uses ACME anonymous forward labels (`+`)
+; which are positional and therefore reusable across macro expansions.
+!macro pv_inline_shift_left_4 {
+        ; --- doubling 1 ---
+        clc
+        rol polyval_acc
+        rol polyval_acc+1
+        rol polyval_acc+2
+        rol polyval_acc+3
+        rol polyval_acc+4
+        rol polyval_acc+5
+        rol polyval_acc+6
+        rol polyval_acc+7
+        rol polyval_acc+8
+        rol polyval_acc+9
+        rol polyval_acc+10
+        rol polyval_acc+11
+        rol polyval_acc+12
+        rol polyval_acc+13
+        rol polyval_acc+14
+        rol polyval_acc+15
+        bcc +
+        lda polyval_acc
+        eor #$01
+        sta polyval_acc
+        lda polyval_acc+15
+        eor #$c2
+        sta polyval_acc+15
++
+        ; --- doubling 2 ---
+        clc
+        rol polyval_acc
+        rol polyval_acc+1
+        rol polyval_acc+2
+        rol polyval_acc+3
+        rol polyval_acc+4
+        rol polyval_acc+5
+        rol polyval_acc+6
+        rol polyval_acc+7
+        rol polyval_acc+8
+        rol polyval_acc+9
+        rol polyval_acc+10
+        rol polyval_acc+11
+        rol polyval_acc+12
+        rol polyval_acc+13
+        rol polyval_acc+14
+        rol polyval_acc+15
+        bcc +
+        lda polyval_acc
+        eor #$01
+        sta polyval_acc
+        lda polyval_acc+15
+        eor #$c2
+        sta polyval_acc+15
++
+        ; --- doubling 3 ---
+        clc
+        rol polyval_acc
+        rol polyval_acc+1
+        rol polyval_acc+2
+        rol polyval_acc+3
+        rol polyval_acc+4
+        rol polyval_acc+5
+        rol polyval_acc+6
+        rol polyval_acc+7
+        rol polyval_acc+8
+        rol polyval_acc+9
+        rol polyval_acc+10
+        rol polyval_acc+11
+        rol polyval_acc+12
+        rol polyval_acc+13
+        rol polyval_acc+14
+        rol polyval_acc+15
+        bcc +
+        lda polyval_acc
+        eor #$01
+        sta polyval_acc
+        lda polyval_acc+15
+        eor #$c2
+        sta polyval_acc+15
++
+        ; --- doubling 4 ---
+        clc
+        rol polyval_acc
+        rol polyval_acc+1
+        rol polyval_acc+2
+        rol polyval_acc+3
+        rol polyval_acc+4
+        rol polyval_acc+5
+        rol polyval_acc+6
+        rol polyval_acc+7
+        rol polyval_acc+8
+        rol polyval_acc+9
+        rol polyval_acc+10
+        rol polyval_acc+11
+        rol polyval_acc+12
+        rol polyval_acc+13
+        rol polyval_acc+14
+        rol polyval_acc+15
+        bcc +
+        lda polyval_acc
+        eor #$01
+        sta polyval_acc
+        lda polyval_acc+15
+        eor #$c2
+        sta polyval_acc+15
++
+}
+
+; Process one nibble: shift acc left by 4, then XOR htable[nibble] into acc.
+; Input: A = nibble value (0..15). A is clobbered.
+; Preserves the zero-htable[0] early-skip: if nibble==0, the XOR is bypassed.
+!macro pv_process_nibble {
+        ; shift_left_4 clobbers A (reduction stores $c2-xored byte), so stash
+        ; the nibble in Y first, then rehydrate after the shift.
+        tax                     ; X = nibble (preserved across shift)
+        +pv_inline_shift_left_4
+        cpx #0
+        beq +
+        txa
+        asl
+        asl
+        asl
+        asl                     ; A = nibble * 16
+        tay                     ; Y = htable offset
+        +pv_unroll_xor_htable_16
++
+}
+
 ; XOR polyval_temp (absolute) into polyval_acc (ZP).
 !macro pv_unroll_xor_temp_16 {
         lda polyval_acc+0  : eor polyval_temp+0  : sta polyval_acc+0
@@ -489,43 +619,171 @@ polyval_multiply:
         lda #0
         +pv_unroll_clear_acc_16
 
-        ; Process bytes from MSB (byte 15) to LSB (byte 0)
-        lda #15
-        sta pv_mul_byte_idx
+        ; Fully unrolled nibble loop: 32 straight-line invocations of
+        ; pv_process_nibble (inlined shift_left_4 + xor_table_entry body).
+        ; Bytes processed MSB (byte 15) -> LSB (byte 0), high nibble first.
+        ; pv_mul_byte_idx / pv_mul_nibble bookkeeping eliminated.
 
-@byte_loop:
-        ; Get the input byte
-        ldx pv_mul_byte_idx
-        lda pv_mul_input,x
-
-        ; Process high nibble first (bits 7-4)
-        pha
+        ; --- byte 15 ---
+        lda pv_mul_input+15
         lsr
         lsr
         lsr
-        lsr                     ; high nibble in A (0-15)
-        sta pv_mul_nibble
-
-        ; Left-shift result by 4 bits (with reduction)
-        jsr polyval_shift_left_4
-
-        ; XOR htable[nibble] into result
-        jsr polyval_xor_table_entry
-
-        ; Process low nibble (bits 3-0)
-        pla
+        lsr
+        +pv_process_nibble
+        lda pv_mul_input+15
         and #$0f
-        sta pv_mul_nibble
-
-        ; Left-shift result by 4 bits
-        jsr polyval_shift_left_4
-
-        ; XOR htable[nibble] into result
-        jsr polyval_xor_table_entry
-
-        ; Next byte
-        dec pv_mul_byte_idx
-        bpl @byte_loop
+        +pv_process_nibble
+        ; --- byte 14 ---
+        lda pv_mul_input+14
+        lsr
+        lsr
+        lsr
+        lsr
+        +pv_process_nibble
+        lda pv_mul_input+14
+        and #$0f
+        +pv_process_nibble
+        ; --- byte 13 ---
+        lda pv_mul_input+13
+        lsr
+        lsr
+        lsr
+        lsr
+        +pv_process_nibble
+        lda pv_mul_input+13
+        and #$0f
+        +pv_process_nibble
+        ; --- byte 12 ---
+        lda pv_mul_input+12
+        lsr
+        lsr
+        lsr
+        lsr
+        +pv_process_nibble
+        lda pv_mul_input+12
+        and #$0f
+        +pv_process_nibble
+        ; --- byte 11 ---
+        lda pv_mul_input+11
+        lsr
+        lsr
+        lsr
+        lsr
+        +pv_process_nibble
+        lda pv_mul_input+11
+        and #$0f
+        +pv_process_nibble
+        ; --- byte 10 ---
+        lda pv_mul_input+10
+        lsr
+        lsr
+        lsr
+        lsr
+        +pv_process_nibble
+        lda pv_mul_input+10
+        and #$0f
+        +pv_process_nibble
+        ; --- byte 9 ---
+        lda pv_mul_input+9
+        lsr
+        lsr
+        lsr
+        lsr
+        +pv_process_nibble
+        lda pv_mul_input+9
+        and #$0f
+        +pv_process_nibble
+        ; --- byte 8 ---
+        lda pv_mul_input+8
+        lsr
+        lsr
+        lsr
+        lsr
+        +pv_process_nibble
+        lda pv_mul_input+8
+        and #$0f
+        +pv_process_nibble
+        ; --- byte 7 ---
+        lda pv_mul_input+7
+        lsr
+        lsr
+        lsr
+        lsr
+        +pv_process_nibble
+        lda pv_mul_input+7
+        and #$0f
+        +pv_process_nibble
+        ; --- byte 6 ---
+        lda pv_mul_input+6
+        lsr
+        lsr
+        lsr
+        lsr
+        +pv_process_nibble
+        lda pv_mul_input+6
+        and #$0f
+        +pv_process_nibble
+        ; --- byte 5 ---
+        lda pv_mul_input+5
+        lsr
+        lsr
+        lsr
+        lsr
+        +pv_process_nibble
+        lda pv_mul_input+5
+        and #$0f
+        +pv_process_nibble
+        ; --- byte 4 ---
+        lda pv_mul_input+4
+        lsr
+        lsr
+        lsr
+        lsr
+        +pv_process_nibble
+        lda pv_mul_input+4
+        and #$0f
+        +pv_process_nibble
+        ; --- byte 3 ---
+        lda pv_mul_input+3
+        lsr
+        lsr
+        lsr
+        lsr
+        +pv_process_nibble
+        lda pv_mul_input+3
+        and #$0f
+        +pv_process_nibble
+        ; --- byte 2 ---
+        lda pv_mul_input+2
+        lsr
+        lsr
+        lsr
+        lsr
+        +pv_process_nibble
+        lda pv_mul_input+2
+        and #$0f
+        +pv_process_nibble
+        ; --- byte 1 ---
+        lda pv_mul_input+1
+        lsr
+        lsr
+        lsr
+        lsr
+        +pv_process_nibble
+        lda pv_mul_input+1
+        and #$0f
+        +pv_process_nibble
+        ; --- byte 0 ---
+        lda pv_mul_input+0
+        lsr
+        lsr
+        lsr
+        lsr
+        +pv_process_nibble
+        lda pv_mul_input+0
+        and #$0f
+        +pv_process_nibble
 
         rts
 
