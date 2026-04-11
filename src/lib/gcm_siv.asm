@@ -721,6 +721,8 @@ gcmsiv_decrypt:
         inx
         cpx #16
         bne @restore_tag
+        ; Return convention: valid tag -> A=0, Z=1 (BEQ taken)
+        lda #0
         rts
 
 @tag_fail:
@@ -740,6 +742,8 @@ gcmsiv_decrypt:
         inx
         cpx #16
         bne @restore_tag2
+        ; Return convention: invalid tag -> A=1, Z=0 (BNE taken)
+        lda #1
         rts
 
 ; =============================================================================
