@@ -6,7 +6,8 @@
 
         !cpu 6502
 ; --- Constants and equates (no code emitted) ---
-!source "constants.asm"
+!source "lib/constants_lib.asm"
+!source "constants_app.asm"
 
 ; --- Program origin ---
         * = $0801
