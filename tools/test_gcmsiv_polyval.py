@@ -38,7 +38,19 @@ import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__))))
 from reference_sanity import cross_validate_reference
-from polyval_reference import gcmsiv_encrypt as py_encrypt, gcmsiv_decrypt as py_decrypt
+from polyval_reference import (
+    gcmsiv_encrypt as py_encrypt,
+    gcmsiv_decrypt as py_decrypt,
+    gcmsiv_derive_keys as py_derive_keys,
+    gcmsiv_compute_tag as py_compute_tag,
+    gcmsiv_ctr_encrypt as py_ctr,
+    polyval as py_polyval,
+    bytes_to_int,
+    int_to_bytes,
+)
+import struct
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.backends import default_backend
 
 from c64_test_harness import (
     Labels,
@@ -351,8 +363,7 @@ def test_tampered_tag_bitflips(transport, labels) -> list:
     pt = random_bytes(32)
     ct, tag = c64_gcmsiv_encrypt(transport, labels, key, nonce, pt)
 
-    # Oracle: cryptography lib (via py_encrypt, validated at startup)
-    # agrees this tag is valid for (key, nonce, pt).
+    # Oracle: cryptography lib agrees this tag is valid for (key, nonce, pt)
     py_ct, py_tag = py_encrypt(key, nonce, pt)
     assert tag == py_tag and ct == py_ct, "oracle drift"
 
@@ -488,6 +499,281 @@ def test_tag_equals_pt_block(transport, labels) -> list:
 
 
 # ---------------------------------------------------------------------------
+# P5 - Direct unit tests for previously-uncovered public API routines
+# ---------------------------------------------------------------------------
+
+def _lib_aes_ecb_encrypt(key: bytes, block: bytes) -> bytes:
+    c = Cipher(algorithms.AES(key), modes.ECB(), backend=default_backend())
+    e = c.encryptor()
+    return e.update(block) + e.finalize()
+
+
+def _lib_aes_ecb_decrypt(key: bytes, block: bytes) -> bytes:
+    c = Cipher(algorithms.AES(key), modes.ECB(), backend=default_backend())
+    d = c.decryptor()
+    return d.update(block) + d.finalize()
+
+
+def test_aes_encrypt_block(transport, labels) -> list:
+    """Direct unit test: aes_encrypt_block vs cryptography AES-256-ECB."""
+    print("\n--- aes_encrypt_block direct (10 vectors) ---")
+    results = []
+    for i in range(10):
+        key = random_bytes(32)
+        pt = random_bytes(16)
+        # Install key, expand, write state, jsr, read state
+        write_bytes(transport, labels["aes_current_key"], key)
+        robust_jsr(transport, labels["aes_key_expansion"], timeout=10.0)
+        write_bytes(transport, labels["aes_state"], pt)
+        robust_jsr(transport, labels["aes_encrypt_block"], timeout=10.0)
+        got = read_bytes(transport, labels["aes_state"], 16)
+        expected = _lib_aes_ecb_encrypt(key, pt)
+        if got == expected:
+            print(f"    PASS: vec{i}")
+            results.append(True)
+        else:
+            print(f"    FAIL: vec{i}  expected {expected.hex()} got {got.hex()}")
+            results.append(False)
+    return results
+
+
+def test_aes_decrypt_block(transport, labels) -> list:
+    """Direct unit test: aes_decrypt_block vs cryptography AES-256-ECB."""
+    print("\n--- aes_decrypt_block direct (10 vectors) ---")
+    results = []
+    for i in range(10):
+        key = random_bytes(32)
+        pt = random_bytes(16)
+        ct = _lib_aes_ecb_encrypt(key, pt)
+        write_bytes(transport, labels["aes_current_key"], key)
+        robust_jsr(transport, labels["aes_key_expansion"], timeout=10.0)
+        write_bytes(transport, labels["aes_state"], ct)
+        robust_jsr(transport, labels["aes_decrypt_block"], timeout=10.0)
+        got = read_bytes(transport, labels["aes_state"], 16)
+        if got == pt:
+            print(f"    PASS: vec{i}")
+            results.append(True)
+        else:
+            print(f"    FAIL: vec{i}  expected {pt.hex()} got {got.hex()}")
+            results.append(False)
+    return results
+
+
+def test_gcmsiv_derive_keys(transport, labels) -> list:
+    """Direct unit test: gcmsiv_derive_keys vs polyval_reference.
+
+    Precondition: aes_expanded_key must already hold the master-key expansion.
+    """
+    print("\n--- gcmsiv_derive_keys direct (10 vectors) ---")
+    results = []
+    for i in range(10):
+        key = random_bytes(32)
+        nonce = random_bytes(12)
+        # Install master key and expand it (required precondition)
+        write_bytes(transport, labels["aes_current_key"], key)
+        robust_jsr(transport, labels["aes_key_expansion"], timeout=10.0)
+        write_bytes(transport, labels["gcmsiv_nonce"], nonce)
+        robust_jsr(transport, labels["gcmsiv_derive_keys"], timeout=30.0)
+        got_auth = read_bytes(transport, labels["gcmsiv_auth_key"], 16)
+        got_enc = read_bytes(transport, labels["gcmsiv_enc_key"], 32)
+        exp_auth, exp_enc = py_derive_keys(key, nonce)
+        if got_auth == exp_auth and got_enc == exp_enc:
+            print(f"    PASS: vec{i}")
+            results.append(True)
+        else:
+            print(f"    FAIL: vec{i}")
+            if got_auth != exp_auth:
+                print(f"      auth expected {exp_auth.hex()} got {got_auth.hex()}")
+            if got_enc != exp_enc:
+                print(f"      enc  expected {exp_enc.hex()} got {got_enc.hex()}")
+            results.append(False)
+    return results
+
+
+def _py_polyval_tag_base(auth_key: bytes, pt: bytes) -> bytes:
+    """Replicate what gcmsiv_compute_tag_base does: POLYVAL over
+    [PT blocks] [length block with AAD=0]. Returns 16-byte POLYVAL result."""
+    blocks = []
+    if pt:
+        for i in range(0, len(pt), 16):
+            chunk = pt[i:i+16]
+            if len(chunk) < 16:
+                chunk = chunk + b"\x00" * (16 - len(chunk))
+            blocks.append(chunk)
+    len_block = struct.pack("<QQ", 0, len(pt) * 8)
+    blocks.append(len_block)
+    return py_polyval(auth_key, *blocks)
+
+
+def test_gcmsiv_compute_tag_base(transport, labels) -> list:
+    """Direct unit test: gcmsiv_compute_tag_base leaves POLYVAL result in
+    gcmsiv_tag_acc (also polyval_acc). Compare vs python reference which
+    is externally validated."""
+    print("\n--- gcmsiv_compute_tag_base direct (10 vectors, varying len) ---")
+    results = []
+    lengths = [0, 1, 15, 16, 17, 32, 48, 63, 64, 7]
+    for i, pt_len in enumerate(lengths):
+        auth_key = random_bytes(16)
+        pt = random_bytes(pt_len) if pt_len > 0 else b""
+        # Set up state directly
+        write_bytes(transport, labels["gcmsiv_auth_key"], auth_key)
+        write_bytes(transport, labels["gcmsiv_pt_buf"], pt if pt else b"\x00")
+        write_bytes(transport, labels["gcmsiv_pt_len"], bytes([pt_len]))
+        robust_jsr(transport, labels["gcmsiv_compute_tag_base"], timeout=30.0)
+        got = read_bytes(transport, labels["gcmsiv_tag_acc"], 16)
+        expected = _py_polyval_tag_base(auth_key, pt)
+        if got == expected:
+            print(f"    PASS: vec{i} len={pt_len}")
+            results.append(True)
+        else:
+            print(f"    FAIL: vec{i} len={pt_len}")
+            print(f"      expected {expected.hex()}")
+            print(f"      got      {got.hex()}")
+            results.append(False)
+    return results
+
+
+def test_gcmsiv_finalize_tag(transport, labels) -> list:
+    """Direct unit test: gcmsiv_finalize_tag applies (XOR nonce, clear MSB,
+    AES-encrypt with derived enc key) to gcmsiv_tag_acc -> gcmsiv_tag.
+
+    Precondition: gcmsiv_exp_enc_key must hold the derived enc-key schedule,
+    and aes_expanded_key must hold the master schedule (the routine installs
+    the enc key via gcmsiv_install_enc_key and restores it via
+    gcmsiv_restore_orig_key)."""
+    print("\n--- gcmsiv_finalize_tag direct (10 vectors) ---")
+    results = []
+    for i in range(10):
+        key = random_bytes(32)
+        nonce = random_bytes(12)
+        tag_acc = random_bytes(16)
+
+        # Bootstrap: install master key + expand, then run derive_keys
+        # so that gcmsiv_exp_enc_key gets populated.
+        write_bytes(transport, labels["aes_current_key"], key)
+        robust_jsr(transport, labels["aes_key_expansion"], timeout=10.0)
+        write_bytes(transport, labels["gcmsiv_nonce"], nonce)
+        robust_jsr(transport, labels["gcmsiv_derive_keys"], timeout=30.0)
+
+        # Now set up the inputs for finalize_tag
+        write_bytes(transport, labels["gcmsiv_tag_acc"], tag_acc)
+        # nonce already in place; exp_enc_key populated by derive_keys
+        robust_jsr(transport, labels["gcmsiv_finalize_tag"], timeout=10.0)
+        got = read_bytes(transport, labels["gcmsiv_tag"], 16)
+
+        # Compute expected
+        _auth, enc_key = py_derive_keys(key, nonce)
+        block = bytearray(tag_acc)
+        for j in range(12):
+            block[j] ^= nonce[j]
+        block[15] &= 0x7f
+        expected = _lib_aes_ecb_encrypt(enc_key, bytes(block))
+        if got == expected:
+            print(f"    PASS: vec{i}")
+            results.append(True)
+        else:
+            print(f"    FAIL: vec{i}")
+            print(f"      expected {expected.hex()}")
+            print(f"      got      {got.hex()}")
+            results.append(False)
+    return results
+
+
+def _py_gcmsiv_ctr(enc_key: bytes, tag: bytes, data: bytes) -> bytes:
+    """GCM-SIV CTR: counter = tag with MSB of byte 15 set, 32-bit LE
+    increment on bytes 0..3 per block. Mirrors polyval_reference.gcmsiv_ctr_encrypt
+    but we reimplement via cryptography for the P5 external oracle."""
+    if not data:
+        return b""
+    counter = bytearray(tag)
+    counter[15] |= 0x80
+    out = bytearray()
+    for i in range(0, len(data), 16):
+        ks = _lib_aes_ecb_encrypt(enc_key, bytes(counter))
+        chunk = data[i:i+16]
+        for j in range(len(chunk)):
+            out.append(chunk[j] ^ ks[j])
+        c = struct.unpack_from("<I", counter, 0)[0]
+        c = (c + 1) & 0xFFFFFFFF
+        struct.pack_into("<I", counter, 0, c)
+    return bytes(out)
+
+
+def test_gcmsiv_ctr_encrypt(transport, labels) -> list:
+    """Direct unit test: gcmsiv_ctr_encrypt runs AES-CTR over gcmsiv_pt_buf
+    -> gcmsiv_ct_buf using the derived enc-key schedule and gcmsiv_tag as IV."""
+    print("\n--- gcmsiv_ctr_encrypt direct (10 vectors) ---")
+    results = []
+    for i in range(10):
+        key = random_bytes(32)
+        nonce = random_bytes(12)
+        pt_len = random.choice([1, 15, 16, 17, 32, 48, 63, 64])
+        pt = random_bytes(pt_len)
+        tag = random_bytes(16)
+
+        # Bootstrap derive_keys to populate gcmsiv_exp_enc_key
+        write_bytes(transport, labels["aes_current_key"], key)
+        robust_jsr(transport, labels["aes_key_expansion"], timeout=10.0)
+        write_bytes(transport, labels["gcmsiv_nonce"], nonce)
+        robust_jsr(transport, labels["gcmsiv_derive_keys"], timeout=30.0)
+
+        # Set inputs
+        write_bytes(transport, labels["gcmsiv_pt_buf"], pt)
+        write_bytes(transport, labels["gcmsiv_pt_len"], bytes([pt_len]))
+        write_bytes(transport, labels["gcmsiv_tag"], tag)
+        robust_jsr(transport, labels["gcmsiv_ctr_encrypt"], timeout=30.0)
+        got = read_bytes(transport, labels["gcmsiv_ct_buf"], pt_len)
+
+        _auth, enc_key = py_derive_keys(key, nonce)
+        expected = _py_gcmsiv_ctr(enc_key, tag, pt)
+        if got == expected:
+            print(f"    PASS: vec{i} len={pt_len}")
+            results.append(True)
+        else:
+            print(f"    FAIL: vec{i} len={pt_len}")
+            print(f"      expected {expected.hex()}")
+            print(f"      got      {got.hex()}")
+            results.append(False)
+    return results
+
+
+def test_gcmsiv_ctr_decrypt(transport, labels) -> list:
+    """Direct unit test: gcmsiv_ctr_decrypt is symmetric; encrypt via
+    cryptography, decrypt via 6502, compare to plaintext."""
+    print("\n--- gcmsiv_ctr_decrypt direct (10 vectors) ---")
+    results = []
+    for i in range(10):
+        key = random_bytes(32)
+        nonce = random_bytes(12)
+        pt_len = random.choice([1, 15, 16, 17, 32, 48, 63, 64])
+        pt = random_bytes(pt_len)
+        tag = random_bytes(16)
+
+        _auth, enc_key = py_derive_keys(key, nonce)
+        ct = _py_gcmsiv_ctr(enc_key, tag, pt)
+
+        write_bytes(transport, labels["aes_current_key"], key)
+        robust_jsr(transport, labels["aes_key_expansion"], timeout=10.0)
+        write_bytes(transport, labels["gcmsiv_nonce"], nonce)
+        robust_jsr(transport, labels["gcmsiv_derive_keys"], timeout=30.0)
+
+        write_bytes(transport, labels["gcmsiv_ct_buf"], ct)
+        write_bytes(transport, labels["gcmsiv_pt_len"], bytes([pt_len]))
+        write_bytes(transport, labels["gcmsiv_tag"], tag)
+        robust_jsr(transport, labels["gcmsiv_ctr_decrypt"], timeout=30.0)
+        got = read_bytes(transport, labels["gcmsiv_dec_buf"], pt_len)
+        if got == pt:
+            print(f"    PASS: vec{i} len={pt_len}")
+            results.append(True)
+        else:
+            print(f"    FAIL: vec{i} len={pt_len}")
+            print(f"      expected {pt.hex()}")
+            print(f"      got      {got.hex()}")
+            results.append(False)
+    return results
+
+
+# ---------------------------------------------------------------------------
 # Orchestrator
 # ---------------------------------------------------------------------------
 
@@ -540,6 +826,16 @@ def run_tests(transport: BinaryViceTransport, labels: Labels,
     record_many(test_all_zero_tag(transport, labels))
     record_many(test_all_ones_tag(transport, labels))
     record_many(test_tag_equals_pt_block(transport, labels))
+
+    # 3b. Direct API coverage tests (P5)
+    print("\n=== Direct API Coverage Tests ===")
+    record_many(test_aes_encrypt_block(transport, labels))
+    record_many(test_aes_decrypt_block(transport, labels))
+    record_many(test_gcmsiv_derive_keys(transport, labels))
+    record_many(test_gcmsiv_compute_tag_base(transport, labels))
+    record_many(test_gcmsiv_finalize_tag(transport, labels))
+    record_many(test_gcmsiv_ctr_encrypt(transport, labels))
+    record_many(test_gcmsiv_ctr_decrypt(transport, labels))
 
     # 4. Random roundtrip tests
     print("\n=== Random Roundtrip Tests ===")
