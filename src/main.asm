@@ -17,7 +17,8 @@
 !source "lib/aes_encrypt.asm"
 !source "lib/aes_decrypt.asm"
 !source "disk_io.asm"
-!source "gcm_siv.asm"
+!source "lib/gcm_siv.asm"
+!source "gcm_siv_ui.asm"
 !source "lib/polyval.asm"
 !source "display.asm"
 
