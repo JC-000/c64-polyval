@@ -8,10 +8,43 @@
 ; =============================================================================
 
 ; =============================================================================
-; gcmsiv_encrypt - perform AES-256-GCM-SIV encryption
-; Uses aes_current_key as the 256-bit key
-; Input: gcmsiv_pt_buf (plaintext), gcmsiv_pt_len (length), gcmsiv_nonce (12 bytes)
-; Output: gcmsiv_ct_buf (ciphertext), gcmsiv_tag (16 bytes)
+; gcmsiv_encrypt - full AES-256-GCM-SIV encryption (RFC 8452)
+;
+; Pipeline:
+;   1. gcmsiv_derive_keys     (auth+enc keys from master key + nonce)
+;   2. gcmsiv_compute_tag_base (POLYVAL over plaintext || lengths)
+;   3. gcmsiv_finalize_tag    (AES-encrypt the base with derived enc key)
+;   4. gcmsiv_ctr_encrypt     (AES-CTR keystream over plaintext)
+;
+; Caveat: this library's GCM-SIV wrapper does NOT currently absorb AAD
+; into the tag. gcmsiv_compute_tag_base treats AAD length as zero. The
+; gcmsiv_aad_buf / gcmsiv_aad_len symbols mentioned in the draft API
+; header are reserved for a future extension.
+;
+; Entry:
+;   A, X, Y      n/a
+;   memory       aes_current_key  = 32-byte AES-256 master key
+;                gcmsiv_nonce     = 12-byte nonce
+;                gcmsiv_pt_buf    = plaintext
+;                gcmsiv_pt_len    = plaintext length in bytes (0..64)
+;                aes_expanded_key = already expanded from aes_current_key
+;                                   (caller must have called
+;                                   aes_key_expansion earlier)
+;
+; Exit:
+;   A, X, Y      undefined
+;   memory       gcmsiv_ct_buf    = ciphertext (pt_len bytes)
+;                gcmsiv_tag       = 16-byte authentication tag
+;                aes_expanded_key = restored to master-key schedule
+;                aes_current_key  = preserved
+;                polyval_h        = CLOBBERED (holds H' after tag_base)
+;                polyval_htable*  = built for the derived auth key
+;
+; Clobbers: A, X, Y, all POLYVAL / AES / GCM-SIV ZP and buffer state
+;           except the listed outputs and preserved inputs.
+; Cycles:   unmeasured (dominated by AES and POLYVAL precompute)
+; IRQ-safe: no
+; Reentrant: no
 ; =============================================================================
 gcmsiv_encrypt:
         ; Step 1: Derive authentication key and encryption key from main key + nonce
@@ -29,8 +62,46 @@ gcmsiv_encrypt:
         rts
 
 ; =============================================================================
-; gcmsiv_derive_keys - derive authentication and encryption keys per RFC 8452
-; For AES-256-GCM-SIV: 6 AES encryptions of (counter || nonce)
+; gcmsiv_derive_keys - RFC 8452 key derivation (auth + enc keys)
+;
+; For AES-256-GCM-SIV: performs 6 AES encryptions of
+; (LE32(counter) || nonce), where counter = 0..5. The low 8 bytes of
+; each ciphertext are concatenated to form:
+;   - 16-byte POLYVAL auth key (counters 0,1)
+;   - 32-byte AES-256 enc key  (counters 2,3,4,5)
+; The derived enc key is then expanded into gcmsiv_exp_enc_key and the
+; original master-key schedule is restored into aes_expanded_key.
+;
+; PRECONDITION: aes_expanded_key must already hold the expansion of
+; aes_current_key (the master key). This routine does NOT re-expand it
+; on entry; it assumes the caller has done so. The top-level
+; gcmsiv_encrypt / gcmsiv_decrypt do NOT call aes_key_expansion
+; themselves either, so the host is responsible for expanding the
+; master key once before the first GCM-SIV call.
+; (See SURPRISES in the Phase 3 report.)
+;
+; Entry:
+;   A, X, Y      n/a
+;   memory       aes_current_key  = 32-byte master key
+;                aes_expanded_key = master-key schedule (caller ensures)
+;                gcmsiv_nonce     = 12-byte nonce
+;
+; Exit:
+;   A, X, Y      undefined
+;   memory       gcmsiv_auth_key    = 16-byte POLYVAL auth key
+;                gcmsiv_enc_key     = 32-byte AES-256 enc key
+;                gcmsiv_exp_enc_key = 240-byte expanded enc-key schedule
+;                                     (stored full 256 bytes, tail unused)
+;                aes_expanded_key   = restored master-key schedule
+;                aes_current_key    = preserved
+;                aes_state          = clobbered
+;                gcmsiv_saved_key   = clobbered (scratch)
+;
+; Clobbers: A, X, Y, aes_state, gcmsiv_auth_key, gcmsiv_enc_key,
+;           gcmsiv_exp_enc_key, gcmsiv_saved_key, gcmsiv_derive_ctr
+; Cycles:   unmeasured (dominated by 6 AES encrypts + 2 key expansions)
+; IRQ-safe: no
+; Reentrant: no
 ; =============================================================================
 gcmsiv_derive_keys:
         lda #0
@@ -172,8 +243,42 @@ gcmsiv_derive_ctr:
         !byte 0
 
 ; =============================================================================
-; gcmsiv_compute_tag_base - compute authentication tag base using POLYVAL
-; Processes plaintext blocks then a length block (AAD_len || PT_len in bits)
+; gcmsiv_compute_tag_base - run POLYVAL over plaintext and the length block
+;
+; Pipeline:
+;   1. Copy gcmsiv_auth_key -> polyval_h
+;   2. polyval_precompute_table (builds H-tables from the auth key)
+;   3. polyval_init             (zero the accumulator)
+;   4. For each 16-byte (zero-padded) plaintext block:
+;        copy into polyval_temp; polyval_update
+;   5. Build and absorb the length block:
+;        (AAD bit length = 0) || (PT bit length, little-endian)
+;   6. Copy polyval_acc -> gcmsiv_tag_acc
+;
+; Caveat: AAD is NOT processed; the AAD length field is always written
+; as zero. This matches the current gcmsiv_encrypt/decrypt surface,
+; which does not expose AAD either.
+;
+; Entry:
+;   A, X, Y      n/a
+;   memory       gcmsiv_auth_key  = derived POLYVAL auth key
+;                gcmsiv_pt_buf    = plaintext
+;                gcmsiv_pt_len    = length in bytes (0..64)
+;
+; Exit:
+;   A, X, Y      undefined
+;   memory       gcmsiv_tag_acc   = 16-byte POLYVAL result
+;                polyval_acc      = same result (mirror)
+;                polyval_h        = CLOBBERED (now H')
+;                polyval_htable*  = filled for the auth key
+;                polyval_temp     = clobbered
+;                gcmsiv_block_idx = clobbered
+;                gcmsiv_pt_buf    = preserved
+;
+; Clobbers: A, X, Y, polyval_*, gcmsiv_tag_acc, gcmsiv_block_idx
+; Cycles:   unmeasured
+; IRQ-safe: no
+; Reentrant: no
 ; =============================================================================
 gcmsiv_compute_tag_base:
         ; Initialize POLYVAL with the derived auth key
@@ -283,7 +388,37 @@ gcmsiv_compute_tag_base:
         rts
 
 ; =============================================================================
-; gcmsiv_finalize_tag - encrypt tag base with derived enc key to produce final tag
+; gcmsiv_finalize_tag - produce the final 16-byte tag from gcmsiv_tag_acc
+;
+; Pipeline:
+;   1. aes_state = gcmsiv_tag_acc
+;   2. XOR first 12 bytes with gcmsiv_nonce
+;   3. Clear the MSB of aes_state[15] (RFC 8452 tag tweak)
+;   4. Install the derived enc-key schedule (gcmsiv_install_enc_key)
+;   5. aes_encrypt_block
+;   6. Restore the master-key schedule (gcmsiv_restore_orig_key)
+;   7. gcmsiv_tag = aes_state
+;
+; Entry:
+;   A, X, Y      n/a
+;   memory       gcmsiv_tag_acc     = POLYVAL result from
+;                                     gcmsiv_compute_tag_base
+;                gcmsiv_nonce       = 12-byte nonce
+;                gcmsiv_exp_enc_key = 240 B derived enc-key schedule
+;                aes_expanded_key   = master-key schedule to preserve
+;
+; Exit:
+;   A, X, Y      undefined
+;   memory       gcmsiv_tag         = 16-byte final tag
+;                aes_state          = tag (mirror of gcmsiv_tag)
+;                aes_expanded_key   = restored master-key schedule
+;                gcmsiv_saved_exp   = clobbered (scratch)
+;
+; Clobbers: A, X, Y, aes_state, gcmsiv_tag, gcmsiv_saved_exp,
+;           aes_expanded_key (temporarily), aes_mc_*
+; Cycles:   unmeasured
+; IRQ-safe: no
+; Reentrant: no
 ; =============================================================================
 gcmsiv_finalize_tag:
         ; Copy tag accumulator to state
@@ -362,7 +497,39 @@ gcmsiv_restore_orig_key:
         rts
 
 ; =============================================================================
-; gcmsiv_ctr_encrypt - encrypt plaintext using AES-CTR with tag as IV
+; gcmsiv_ctr_encrypt - AES-CTR keystream from gcmsiv_pt_buf -> gcmsiv_ct_buf
+;
+; The counter block is initialised from gcmsiv_tag with the MSB of the
+; last byte forced to 1 (RFC 8452 IV construction). The 32-bit LE
+; counter at bytes 0..3 is incremented per 16-byte block. Uses the
+; derived enc-key schedule via gcmsiv_install_enc_key and restores the
+; master-key schedule on exit.
+;
+; Entry:
+;   A, X, Y      n/a
+;   memory       gcmsiv_tag         = 16-byte tag (used as IV seed)
+;                gcmsiv_pt_buf      = plaintext
+;                gcmsiv_pt_len      = length in bytes (0..64)
+;                gcmsiv_exp_enc_key = derived enc-key schedule
+;                aes_expanded_key   = master-key schedule to preserve
+;
+; Exit:
+;   A, X, Y      undefined
+;   memory       gcmsiv_ct_buf      = ciphertext (pt_len bytes)
+;                gcmsiv_counter     = clobbered
+;                gcmsiv_keystream   = clobbered
+;                gcmsiv_ct_idx      = clobbered
+;                gcmsiv_ks_idx      = clobbered
+;                aes_state          = clobbered
+;                aes_expanded_key   = restored master-key schedule
+;                gcmsiv_tag         = preserved
+;                gcmsiv_pt_buf      = preserved
+;
+; Clobbers: A, X, Y, gcmsiv_counter, gcmsiv_keystream, gcmsiv_ct_idx,
+;           gcmsiv_ks_idx, gcmsiv_ct_buf, aes_state, aes_mc_*
+; Cycles:   unmeasured
+; IRQ-safe: no
+; Reentrant: no
 ; =============================================================================
 gcmsiv_ctr_encrypt:
         jsr gcmsiv_install_enc_key
@@ -450,7 +617,53 @@ gcmsiv_gen_keystream:
         rts
 
 ; =============================================================================
-; gcmsiv_decrypt - perform AES-256-GCM-SIV decryption with tag verification
+; gcmsiv_decrypt - full AES-256-GCM-SIV decryption with tag verification
+;
+; Pipeline:
+;   1. gcmsiv_derive_keys
+;   2. gcmsiv_ctr_decrypt          (CT -> gcmsiv_dec_buf)
+;   3. save received tag, stage decrypted PT into gcmsiv_pt_buf
+;   4. gcmsiv_compute_tag_base / gcmsiv_finalize_tag (recompute)
+;   5. constant-time-ish byte-wise compare with the saved tag
+;   6. on match: set gcmsiv_tag_valid=1, restore original tag;
+;      on mismatch: clear gcmsiv_dec_buf, set gcmsiv_tag_valid=0, restore
+;      original tag.
+;
+; Entry:
+;   A, X, Y      n/a
+;   memory       aes_current_key    = 32-byte master key
+;                aes_expanded_key   = master-key schedule (pre-expanded)
+;                gcmsiv_nonce       = 12-byte nonce
+;                gcmsiv_ct_buf      = ciphertext
+;                gcmsiv_pt_len      = plaintext length (0..64)
+;                gcmsiv_tag         = received 16-byte tag
+;
+; Exit:
+;   On valid tag:
+;     A             = 0
+;     Z flag        = 1 (BEQ taken)
+;     gcmsiv_tag_valid = 1
+;     gcmsiv_dec_buf   = plaintext (pt_len bytes)
+;     gcmsiv_tag       = preserved (restored to received tag)
+;   On invalid tag:
+;     A             = 1
+;     Z flag        = 0 (BNE taken)
+;     gcmsiv_tag_valid = 0
+;     gcmsiv_dec_buf   = zeroed (64 bytes)
+;     gcmsiv_tag       = restored to received tag
+;   memory (always): polyval_*, aes_state, gcmsiv_counter/keystream/idx
+;                    all clobbered; aes_expanded_key restored to master
+;                    schedule; aes_current_key preserved.
+;
+; Clobbers: A, X, Y, same footprint as gcmsiv_encrypt
+; Cycles:   unmeasured
+; IRQ-safe: no
+; Reentrant: no
+;
+; Recommended usage:
+;   jsr gcmsiv_decrypt
+;   beq tag_ok         ; valid -> consume gcmsiv_dec_buf
+;   ; ...tag failure path...
 ; =============================================================================
 gcmsiv_decrypt:
         lda #0
@@ -530,7 +743,37 @@ gcmsiv_decrypt:
         rts
 
 ; =============================================================================
-; gcmsiv_ctr_decrypt - decrypt ciphertext using AES-CTR with tag as IV
+; gcmsiv_ctr_decrypt - AES-CTR keystream from gcmsiv_ct_buf -> gcmsiv_dec_buf
+;
+; Mirror image of gcmsiv_ctr_encrypt: reads ciphertext from gcmsiv_ct_buf
+; and writes recovered plaintext to gcmsiv_dec_buf. The counter block is
+; initialised from gcmsiv_tag with the MSB of the last byte forced to 1.
+;
+; Entry:
+;   A, X, Y      n/a
+;   memory       gcmsiv_tag         = 16-byte tag (used as IV seed)
+;                gcmsiv_ct_buf      = ciphertext
+;                gcmsiv_pt_len      = length in bytes (0..64)
+;                gcmsiv_exp_enc_key = derived enc-key schedule
+;                aes_expanded_key   = master-key schedule to preserve
+;
+; Exit:
+;   A, X, Y      undefined
+;   memory       gcmsiv_dec_buf     = plaintext (pt_len bytes)
+;                gcmsiv_counter     = clobbered
+;                gcmsiv_keystream   = clobbered
+;                gcmsiv_ct_idx      = clobbered
+;                gcmsiv_ks_idx      = clobbered
+;                aes_state          = clobbered
+;                aes_expanded_key   = restored master-key schedule
+;                gcmsiv_tag         = preserved
+;                gcmsiv_ct_buf      = preserved
+;
+; Clobbers: A, X, Y, gcmsiv_counter, gcmsiv_keystream, gcmsiv_ct_idx,
+;           gcmsiv_ks_idx, gcmsiv_dec_buf, aes_state, aes_mc_*
+; Cycles:   unmeasured
+; IRQ-safe: no
+; Reentrant: no
 ; =============================================================================
 gcmsiv_ctr_decrypt:
         jsr gcmsiv_install_enc_key

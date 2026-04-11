@@ -367,6 +367,23 @@
 
 ; =============================================================================
 ; polyval_init - zero the 128-bit accumulator
+;
+; Entry:
+;   A, X, Y      n/a (contents ignored)
+;   memory       none required
+;   flags        none required
+;
+; Exit:
+;   A            0
+;   X            16
+;   Y            preserved
+;   memory       polyval_acc[0..15] = 0
+;   flags        Z=1, N=0 (from the trailing compare)
+;
+; Clobbers: A, X, polyval_acc
+; Cycles:   ~110 (16-byte store loop)
+; IRQ-safe: no (touches shared ZP polyval_acc)
+; Reentrant: no
 ; =============================================================================
 polyval_init:
         ldx #0
@@ -379,9 +396,29 @@ polyval_init:
         rts
 
 ; =============================================================================
-; polyval_double - left-shift 128-bit value at polyval_acc by 1 bit
-; If carry out, XOR with left-shift reduction constant
-; Used during table precomputation and multiplication
+; polyval_double - multiply the accumulator by x in GF(2^128)
+;
+; Implements a single left-shift of polyval_acc with POLYVAL's left-shift
+; reduction polynomial (bytes ^= {$01, ..., $c2}) when the high bit
+; carries out. Used internally by polyval_precompute_table and by the
+; SHORT-profile multiply; exposed so tests can exercise the doubling
+; primitive in isolation.
+;
+; Entry:
+;   A, X, Y      n/a
+;   memory       polyval_acc = 128-bit value to double
+;   flags        none required
+;
+; Exit:
+;   A            reduction constant if branch taken, else last rolled byte
+;   X, Y         preserved
+;   memory       polyval_acc = input * x (mod POLYVAL reduction polynomial)
+;   flags        undefined - do NOT rely on C/Z/N
+;
+; Clobbers: A, polyval_acc
+; Cycles:   85 (inlined ZP ROLs)
+; IRQ-safe: no
+; Reentrant: no
 ; =============================================================================
 polyval_double:
         clc
@@ -453,8 +490,28 @@ polyval_right_shift_1:
         rts
 
 ; =============================================================================
-; polyval_shift_left_4 - left-shift polyval_acc by 4 bits with reduction
-; Inlined: 4 sequential doublings (ZP ROL = 5 cy vs ABS ROL = 6 cy)
+; polyval_shift_left_4 - multiply the accumulator by x^4 in GF(2^128)
+;
+; Four sequential POLYVAL doublings fused into one straight-line sequence
+; to get a small speed win on the SHORT-profile multiply hot path.
+; Exposed as a public symbol so test_polyval_direct.py can regression-
+; test the combined 4-bit shift against the Python reference.
+;
+; Entry:
+;   A, X, Y      n/a
+;   memory       polyval_acc = 128-bit value to shift
+;   flags        none required
+;
+; Exit:
+;   A            undefined
+;   X, Y         preserved
+;   memory       polyval_acc = input * x^4
+;   flags        undefined
+;
+; Clobbers: A, polyval_acc
+; Cycles:   370 (measured)
+; IRQ-safe: no
+; Reentrant: no
 ; =============================================================================
 polyval_shift_left_4:
         ; --- doubling 1 ---
@@ -564,8 +621,33 @@ polyval_shift_left_4:
         rts
 
 ; =============================================================================
-; polyval_precompute_table - build htable[0..15] from H
+; polyval_precompute_table - build the 4-bit H-table from polyval_h
 ;
+; SHORT profile: builds only polyval_htable (256 B). Must be called once
+; per new H before polyval_update / polyval_multiply.
+;
+; PRECONDITION (undocumented until now): polyval_h must already contain
+; the desired H. This routine uses polyval_temp and polyval_acc as
+; scratch during the mulX_POLYVAL transform and leaves polyval_h
+; overwritten with H'. Callers that need H back after a precompute must
+; save a copy first. (See SURPRISES in the Phase 3 report.)
+;
+; Entry:
+;   A, X, Y      n/a
+;   memory       polyval_h = 16-byte hash key H
+;
+; Exit:
+;   A, X, Y      undefined
+;   memory       polyval_htable[256]  filled
+;                polyval_h            CLOBBERED (holds H')
+;                polyval_acc, polyval_temp undefined
+;
+; Clobbers: A, X, Y, polyval_acc, polyval_temp, polyval_h
+; Cycles:   4654 (SHORT, measured)
+; IRQ-safe: no
+; Reentrant: no
+;
+; Algorithm notes:
 ; Step 1: Compute H' = H * x^{-128} via the mulX_POLYVAL identity.
 ;
 ;   In GF(2^128) under POLYVAL's polynomial p(x) = x^128 + x^127 + x^126
@@ -695,15 +777,32 @@ polyval_precompute_table:
         rts
 
 ; =============================================================================
-; polyval_multiply - multiply polyval_acc by H using 4-bit table lookup
-; Process each byte of the accumulator as two nibbles (32 lookups total)
+; polyval_multiply - multiply polyval_acc by H in GF(2^128) (SHORT profile)
 ;
 ; Algorithm: result = 0; for i = 15 downto 0:
 ;   result <<= 4 (with reduction); result ^= htable[byte_high_nibble]
 ;   result <<= 4 (with reduction); result ^= htable[byte_low_nibble]
 ;
 ; Uses LEFT-shift-by-4 with the table built from H' = H * x^{-128},
-; so the result is acc * H' = acc * H * x^{-128} = dot(acc, H).
+; so the result is acc * H' = acc * H * x^{-128} = dot(acc, H). The
+; SHORT profile uses only the 256-byte polyval_htable (no htable8 /
+; reduce8 slices).
+;
+; Entry:
+;   A, X, Y      n/a
+;   memory       polyval_acc    = 128-bit operand a
+;                polyval_htable = built by polyval_precompute_table
+;
+; Exit:
+;   A, X, Y      undefined
+;   memory       polyval_acc    = a * H' = dot(a, H)
+;                pv_mul_input   = CLOBBERED (holds copy of input a)
+;                pv_mul_nibble  = CLOBBERED
+;
+; Clobbers: A, X, Y, polyval_acc, pv_mul_input, pv_mul_nibble
+; Cycles:   18774 (SHORT, measured)
+; IRQ-safe: no
+; Reentrant: no
 ; =============================================================================
 polyval_multiply:
         ; Unrolled 16-byte save: eliminates per-call loop overhead in hot path.
@@ -887,7 +986,27 @@ polyval_multiply:
 ; multiply; the fused Tier 1 hot path no longer needs it.
 
 ; =============================================================================
-; polyval_xor_table_entry - XOR htable[pv_mul_nibble] into polyval_acc
+; polyval_xor_table_entry - XOR polyval_htable[pv_mul_nibble] into acc
+;
+; Low-level helper exposed for the regression suite. Selects one 16-byte
+; entry from the 4-bit Shoup H-table (indexed by pv_mul_nibble in 0..15)
+; and XORs it into polyval_acc in place.
+;
+; Entry:
+;   A, X, Y      n/a
+;   memory       pv_mul_nibble  = entry index 0..15 (low nibble only)
+;                polyval_htable = already built by polyval_precompute_table
+;                polyval_acc    = current accumulator
+;
+; Exit:
+;   A, X, Y      undefined
+;   memory       polyval_acc ^= polyval_htable[pv_mul_nibble]
+;                (no-op when pv_mul_nibble == 0)
+;
+; Clobbers: A, Y, polyval_acc
+; Cycles:   353 when nibble != 0, ~5 for the fast skip
+; IRQ-safe: no
+; Reentrant: no
 ; =============================================================================
 polyval_xor_table_entry:
         ; Calculate table offset: nibble * 16
@@ -905,8 +1024,28 @@ polyval_xor_table_entry:
         rts
 
 ; =============================================================================
-; polyval_update - XOR polyval_temp into accumulator, then multiply by H
-; polyval_temp contains the 16-byte block
+; polyval_update - absorb one 16-byte block into the POLYVAL accumulator
+;
+; Computes acc = (acc XOR polyval_temp) * H for one 128-bit block.
+; This is the per-block step of the RFC 8452 POLYVAL construction.
+;
+; Entry:
+;   A, X, Y      n/a
+;   memory       polyval_acc    = current accumulator
+;                polyval_temp   = 16-byte block to absorb
+;                polyval_htable = already built by polyval_precompute_table
+;
+; Exit:
+;   A, X, Y      undefined
+;   memory       polyval_acc    = (old acc XOR polyval_temp) * H
+;                polyval_temp   = preserved
+;                pv_mul_input   = clobbered
+;                pv_mul_nibble  = clobbered
+;
+; Clobbers: A, X, Y, polyval_acc, pv_mul_input, pv_mul_nibble
+; Cycles:   ~19000 (SHORT, dominated by polyval_multiply)
+; IRQ-safe: no
+; Reentrant: no
 ; =============================================================================
 polyval_update:
         ; Unrolled 16-byte XOR of block into accumulator: hot-path loop removal.

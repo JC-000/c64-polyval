@@ -4,8 +4,31 @@
 ; =============================================================================
 
 ; =============================================================================
-; aes_decrypt_block - decrypt one 16-byte block in aes_state
-; standard inverse cipher for aes-256 (14 rounds)
+; aes_decrypt_block - AES-256 decrypt one 16-byte block in place
+;
+; Runs the full 14-round inverse AES-256 cipher on aes_state using the
+; round keys in aes_expanded_key. FIPS-197 order: AddRoundKey at round
+; 14, then 13 x {InvShiftRows, InvSubBytes, AddRoundKey, InvMixColumns},
+; then final {InvShiftRows, InvSubBytes, AddRoundKey}.
+;
+; Entry:
+;   A, X, Y      n/a
+;   memory       aes_state        = 16-byte ciphertext block
+;                aes_expanded_key = 240-byte key schedule from
+;                                   aes_key_expansion
+;
+; Exit:
+;   A, X, Y      undefined
+;   memory       aes_state        = plaintext block (16 bytes)
+;                aes_mc_a0..b3    = clobbered (InvMixColumns scratch)
+;
+; Clobbers: A, X, Y, aes_state, aes_mc_a0..b3, zp_round
+; Cycles:   unmeasured
+; IRQ-safe: no
+; Reentrant: no
+; Note: GCM-SIV never invokes aes_decrypt_block; decryption is done via
+;       AES-CTR on encrypt_block. This routine is exposed for direct
+;       AES users.
 ; =============================================================================
 aes_decrypt_block:
         ; round 14: initial add round key
