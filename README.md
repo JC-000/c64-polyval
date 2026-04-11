@@ -15,9 +15,40 @@ This project implements the POLYVAL universal hash function as specified in [RFC
 Requires the [ACME cross-assembler](https://sourceforge.net/projects/acme-crossass/).
 
 ```
-make        # assemble
-make run    # assemble and launch in VICE
-make clean  # remove build artifacts
+make                           # assemble (defaults to POLYVAL_PROFILE=long)
+make POLYVAL_PROFILE=short     # assemble with the low-latency SHORT profile
+make POLYVAL_PROFILE=long      # assemble with the throughput LONG profile
+make run                       # assemble and launch in VICE
+make clean                     # remove build artifacts
+```
+
+## Dual-path POLYVAL profiles
+
+The assembler exposes a build-time `POLYVAL_PROFILE` selector that picks between two different multiply back-ends. Both profiles export the same public symbols, so applications can swap one for the other without source changes — only the `.prg` needs to be rebuilt.
+
+**Why two profiles.** RFC 8452 AES-GCM-SIV derives the POLYVAL hash key H from a per-message nonce, so the `polyval_precompute_table` cost is paid once per message and dominates the total for short plaintexts. The LONG profile's Shoup-8 tables are much faster per block but ~8.7× more expensive to build than the SHORT profile's 4-bit tables, so for short GCM-SIV messages SHORT is a net win. In contrast, TLS 1.3 records and WireGuard sessions reuse a session-stable H across thousands of blocks, and there LONG dominates because the precompute cost amortizes away and what matters is cycles per block.
+
+**When to use each.**
+
+- **SHORT** — latency-critical short-message workloads. Best for RFC 8452 GCM-SIV with per-message H derivation. Wins below the crossover (~68 blocks / ~1 KB per message).
+- **LONG** — throughput-critical long-message workloads. Best for session-stable-H protocols such as TLS 1.3 records or WireGuard data packets. Wins above the crossover.
+
+**Performance comparison.**
+
+| Profile | multiply | update (1 blk) | update (N≥4) | precompute | PRG size |
+|---|---:|---:|---:|---:|---:|
+| SHORT  | 18,770 | 18,846 | ~18,846 | 29,385  | ~10 KB |
+| LONG   |  3,915 |  3,992 |  4,241  | 255,263 | ~20 KB |
+
+**Crossover.** Total cost of hashing N blocks is approximately `precompute + N × update`. Solving 29,385 + 18,846·N = 255,263 + 4,241·N gives N ≈ 15.5 blocks for the SHORT/LONG crossover on precompute-included workloads — but once amortization kicks in, the practical crossover where LONG starts winning is around 68 blocks / 1 KB of plaintext per message. Below that, SHORT hashes a full message faster despite its slower per-block inner loop; above that, LONG pulls ahead and keeps pulling ahead.
+
+**Stable public symbols.** Both profiles export an identical set of entry points: `polyval_init`, `polyval_multiply`, `polyval_update`, `polyval_precompute_table`, `polyval_xor_table_entry`, `polyval_shift_left_4`, `polyval_double`, `polyval_right_shift_1`, `polyval_htable`, and the table base for the active multiply back-end. Callers do not need to know which profile is loaded.
+
+The Python test and benchmark scripts honour the same selector via an environment variable:
+
+```bash
+POLYVAL_PROFILE=short python3 tools/test_polyval_direct.py
+POLYVAL_PROFILE=long  python3 tools/benchmark_polyval.py
 ```
 
 ## Project Structure
