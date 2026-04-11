@@ -61,6 +61,13 @@ JSR_RETRIES = 3
 JSR_RETRY_DELAY = 0.3
 
 
+# Sentinel returned by test functions when a vector is intentionally skipped
+# (e.g. AAD-containing RFC vectors: the 6502 gcmsiv_compute_tag_base does not
+# absorb AAD, so those tests can't run against the C64 at all). Tracked
+# separately from pass/fail in the summary.
+SKIP = "SKIP"
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -175,12 +182,14 @@ def test_rfc_vector_encrypt(transport: BinaryViceTransport, labels: Labels,
     expected_tag = bytes.fromhex(vector["tag"])
 
     if len(pt) > MAX_PT_LEN:
-        print(f"  SKIP: plaintext too long ({len(pt)} > {MAX_PT_LEN})")
-        return True
+        reason = f"plaintext too long ({len(pt)} > {MAX_PT_LEN}, C64 buffer limit)"
+        print(f"  SKIPPED: {name} ({reason})")
+        return SKIP
 
     if vector.get("aad", ""):
-        print(f"  SKIP: C64 does not support AAD")
-        return True
+        reason = "AAD not supported by 6502 gcmsiv_compute_tag_base"
+        print(f"  SKIPPED: {name} ({reason})")
+        return SKIP
 
     ct, tag = c64_gcmsiv_encrypt(transport, labels, key, nonce, pt)
 
@@ -211,12 +220,14 @@ def test_rfc_vector_decrypt(transport: BinaryViceTransport, labels: Labels,
     tag = bytes.fromhex(vector["tag"])
 
     if len(ct) > MAX_PT_LEN:
-        print(f"  SKIP: ciphertext too long ({len(ct)} > {MAX_PT_LEN})")
-        return True
+        reason = f"ciphertext too long ({len(ct)} > {MAX_PT_LEN}, C64 buffer limit)"
+        print(f"  SKIPPED: {name} ({reason})")
+        return SKIP
 
     if vector.get("aad", ""):
-        print(f"  SKIP: C64 does not support AAD")
-        return True
+        reason = "AAD not supported by 6502 gcmsiv_compute_tag_base"
+        print(f"  SKIPPED: {name} ({reason})")
+        return SKIP
 
     pt, valid = c64_gcmsiv_decrypt(transport, labels, key, nonce, ct, tag)
 
@@ -307,14 +318,17 @@ def test_tampered_tag(transport: BinaryViceTransport, labels: Labels) -> bool:
 # ---------------------------------------------------------------------------
 
 def run_tests(transport: BinaryViceTransport, labels: Labels,
-              iterations: int) -> tuple[int, int]:
-    """Run all GCM-SIV tests. Returns (passed, failed)."""
+              iterations: int) -> tuple[int, int, int]:
+    """Run all GCM-SIV tests. Returns (passed, skipped, failed)."""
     passed = 0
+    skipped = 0
     failed = 0
 
-    def record(ok: bool):
-        nonlocal passed, failed
-        if ok:
+    def record(result):
+        nonlocal passed, skipped, failed
+        if result == SKIP:
+            skipped += 1
+        elif result:
             passed += 1
         else:
             failed += 1
@@ -323,18 +337,16 @@ def run_tests(transport: BinaryViceTransport, labels: Labels,
     with open(VECTORS_PATH) as f:
         vectors = json.load(f)
 
-    # Filter to no-AAD vectors for C64 testing
-    no_aad_vectors = [v for v in vectors["aes256_gcmsiv_vectors"]
-                      if not v.get("aad", "")]
+    all_vectors = vectors["aes256_gcmsiv_vectors"]
 
-    # 1. RFC vector encryption tests (no AAD only)
+    # 1. RFC vector encryption tests (AAD/oversized are reported as SKIPPED)
     print("\n=== RFC 8452 C.2 Vector Encryption ===")
-    for v in no_aad_vectors:
+    for v in all_vectors:
         record(test_rfc_vector_encrypt(transport, labels, v))
 
-    # 2. RFC vector decryption tests (no AAD only)
+    # 2. RFC vector decryption tests
     print("\n=== RFC 8452 C.2 Vector Decryption ===")
-    for v in no_aad_vectors:
+    for v in all_vectors:
         record(test_rfc_vector_decrypt(transport, labels, v))
 
     # 3. Tampered tag test
@@ -343,7 +355,8 @@ def run_tests(transport: BinaryViceTransport, labels: Labels,
 
     # 4. Random roundtrip tests
     print("\n=== Random Roundtrip Tests ===")
-    fixed_count = len(no_aad_vectors) * 2 + 1  # encrypt + decrypt + tamper
+    no_aad_count = sum(1 for v in all_vectors if not v.get("aad", ""))
+    fixed_count = no_aad_count * 2 + 1  # encrypt + decrypt + tamper
     random_count = max(0, iterations - fixed_count)
 
     # Boundary cases
@@ -365,7 +378,7 @@ def run_tests(transport: BinaryViceTransport, labels: Labels,
             f"Random roundtrip {i+1}: {pt_len} bytes",
         ))
 
-    return passed, failed
+    return passed, skipped, failed
 
 
 # ---------------------------------------------------------------------------
@@ -454,19 +467,22 @@ def main():
 
         # Run tests
         print(f"\n=== GCM-SIV + POLYVAL Tests ({iterations} iterations) ===")
-        passed, failed = run_tests(transport, labels, iterations)
+        passed, skipped, failed = run_tests(transport, labels, iterations)
 
     # Summary
-    total = passed + failed
+    total = passed + skipped + failed
     print("\n" + "=" * 60)
     print("RESULTS")
     print("=" * 60)
-    print(f"  Passed: {passed}/{total}")
-    print(f"  Failed: {failed}/{total}")
+    print(f"  Passed:  {passed}/{total}")
+    print(f"  Skipped: {skipped}/{total}")
+    print(f"  Failed:  {failed}/{total}")
     if failed == 0:
-        print(f"\n  [+] GCM-SIV + POLYVAL: ALL {total} TESTS PASSED")
+        summary = f"{passed} passed, {skipped} skipped, 0 failed"
+        print(f"\n  [+] GCM-SIV + POLYVAL: {summary}")
     else:
-        print(f"\n  [-] GCM-SIV + POLYVAL: {failed} TEST(S) FAILED")
+        print(f"\n  [-] GCM-SIV + POLYVAL: {failed} TEST(S) FAILED "
+              f"({passed} passed, {skipped} skipped)")
     print("=" * 60)
 
     sys.exit(0 if failed == 0 else 1)

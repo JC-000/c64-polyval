@@ -167,15 +167,15 @@ def worker_gcmsiv(transport, labels, seed, iterations, tls_stdout):
     random.seed(seed)
 
     try:
-        passed, failed = gcmsiv_run_tests(transport, labels, iterations)
+        passed, skipped, failed = gcmsiv_run_tests(transport, labels, iterations)
         errors = [] if failed == 0 else [f"{failed} GCM-SIV test(s) failed"]
     except Exception as e:
-        passed, failed = 0, 1
+        passed, skipped, failed = 0, 0, 1
         errors = [f"EXCEPTION: {type(e).__name__}: {e}"]
         print(f"EXCEPTION: {type(e).__name__}: {e}")
 
     tls_stdout.clear_buffer()
-    return passed, failed, errors, buf.getvalue()
+    return passed, skipped, failed, errors, buf.getvalue()
 
 
 # ---------------------------------------------------------------------------
@@ -278,7 +278,7 @@ def main():
 
     # Unpack results
     pv_passed, pv_failed, pv_errors, pv_output = polyval_result
-    gc_passed, gc_failed, gc_errors, gc_output = gcmsiv_result
+    gc_passed, gc_skipped, gc_failed, gc_errors, gc_output = gcmsiv_result
 
     # Print captured output sequentially
     print("-" * 60)
@@ -301,7 +301,9 @@ def main():
     print("=" * 60)
     print(f"  POLYVAL Direct : {pv_passed}/{pv_passed + pv_failed} passed"
           f"{'  ALL PASSED' if pv_failed == 0 else ''}")
-    print(f"  GCM-SIV        : {gc_passed}/{gc_passed + gc_failed} passed"
+    gc_total = gc_passed + gc_skipped + gc_failed
+    skip_str = f", {gc_skipped} skipped" if gc_skipped else ""
+    print(f"  GCM-SIV        : {gc_passed}/{gc_total} passed{skip_str}"
           f"{'  ALL PASSED' if gc_failed == 0 else ''}")
     print(f"  {'─' * 40}")
     print(f"  Total          : {total_passed}/{total} passed")
