@@ -56,3 +56,23 @@ aes_expanded_key_size = 240     ; (14+1) * 16 = 240 bytes
 ; buffer sizes
 input_buf_size  = 64            ; max input text size
 encrypt_buf_size = 80           ; encrypted output size (input + up to 16 pad)
+
+; =============================================================================
+; POLYVAL build profile selector
+; -----------------------------------------------------------------------------
+; SHORT:  4-bit Shoup table with Tier 1 unrolling. ~19k multiply, ~29k
+;         precompute. Best for RFC 8452 GCM-SIV short messages (auth key H
+;         is rederived per message, so precompute runs every call).
+; LONG:   Shoup 8-bit fused shift+reduce+htable. ~4k multiply, ~255k
+;         precompute. Best for long-message / session-stable-H workloads
+;         (TLS 1.3, WireGuard) where precompute amortises.
+;
+; Define POLYVAL_PROFILE on the ACME command line via -DPOLYVAL_PROFILE=...
+; If left undefined, default to LONG (preserves feature/polyval-speed-sprint
+; correctness).
+; =============================================================================
+POLYVAL_PROFILE_SHORT = 1
+POLYVAL_PROFILE_LONG  = 2
+!ifndef POLYVAL_PROFILE {
+        POLYVAL_PROFILE = POLYVAL_PROFILE_LONG
+}

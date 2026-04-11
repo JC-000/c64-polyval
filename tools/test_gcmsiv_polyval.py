@@ -389,10 +389,15 @@ def main():
     random.seed(seed)
     print(f"Random seed: {seed} (reproduce with --seed {seed})")
 
-    # Build
+    # Build. Honour POLYVAL_PROFILE env var for dual-path selection.
     print("\n=== Building ===")
+    profile = os.environ.get("POLYVAL_PROFILE", "long")
+    print(f"  Profile: {profile}")
     subprocess.run(["make", "clean"], capture_output=True)
-    result = subprocess.run(["make"], capture_output=True, text=True)
+    result = subprocess.run(
+        ["make", f"POLYVAL_PROFILE={profile}"],
+        capture_output=True, text=True,
+    )
     if result.returncode != 0:
         print(f"Build failed:\n{result.stderr}")
         sys.exit(1)

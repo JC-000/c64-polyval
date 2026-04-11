@@ -889,10 +889,17 @@ def main():
     print("POLYVAL Cycle-Accurate Benchmark")
     print(f"Samples per routine: {num_samples}")
 
-    # Build
+    # Build. Honour POLYVAL_PROFILE from the environment so
+    # `POLYVAL_PROFILE=short python3 tools/benchmark_polyval.py` picks the
+    # short-profile build. Default matches the Makefile default (long).
     print("\n=== Building ===")
+    profile = os.environ.get("POLYVAL_PROFILE", "long")
+    print(f"  Profile: {profile}")
     subprocess.run(["make", "clean"], capture_output=True)
-    result = subprocess.run(["make"], capture_output=True, text=True)
+    result = subprocess.run(
+        ["make", f"POLYVAL_PROFILE={profile}"],
+        capture_output=True, text=True,
+    )
     if result.returncode != 0:
         print(f"Build failed:\n{result.stderr}")
         sys.exit(1)
