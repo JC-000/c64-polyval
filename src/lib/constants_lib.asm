@@ -49,3 +49,22 @@ POLYVAL_PROFILE_LONG  = 2
 !ifndef POLYVAL_PROFILE {
         POLYVAL_PROFILE = POLYVAL_PROFILE_LONG
 }
+
+; =============================================================================
+; POLYVAL_LIB_MEM_BASE — library absolute-memory relocation anchor
+; -----------------------------------------------------------------------------
+; Library buffers (polyval_h, polyval_htable, polyval_htable8, AES state,
+; GCM-SIV state, etc.) are placed inside a PC-advance block at this address
+; when lib/data.asm is !source'd.
+;
+; Default: NOT defined here — lib/data.asm falls back to "wherever * happens
+; to be" which preserves the standalone demo-app layout and wastes zero bytes.
+;
+; Host override: define POLYVAL_LIB_MEM_BASE before !source'ing any library
+; file (typically alongside the other overrides). The library will advance *
+; to POLYVAL_LIB_MEM_BASE before declaring buffers, so tables land at a
+; known address. lib/data.asm will error out if POLYVAL_LIB_MEM_BASE is
+; below the current PC (the override is too low — raise it). It also
+; declares POLYVAL_LIB_MEM_END = * after the final buffer so the host can
+; see how much space the library consumed.
+; =============================================================================
