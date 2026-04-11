@@ -16,7 +16,15 @@ Note: The C64 implementation has no AAD support (AAD is always empty),
 so only vectors with empty AAD are tested via the C64.
 
 Usage:
-    python3 tools/test_gcmsiv_polyval.py [--iterations N] [--seed S]
+    python3 tools/test_gcmsiv_polyval.py [--iterations N] [--seed S|random]
+
+Seeding:
+  By default, the RNG is seeded with DEFAULT_SEED = 8452 (RFC 8452 number),
+  so two runs with no args produce the same random vectors. To reproduce a
+  specific failing run, pass `--seed <N>` with the seed printed at startup.
+  To opt in to a fresh non-deterministic run (fuzz-style), pass
+  `--seed random` — a 32-bit seed is sampled and printed so you can still
+  reproduce if something fails.
 
 Requires: Python 3.10+, c64_test_harness, VICE x64sc
 """
@@ -53,6 +61,7 @@ PRG_PATH = os.path.join(PROJECT_ROOT, "build", "polyval.prg")
 LABELS_PATH = os.path.join(PROJECT_ROOT, "build", "labels.txt")
 VECTORS_PATH = os.path.join(PROJECT_ROOT, "test", "rfc8452_vectors.json")
 
+DEFAULT_SEED = 8452  # RFC 8452 number; deterministic by default
 DEFAULT_ITERATIONS = 15
 MAX_PT_LEN = 64  # C64 buffer limit
 
@@ -399,13 +408,19 @@ def main():
         if idx + 1 < len(sys.argv):
             iterations = int(sys.argv[idx + 1])
 
-    seed = random.randint(0, 2**32 - 1)
+    seed = DEFAULT_SEED
     if "--seed" in sys.argv:
         idx = sys.argv.index("--seed")
         if idx + 1 < len(sys.argv):
-            seed = int(sys.argv[idx + 1])
+            raw = sys.argv[idx + 1]
+            if raw == "random":
+                # Opt-in fuzz mode: sample a fresh seed but print it so
+                # any failure is still reproducible via `--seed <N>`.
+                seed = random.SystemRandom().randint(0, 2**32 - 1)
+            else:
+                seed = int(raw)
     random.seed(seed)
-    print(f"Random seed: {seed} (reproduce with --seed {seed})")
+    print(f"Seed: {seed} (reproduce with --seed {seed})")
 
     # Build. Honour POLYVAL_PROFILE env var for dual-path selection.
     print("\n=== Building ===")
