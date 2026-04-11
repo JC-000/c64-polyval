@@ -31,6 +31,7 @@ import sys
 import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__))))
+from reference_sanity import cross_validate_reference
 from polyval_reference import (
     polyval,
     polyval_dot,
@@ -626,6 +627,10 @@ def test_multiply_vs_dot(transport, labels, results: TestResults, iterations=10)
 def main():
     global VERBOSE
     os.chdir(PROJECT_ROOT)
+
+    # Cross-check Python oracle against an external AES-GCM-SIV implementation
+    # BEFORE any 6502 code runs. Aborts the suite on drift.
+    cross_validate_reference()
 
     # Parse args
     seed = DEFAULT_SEED

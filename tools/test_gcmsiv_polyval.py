@@ -29,6 +29,7 @@ import sys
 import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__))))
+from reference_sanity import cross_validate_reference
 from polyval_reference import gcmsiv_encrypt as py_encrypt, gcmsiv_decrypt as py_decrypt
 
 from c64_test_harness import (
@@ -373,6 +374,10 @@ def run_tests(transport: BinaryViceTransport, labels: Labels,
 
 def main():
     os.chdir(PROJECT_ROOT)
+
+    # Cross-check Python oracle against an external AES-GCM-SIV implementation
+    # BEFORE any 6502 code runs. Aborts the suite on drift.
+    cross_validate_reference()
 
     # Parse args
     iterations = DEFAULT_ITERATIONS
