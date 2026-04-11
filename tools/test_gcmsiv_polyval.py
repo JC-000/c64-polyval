@@ -34,8 +34,8 @@ from polyval_reference import gcmsiv_encrypt as py_encrypt, gcmsiv_decrypt as py
 from c64_test_harness import (
     Labels,
     ViceConfig,
-    ViceProcess,
-    ViceTransport,
+    ViceInstanceManager,
+    BinaryViceTransport,
     dump_screen,
     read_bytes,
     write_bytes,
@@ -79,13 +79,13 @@ def random_bytes(n: int) -> bytes:
     return bytes(random.randint(0, 255) for _ in range(n))
 
 
-def setup_key_and_expand(transport: ViceTransport, labels: Labels, key: bytes):
+def setup_key_and_expand(transport: BinaryViceTransport, labels: Labels, key: bytes):
     """Write 32-byte key and call aes_key_expansion."""
     write_bytes(transport, labels["key_data"], key)
     robust_jsr(transport, labels["aes_key_expansion"], timeout=10.0)
 
 
-def c64_gcmsiv_encrypt(transport: ViceTransport, labels: Labels,
+def c64_gcmsiv_encrypt(transport: BinaryViceTransport, labels: Labels,
                        key: bytes, nonce: bytes, plaintext: bytes) -> tuple[bytes, bytes]:
     """Run full GCM-SIV encryption on C64 via direct memory + jsr().
 
@@ -119,7 +119,7 @@ def c64_gcmsiv_encrypt(transport: ViceTransport, labels: Labels,
     return ct, tag
 
 
-def c64_gcmsiv_decrypt(transport: ViceTransport, labels: Labels,
+def c64_gcmsiv_decrypt(transport: BinaryViceTransport, labels: Labels,
                        key: bytes, nonce: bytes, ciphertext: bytes,
                        tag: bytes) -> tuple[bytes, bool]:
     """Run full GCM-SIV decryption on C64 via direct memory + jsr().
@@ -161,7 +161,7 @@ def c64_gcmsiv_decrypt(transport: ViceTransport, labels: Labels,
 # Test functions
 # ---------------------------------------------------------------------------
 
-def test_rfc_vector_encrypt(transport: ViceTransport, labels: Labels,
+def test_rfc_vector_encrypt(transport: BinaryViceTransport, labels: Labels,
                             vector: dict) -> bool:
     """Test C64 encryption against an RFC 8452 vector."""
     name = vector["name"]
@@ -197,7 +197,7 @@ def test_rfc_vector_encrypt(transport: ViceTransport, labels: Labels,
         return False
 
 
-def test_rfc_vector_decrypt(transport: ViceTransport, labels: Labels,
+def test_rfc_vector_decrypt(transport: BinaryViceTransport, labels: Labels,
                             vector: dict) -> bool:
     """Test C64 decryption against an RFC 8452 vector."""
     name = vector["name"]
@@ -232,7 +232,7 @@ def test_rfc_vector_decrypt(transport: ViceTransport, labels: Labels,
         return False
 
 
-def test_random_roundtrip(transport: ViceTransport, labels: Labels,
+def test_random_roundtrip(transport: BinaryViceTransport, labels: Labels,
                           pt_len: int, label: str) -> bool:
     """Encrypt on C64, decrypt on C64, verify roundtrip + match Python reference."""
     print(f"\n--- {label} ---")
@@ -276,7 +276,7 @@ def test_random_roundtrip(transport: ViceTransport, labels: Labels,
         return False
 
 
-def test_tampered_tag(transport: ViceTransport, labels: Labels) -> bool:
+def test_tampered_tag(transport: BinaryViceTransport, labels: Labels) -> bool:
     """Verify that a tampered tag causes verification failure."""
     print("\n--- Tampered tag detection ---")
 
@@ -305,7 +305,7 @@ def test_tampered_tag(transport: ViceTransport, labels: Labels) -> bool:
 # Orchestrator
 # ---------------------------------------------------------------------------
 
-def run_tests(transport: ViceTransport, labels: Labels,
+def run_tests(transport: BinaryViceTransport, labels: Labels,
               iterations: int) -> tuple[int, int]:
     """Run all GCM-SIV tests. Returns (passed, failed)."""
     passed = 0
@@ -427,13 +427,11 @@ def main():
         sound=False,
     )
 
-    with ViceProcess(config) as vice:
-        if not vice.wait_for_monitor(timeout=30.0):
-            print("FATAL: Could not connect to VICE monitor")
-            sys.exit(1)
-        print(f"  VICE started (PID {vice.pid})")
+    with ViceInstanceManager(config=config) as mgr:
+        inst = mgr.acquire()
+        print(f"  VICE started (PID {inst.pid}, port {inst.port})")
 
-        transport = ViceTransport(port=config.port)
+        transport = inst.transport
 
         # Wait for main menu
         print("  Waiting for main menu...")

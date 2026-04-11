@@ -35,6 +35,7 @@ zp_tmp2         = $07           ; aes temp
 zp_tmp3         = $08           ; aes temp
 zp_tmp4         = $09           ; aes temp
 polyval_acc     = $10           ; 16-byte POLYVAL accumulator ($10-$1F)
+pv_mul_input    = $20           ; 16-byte multiply input scratch ($20-$2F)
 kbd_buffer      = $c6           ; keyboard buffer count
 
 ; petscii codes

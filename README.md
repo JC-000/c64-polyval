@@ -6,7 +6,7 @@ POLYVAL (GF(2^128) universal hash from RFC 8452) implementation for the Commodor
 
 This project implements the POLYVAL universal hash function as specified in [RFC 8452](https://datatracker.ietf.org/doc/html/rfc8452), integrated into a complete AES-256-GCM-SIV encryption/decryption system for the C64.
 
-**POLYVAL multiplication strategy:** 4-bit nibble table lookup with left-shift processing. The hash key H is transformed to H' = H * x^{-128} via 128 right-shifts, then a 256-byte table (16 entries of 16 bytes) is precomputed from H' using left-shift doubling. Each 128-bit multiply processes 32 nibbles with table lookups.
+**POLYVAL multiplication strategy:** Shoup 8-bit window. The hash key H is transformed to H' = H * x^{-128} via 128 right-shifts, then a page-aligned sliced `polyval_htable8` (16 pages × 256 bytes, one per output byte) and a paired `polyval_reduce8` carry-reduction table (16 pages) are precomputed from H'. Each 128-bit multiply processes 16 bytes of input using a single fused inner loop that combines shift-by-8, polynomial reduction, and htable XOR with no intermediate passes. An earlier 4-bit nibble variant (`polyval_xor_table_entry` + `polyval_htable`) is retained for reference and precompute bootstrap.
 
 **Polynomial:** x^128 + x^127 + x^126 + x^121 + 1
 
@@ -58,13 +58,24 @@ The core POLYVAL routines in `src/polyval.asm`:
 | `polyval_double` | Left-shift 128 bits with reduction (x^128 mod p) |
 | `polyval_right_shift_1` | Right-shift 128 bits with reduction (x^{-1} mod p) |
 | `polyval_shift_left_4` | Left-shift 4 bits with reduction (4 inline doublings) |
-| `polyval_precompute_table` | Build htable[0..15] from H via H' = H * x^{-128} |
-| `polyval_multiply` | 4-bit nibble table multiply (32 lookups per 128-bit multiply) |
-| `polyval_update` | XOR block into accumulator, then multiply by H |
+| `polyval_precompute_table` | Build `polyval_htable` (4-bit) and Shoup `polyval_htable8` / `polyval_reduce8` (8-bit) tables from H |
+| `polyval_xor_table_entry` | XOR one 4-bit `polyval_htable` entry into the accumulator |
+| `polyval_multiply` | Shoup 8-bit window multiply (fused shift / reduce / xor inner loop) |
+| `polyval_update` | Multiply-by-H with the input block XORed into the accumulator seed (single fused pass) |
 
-**Performance optimization:** The 128-bit accumulator (`polyval_acc`) is allocated in zero page ($10-$1F), reducing ROL/LDA/STA cycle counts across all routines. The `polyval_shift_left_4` routine inlines 4 doublings directly, eliminating JSR/RTS overhead. Together these yield a ~16% speedup on the multiply hot path.
+**Performance optimization.** The sprint on `feature/polyval-speed-sprint` layered several transforms on top of the ZP accumulator baseline:
+
+1. **Tier 1 unrolling** — `polyval_xor_table_entry`, all ZP 16-byte loops, and `polyval_multiply`'s nibble byte loop fully unrolled; `polyval_shift_left_4` inlined as 4 doublings.
+2. **Page-aligned tables** — `polyval_htable` moved to a page boundary so nibble lookups never cross pages.
+3. **Shoup 8-bit window** — `polyval_multiply` rewritten to consume one byte per iteration against sliced per-output-byte htable8 pages plus a carry reduction table.
+4. **Fused inner loop** — the three-pass Shoup-8 shift / reduce / xor sequence was collapsed into a single pass (the biggest single win).
+5. **ZP input + update fusion** — `pv_mul_input` moved to zero page at $20-$2F, and `polyval_update`'s block-XOR fused directly into the multiply seed, eliminating a separate XOR loop.
+
+The 128-bit accumulator `polyval_acc` lives in zero page at $10-$1F. Tables are placed at fixed pages: `polyval_htable` at $2E00, sliced `polyval_htable8_s0..s15` at $2F00-$3EFF, `polyval_reduce8_s0..s15` at $3F00-$4EFF.
 
 The dot product `dot(a, b) = a * b * x^{-128} mod p` is computed via the precomputed table built from H' = H * x^{-128}, so that `acc * H' = acc * H * x^{-128} = dot(acc, H)`.
+
+**Public API (stable for backport).** The following symbols are considered stable and are the intended entry points when embedding POLYVAL elsewhere: `polyval_multiply`, `polyval_update`, `polyval_precompute_table`, `polyval_xor_table_entry`, `polyval_shift_left_4`, `polyval_double`, and the table symbols `polyval_htable`, `polyval_htable8`, `polyval_reduce8`.
 
 ## Testing
 
@@ -84,7 +95,7 @@ python3 tools/test_polyval_direct.py [--seed N] [--iterations N] [--verbose]
 python3 tools/test_gcmsiv_polyval.py [--iterations 15] [--seed N]
 ```
 
-**`test_polyval_direct.py`** (153 tests): regression suite for `polyval.asm`, designed for use during performance optimization. Tests every routine individually via direct `jsr()` calls — `polyval_init`, `polyval_double`, `polyval_right_shift_1`, `polyval_shift_left_4`, `polyval_xor_table_entry`, `polyval_precompute_table`, `polyval_multiply` (in isolation), `polyval_update`, full multi-block pipeline, and multiply-vs-dot-product consistency. Deterministic seed (8452) by default; includes transient VICE connection retry logic.
+**`test_polyval_direct.py`** (217 tests): regression suite for `polyval.asm`, designed for use during performance optimization. Tests every routine individually via direct `jsr()` calls — `polyval_init`, `polyval_double`, `polyval_right_shift_1`, `polyval_shift_left_4`, `polyval_xor_table_entry`, `polyval_precompute_table`, `polyval_multiply` (in isolation), `polyval_update`, full multi-block pipeline, and multiply-vs-dot-product consistency. Deterministic seed (8452) by default; includes transient VICE connection retry logic.
 
 **`test_gcmsiv_polyval.py`** (~15 tests): verifies the full AES-256-GCM-SIV pipeline — RFC 8452 C.2 encrypt/decrypt vectors, tampered tag detection, and random roundtrip tests at boundary plaintext lengths (1-64 bytes), comparing C64 output against the Python reference. Includes transient VICE connection retry logic.
 
@@ -92,7 +103,7 @@ python3 tools/test_gcmsiv_polyval.py [--iterations 15] [--seed N]
 
 ## Benchmarks
 
-Cycle-accurate measurements using the C64's CIA #1 Timer A hardware (IRQs disabled via SEI for deterministic results):
+Cycle-accurate measurements use CIA #1 Timer A (IRQs disabled via SEI for deterministic results). Routines that fit under 65535 cycles run under a "short" wrapper; longer ones (e.g. `polyval_precompute_table` and multi-block update sweeps) run under a 32-bit "long" wrapper that chains CIA Timer A into Timer B for a full 32-bit cycle counter. The benchmark also sweeps `polyval_update` over N = 1, 4, 16, 64, 256 blocks to expose per-block steady-state cost.
 
 ```bash
 python3 tools/benchmark_polyval.py [--samples N] [--verbose]
@@ -102,12 +113,23 @@ python3 tools/benchmark_polyval.py [--samples N] [--verbose]
 |---|---:|---|
 | `polyval_double` | 85 | Left-shift 128 bits + reduction |
 | `polyval_shift_left_4` | 370 | Left-shift 4 bits (4 inline doublings) |
-| `polyval_xor_table_entry` | 353 | XOR htable[nibble] into accumulator |
-| `polyval_precompute_table` | 29,375 | Build htable[0..15] from H |
-| `polyval_multiply` | 26,074 | 4-bit nibble table multiply |
-| `polyval_update` | 26,439 | XOR block + multiply (full per-block cost) |
+| `polyval_xor_table_entry` | 176 | XOR htable[nibble] into accumulator (4-bit path) |
+| `polyval_precompute_table` | 255,205 | Build 4-bit htable + Shoup htable8 + reduce8 from H |
+| `polyval_multiply` | 3,916 | Shoup 8-bit window multiply (fused inner loop) |
+| `polyval_update` (single) | 3,992 | Fused block-XOR + multiply |
+| `polyval_update` (N≥4) | 4,240 / block | Steady-state per-block cost (Horner batching) |
 
-The XOR loop overhead (update - multiply) is 365 cycles. A full POLYVAL hash of N blocks costs approximately 29,375 + N * 26,439 cycles (precompute + N updates).
+A full POLYVAL hash of N blocks costs approximately 255,205 + N × 4,240 cycles (precompute once, then one update per block).
+
+**Optimization sprint summary (`feature/polyval-speed-sprint`).** Cumulative speedups over the ZP-accumulator baseline:
+
+| Routine | Before | After | Speedup |
+|---|---:|---:|---:|
+| `polyval_multiply` | 25,945 | 3,916 | 6.63× |
+| `polyval_update` (single) | 26,220 | 3,992 | 6.57× |
+| `polyval_update` (N≥4) | ~26,220 | 4,240 | 6.18× |
+
+PRG size grew from 8,154 to ~19,700 bytes, mostly from the two page-aligned Shoup tables.
 
 ## Status
 
