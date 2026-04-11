@@ -24,10 +24,10 @@
 ; =============================================================================
 
 !if POLYVAL_PROFILE = POLYVAL_PROFILE_SHORT {
-        !source "polyval_short.asm"
+        !source "lib/polyval_short.asm"
 } else {
         !if POLYVAL_PROFILE = POLYVAL_PROFILE_LONG {
-                !source "polyval_long.asm"
+                !source "lib/polyval_long.asm"
         } else {
                 !error "POLYVAL_PROFILE must be POLYVAL_PROFILE_SHORT or POLYVAL_PROFILE_LONG"
         }

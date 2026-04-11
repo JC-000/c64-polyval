@@ -14,14 +14,14 @@
 ; --- Code modules ---
 !source "boot.asm"
 !source "main_loop.asm"
-!source "aes_encrypt.asm"
-!source "aes_decrypt.asm"
+!source "lib/aes_encrypt.asm"
+!source "lib/aes_decrypt.asm"
 !source "disk_io.asm"
 !source "gcm_siv.asm"
-!source "polyval.asm"
+!source "lib/polyval.asm"
 !source "display.asm"
 
 ; --- Data and tables ---
-!source "data.asm"
-!source "tables.asm"
+!source "lib/data.asm"
+!source "lib/tables.asm"
 !source "strings.asm"
