@@ -38,7 +38,7 @@
         lda polyval_acc+15 : eor polyval_htable+15,y : sta polyval_acc+15
 }
 
-; Copy polyval_acc -> pv_mul_input (absolute dest).
+; Copy polyval_acc -> pv_mul_input (both in zero page).
 !macro pv_unroll_save_acc_16 {
         lda polyval_acc+0  : sta pv_mul_input+0
         lda polyval_acc+1  : sta pv_mul_input+1
@@ -56,6 +56,31 @@
         lda polyval_acc+13 : sta pv_mul_input+13
         lda polyval_acc+14 : sta pv_mul_input+14
         lda polyval_acc+15 : sta pv_mul_input+15
+}
+
+; Fused: pv_mul_input[k] = polyval_acc[k] XOR polyval_temp[k]
+; Used by polyval_update to seed multiply input directly, skipping the
+; separate "acc ^= temp" + "save_acc -> pv_mul_input" two-step.
+; Note: polyval_acc itself is NOT updated; the multiply seed phase fully
+; overwrites polyval_acc from htable8[pv_mul_input+15], so the pre-XOR
+; acc value is unused after this point.
+!macro pv_unroll_fused_xor_temp_to_input_16 {
+        lda polyval_acc+0  : eor polyval_temp+0  : sta pv_mul_input+0
+        lda polyval_acc+1  : eor polyval_temp+1  : sta pv_mul_input+1
+        lda polyval_acc+2  : eor polyval_temp+2  : sta pv_mul_input+2
+        lda polyval_acc+3  : eor polyval_temp+3  : sta pv_mul_input+3
+        lda polyval_acc+4  : eor polyval_temp+4  : sta pv_mul_input+4
+        lda polyval_acc+5  : eor polyval_temp+5  : sta pv_mul_input+5
+        lda polyval_acc+6  : eor polyval_temp+6  : sta pv_mul_input+6
+        lda polyval_acc+7  : eor polyval_temp+7  : sta pv_mul_input+7
+        lda polyval_acc+8  : eor polyval_temp+8  : sta pv_mul_input+8
+        lda polyval_acc+9  : eor polyval_temp+9  : sta pv_mul_input+9
+        lda polyval_acc+10 : eor polyval_temp+10 : sta pv_mul_input+10
+        lda polyval_acc+11 : eor polyval_temp+11 : sta pv_mul_input+11
+        lda polyval_acc+12 : eor polyval_temp+12 : sta pv_mul_input+12
+        lda polyval_acc+13 : eor polyval_temp+13 : sta pv_mul_input+13
+        lda polyval_acc+14 : eor polyval_temp+14 : sta pv_mul_input+14
+        lda polyval_acc+15 : eor polyval_temp+15 : sta pv_mul_input+15
 }
 
 ; Zero polyval_acc. A must already hold 0.
@@ -899,7 +924,13 @@ polyval_multiply:
         ; Save input. Byte-15 seed below initialises the whole accumulator,
         ; so no separate clear pass is needed.
         +pv_unroll_save_acc_16
+        ; Fall through to polyval_multiply_core.
 
+; Internal entry point used by polyval_update: assumes pv_mul_input is
+; already populated (typically with acc XOR block) and skips the save step.
+; Not a published API symbol — callers outside this file must use
+; polyval_multiply, which preserves the legacy "input is current acc" contract.
+polyval_multiply_core:
         ; Fully unrolled 16-byte Shoup-8 loop using the fused
         ; shift_left_8 + reduce8 + htable8 macro:
         ;   X = old polyval_acc+15 (reduce8 index, "outgoing" byte)
@@ -946,7 +977,7 @@ polyval_multiply:
         rts
 
 
-pv_mul_input:   !fill 16, 0    ; saved copy of input accumulator
+; pv_mul_input now lives in zero page ($20-$2F) - see constants.asm
 pv_mul_byte_idx: !byte 0
 pv_mul_nibble:  !byte 0
 
@@ -973,11 +1004,15 @@ polyval_xor_table_entry:
 ; polyval_temp contains the 16-byte block
 ; =============================================================================
 polyval_update:
-        ; Unrolled 16-byte XOR of block into accumulator: hot-path loop removal.
-        +pv_unroll_xor_temp_16
+        ; Fused: write pv_mul_input = polyval_acc XOR polyval_temp directly.
+        ; This replaces the old two-step (acc ^= temp; multiply saves acc)
+        ; with a single pass (~112 cy saved). polyval_acc is left untouched
+        ; here because the multiply seed phase fully overwrites it from
+        ; htable8[pv_mul_input+15].
+        +pv_unroll_fused_xor_temp_to_input_16
 
-        ; Multiply accumulator by H
-        jsr polyval_multiply
+        ; Multiply by H, skipping the save (pv_mul_input is already loaded).
+        jsr polyval_multiply_core
 
         rts
 
