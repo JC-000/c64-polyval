@@ -208,6 +208,145 @@
 +
 }
 
+; Store polyval_acc -> sliced table entry at index X (for htable8).
+!macro pv_store_acc_to_htable8_x {
+        lda polyval_acc+0  : sta polyval_htable8_s0,x
+        lda polyval_acc+1  : sta polyval_htable8_s1,x
+        lda polyval_acc+2  : sta polyval_htable8_s2,x
+        lda polyval_acc+3  : sta polyval_htable8_s3,x
+        lda polyval_acc+4  : sta polyval_htable8_s4,x
+        lda polyval_acc+5  : sta polyval_htable8_s5,x
+        lda polyval_acc+6  : sta polyval_htable8_s6,x
+        lda polyval_acc+7  : sta polyval_htable8_s7,x
+        lda polyval_acc+8  : sta polyval_htable8_s8,x
+        lda polyval_acc+9  : sta polyval_htable8_s9,x
+        lda polyval_acc+10 : sta polyval_htable8_s10,x
+        lda polyval_acc+11 : sta polyval_htable8_s11,x
+        lda polyval_acc+12 : sta polyval_htable8_s12,x
+        lda polyval_acc+13 : sta polyval_htable8_s13,x
+        lda polyval_acc+14 : sta polyval_htable8_s14,x
+        lda polyval_acc+15 : sta polyval_htable8_s15,x
+}
+
+; Load polyval_acc <- sliced table entry at index X (for htable8).
+!macro pv_load_acc_from_htable8_x {
+        lda polyval_htable8_s0,x  : sta polyval_acc+0
+        lda polyval_htable8_s1,x  : sta polyval_acc+1
+        lda polyval_htable8_s2,x  : sta polyval_acc+2
+        lda polyval_htable8_s3,x  : sta polyval_acc+3
+        lda polyval_htable8_s4,x  : sta polyval_acc+4
+        lda polyval_htable8_s5,x  : sta polyval_acc+5
+        lda polyval_htable8_s6,x  : sta polyval_acc+6
+        lda polyval_htable8_s7,x  : sta polyval_acc+7
+        lda polyval_htable8_s8,x  : sta polyval_acc+8
+        lda polyval_htable8_s9,x  : sta polyval_acc+9
+        lda polyval_htable8_s10,x : sta polyval_acc+10
+        lda polyval_htable8_s11,x : sta polyval_acc+11
+        lda polyval_htable8_s12,x : sta polyval_acc+12
+        lda polyval_htable8_s13,x : sta polyval_acc+13
+        lda polyval_htable8_s14,x : sta polyval_acc+14
+        lda polyval_htable8_s15,x : sta polyval_acc+15
+}
+
+; Store polyval_acc -> sliced reduce8 entry at index X.
+!macro pv_store_acc_to_reduce8_x {
+        lda polyval_acc+0  : sta polyval_reduce8_s0,x
+        lda polyval_acc+1  : sta polyval_reduce8_s1,x
+        lda polyval_acc+2  : sta polyval_reduce8_s2,x
+        lda polyval_acc+3  : sta polyval_reduce8_s3,x
+        lda polyval_acc+4  : sta polyval_reduce8_s4,x
+        lda polyval_acc+5  : sta polyval_reduce8_s5,x
+        lda polyval_acc+6  : sta polyval_reduce8_s6,x
+        lda polyval_acc+7  : sta polyval_reduce8_s7,x
+        lda polyval_acc+8  : sta polyval_reduce8_s8,x
+        lda polyval_acc+9  : sta polyval_reduce8_s9,x
+        lda polyval_acc+10 : sta polyval_reduce8_s10,x
+        lda polyval_acc+11 : sta polyval_reduce8_s11,x
+        lda polyval_acc+12 : sta polyval_reduce8_s12,x
+        lda polyval_acc+13 : sta polyval_reduce8_s13,x
+        lda polyval_acc+14 : sta polyval_reduce8_s14,x
+        lda polyval_acc+15 : sta polyval_reduce8_s15,x
+}
+
+; Load polyval_acc <- sliced reduce8 entry at index X.
+!macro pv_load_acc_from_reduce8_x {
+        lda polyval_reduce8_s0,x  : sta polyval_acc+0
+        lda polyval_reduce8_s1,x  : sta polyval_acc+1
+        lda polyval_reduce8_s2,x  : sta polyval_acc+2
+        lda polyval_reduce8_s3,x  : sta polyval_acc+3
+        lda polyval_reduce8_s4,x  : sta polyval_acc+4
+        lda polyval_reduce8_s5,x  : sta polyval_acc+5
+        lda polyval_reduce8_s6,x  : sta polyval_acc+6
+        lda polyval_reduce8_s7,x  : sta polyval_acc+7
+        lda polyval_reduce8_s8,x  : sta polyval_acc+8
+        lda polyval_reduce8_s9,x  : sta polyval_acc+9
+        lda polyval_reduce8_s10,x : sta polyval_acc+10
+        lda polyval_reduce8_s11,x : sta polyval_acc+11
+        lda polyval_reduce8_s12,x : sta polyval_acc+12
+        lda polyval_reduce8_s13,x : sta polyval_acc+13
+        lda polyval_reduce8_s14,x : sta polyval_acc+14
+        lda polyval_reduce8_s15,x : sta polyval_acc+15
+}
+
+; Inline shift_left_8 with reduction, using polyval_reduce8 sliced table.
+; Destroys A, X. Y is preserved if caller needs it.
+!macro pv_inline_shift_left_8 {
+        ldx polyval_acc+15          ; X = outgoing byte (reduce8 index)
+        lda polyval_acc+14 : sta polyval_acc+15
+        lda polyval_acc+13 : sta polyval_acc+14
+        lda polyval_acc+12 : sta polyval_acc+13
+        lda polyval_acc+11 : sta polyval_acc+12
+        lda polyval_acc+10 : sta polyval_acc+11
+        lda polyval_acc+9  : sta polyval_acc+10
+        lda polyval_acc+8  : sta polyval_acc+9
+        lda polyval_acc+7  : sta polyval_acc+8
+        lda polyval_acc+6  : sta polyval_acc+7
+        lda polyval_acc+5  : sta polyval_acc+6
+        lda polyval_acc+4  : sta polyval_acc+5
+        lda polyval_acc+3  : sta polyval_acc+4
+        lda polyval_acc+2  : sta polyval_acc+3
+        lda polyval_acc+1  : sta polyval_acc+2
+        lda polyval_acc+0  : sta polyval_acc+1
+        lda #0             : sta polyval_acc+0
+        ; XOR reduce8[X] into polyval_acc
+        lda polyval_acc+0  : eor polyval_reduce8_s0,x  : sta polyval_acc+0
+        lda polyval_acc+1  : eor polyval_reduce8_s1,x  : sta polyval_acc+1
+        lda polyval_acc+2  : eor polyval_reduce8_s2,x  : sta polyval_acc+2
+        lda polyval_acc+3  : eor polyval_reduce8_s3,x  : sta polyval_acc+3
+        lda polyval_acc+4  : eor polyval_reduce8_s4,x  : sta polyval_acc+4
+        lda polyval_acc+5  : eor polyval_reduce8_s5,x  : sta polyval_acc+5
+        lda polyval_acc+6  : eor polyval_reduce8_s6,x  : sta polyval_acc+6
+        lda polyval_acc+7  : eor polyval_reduce8_s7,x  : sta polyval_acc+7
+        lda polyval_acc+8  : eor polyval_reduce8_s8,x  : sta polyval_acc+8
+        lda polyval_acc+9  : eor polyval_reduce8_s9,x  : sta polyval_acc+9
+        lda polyval_acc+10 : eor polyval_reduce8_s10,x : sta polyval_acc+10
+        lda polyval_acc+11 : eor polyval_reduce8_s11,x : sta polyval_acc+11
+        lda polyval_acc+12 : eor polyval_reduce8_s12,x : sta polyval_acc+12
+        lda polyval_acc+13 : eor polyval_reduce8_s13,x : sta polyval_acc+13
+        lda polyval_acc+14 : eor polyval_reduce8_s14,x : sta polyval_acc+14
+        lda polyval_acc+15 : eor polyval_reduce8_s15,x : sta polyval_acc+15
+}
+
+; XOR htable8[byte_k] into polyval_acc. X = byte index (0..255).
+!macro pv_inline_xor_htable8_x {
+        lda polyval_acc+0  : eor polyval_htable8_s0,x  : sta polyval_acc+0
+        lda polyval_acc+1  : eor polyval_htable8_s1,x  : sta polyval_acc+1
+        lda polyval_acc+2  : eor polyval_htable8_s2,x  : sta polyval_acc+2
+        lda polyval_acc+3  : eor polyval_htable8_s3,x  : sta polyval_acc+3
+        lda polyval_acc+4  : eor polyval_htable8_s4,x  : sta polyval_acc+4
+        lda polyval_acc+5  : eor polyval_htable8_s5,x  : sta polyval_acc+5
+        lda polyval_acc+6  : eor polyval_htable8_s6,x  : sta polyval_acc+6
+        lda polyval_acc+7  : eor polyval_htable8_s7,x  : sta polyval_acc+7
+        lda polyval_acc+8  : eor polyval_htable8_s8,x  : sta polyval_acc+8
+        lda polyval_acc+9  : eor polyval_htable8_s9,x  : sta polyval_acc+9
+        lda polyval_acc+10 : eor polyval_htable8_s10,x : sta polyval_acc+10
+        lda polyval_acc+11 : eor polyval_htable8_s11,x : sta polyval_acc+11
+        lda polyval_acc+12 : eor polyval_htable8_s12,x : sta polyval_acc+12
+        lda polyval_acc+13 : eor polyval_htable8_s13,x : sta polyval_acc+13
+        lda polyval_acc+14 : eor polyval_htable8_s14,x : sta polyval_acc+14
+        lda polyval_acc+15 : eor polyval_htable8_s15,x : sta polyval_acc+15
+}
+
 ; XOR polyval_temp (absolute) into polyval_acc (ZP).
 !macro pv_unroll_xor_temp_16 {
         lda polyval_acc+0  : eor polyval_temp+0  : sta polyval_acc+0
@@ -595,197 +734,222 @@ polyval_precompute_table:
         jmp @table_loop
 
 @table_done:
+        ; -----------------------------------------------------------------
+        ; Build 8-bit Shoup window tables:
+        ;   polyval_htable8[i]  = H' * i        (i in 0..255)
+        ;   polyval_reduce8[i]  = i * x^128 mod P
+        ;
+        ; Both are GF(2^128) values; i is an 8-bit polynomial coefficient
+        ; vector. Build recurrence:
+        ;   T[0] = 0
+        ;   T[1] = base
+        ;   T[i even] = double(T[i/2])    via polyval_double (reads from
+        ;                                  sliced storage with X = i/2)
+        ;   T[i odd]  = T[i-1] XOR T[1]  (T[i-1] is still in polyval_acc
+        ;                                  from the previous iteration)
+        ; -----------------------------------------------------------------
+
+        ; --- Build polyval_htable8 from H' (= htable[1]) ---
+
+        ; T[0] = 0
+        ldx #0
+        lda #0
+        +pv_unroll_clear_acc_16
+        +pv_store_acc_to_htable8_x
+
+        ; T[1] = H' (still stored at polyval_htable+16)
+        ldx #0
+@copy_hprime_htable8_1:
+        lda polyval_htable+16,x
+        sta polyval_acc,x
+        inx
+        cpx #16
+        bne @copy_hprime_htable8_1
+        ldx #1
+        +pv_store_acc_to_htable8_x
+
+        ; For i = 2..255:
+        lda #2
+        sta pv_tbl8_idx
+@h8_loop:
+        lda pv_tbl8_idx
+        lsr                         ; carry = parity; A = i/2
+        bcs @h8_odd
+        ; -- EVEN: acc = double(htable8[i/2]), i/2 is in A --
+        tax
+        +pv_load_acc_from_htable8_x
+        jsr polyval_double
+        jmp @h8_store
+@h8_odd:
+        ; -- ODD: acc currently holds htable8[i-1]. XOR with htable8[1] --
+        ldx #0
+@h8_odd_xor:
+        lda polyval_acc,x
+        eor polyval_htable+16,x     ; H' = htable8[1]
+        sta polyval_acc,x
+        inx
+        cpx #16
+        bne @h8_odd_xor
+@h8_store:
+        ldx pv_tbl8_idx
+        +pv_store_acc_to_htable8_x
+        inc pv_tbl8_idx
+        beq @h8_done                ; wrapped 0 → finished 2..255
+        jmp @h8_loop
+@h8_done:
+
+        ; --- Build polyval_reduce8 from pv_reduce_base (= x^128 mod P) ---
+
+        ; T[0] = 0
+        ldx #0
+        lda #0
+        +pv_unroll_clear_acc_16
+        +pv_store_acc_to_reduce8_x
+
+        ; T[1] = pv_reduce_base
+        ldx #0
+@copy_rbase_reduce8_1:
+        lda pv_reduce_base,x
+        sta polyval_acc,x
+        inx
+        cpx #16
+        bne @copy_rbase_reduce8_1
+        ldx #1
+        +pv_store_acc_to_reduce8_x
+
+        ; For i = 2..255:
+        lda #2
+        sta pv_tbl8_idx
+@r8_loop:
+        lda pv_tbl8_idx
+        lsr
+        bcs @r8_odd
+        tax
+        +pv_load_acc_from_reduce8_x
+        jsr polyval_double
+        jmp @r8_store
+@r8_odd:
+        ldx #0
+@r8_odd_xor:
+        lda polyval_acc,x
+        eor pv_reduce_base,x
+        sta polyval_acc,x
+        inx
+        cpx #16
+        bne @r8_odd_xor
+@r8_store:
+        ldx pv_tbl8_idx
+        +pv_store_acc_to_reduce8_x
+        inc pv_tbl8_idx
+        beq @r8_done
+        jmp @r8_loop
+@r8_done:
         rts
 
 pv_tbl_idx:     !byte 0
 pv_shift_ctr:   !byte 0
 
+; x^128 mod P(x) as 16 little-endian bytes.
+; Bits set: bit 0 (x^0=1), bit 121, bit 126, bit 127
+; => byte 0 = $01, byte 15 = $C2 (0b11000010: bits 1, 6, 7)
+pv_reduce_base:
+        !byte $01, $00, $00, $00, $00, $00, $00, $00
+        !byte $00, $00, $00, $00, $00, $00, $00, $c2
+
+; Scratch counter for 8-bit table build
+pv_tbl8_idx:    !byte 0
+
 ; =============================================================================
-; polyval_multiply - multiply polyval_acc by H using 4-bit table lookup
-; Process each byte of the accumulator as two nibbles (32 lookups total)
+; polyval_multiply - multiply polyval_acc by H using 8-bit Shoup window
+; Processes 16 input bytes from MSB (byte 15) to LSB (byte 0).
 ;
 ; Algorithm: result = 0; for i = 15 downto 0:
-;   result <<= 4 (with reduction); result ^= htable[byte_high_nibble]
-;   result <<= 4 (with reduction); result ^= htable[byte_low_nibble]
+;   result = shift_left_8(result) with reduction
+;   result ^= htable8[input_byte_i]
 ;
-; Uses LEFT-shift-by-4 with the table built from H' = H * x^{-128},
-; so the result is acc * H' = acc * H * x^{-128} = dot(acc, H).
+; Uses two sliced 4 KB tables:
+;   polyval_htable8[i] = H' * i            (for i = 0..255)
+;   polyval_reduce8[b] = b * x^128 mod P   (reduction carry contribution)
+; Built from H' = H * x^{-128}, so result = acc * H' = dot(acc, H).
 ; =============================================================================
 polyval_multiply:
-        ; Unrolled 16-byte save: eliminates per-call loop overhead in hot path.
+        ; Save input; clear accumulator
         +pv_unroll_save_acc_16
-
-        ; Unrolled 16-byte clear: eliminates per-call loop overhead in hot path.
         lda #0
         +pv_unroll_clear_acc_16
 
-        ; Fully unrolled nibble loop: 32 straight-line invocations of
-        ; pv_process_nibble (inlined shift_left_4 + xor_table_entry body).
-        ; Bytes processed MSB (byte 15) -> LSB (byte 0), high nibble first.
-        ; pv_mul_byte_idx / pv_mul_nibble bookkeeping eliminated.
+        ; Fully unrolled 16-byte loop: each iteration is
+        ;   shift_left_8 (with reduction via reduce8[outgoing])
+        ;   XOR htable8[input_byte]
+        ;
+        ; For byte 15 the first shift_left_8 is a no-op on a zero acc, so we
+        ; skip it and start by loading the outgoing byte directly.
 
         ; --- byte 15 ---
-        lda pv_mul_input+15
-        lsr
-        lsr
-        lsr
-        lsr
-        +pv_process_nibble
-        lda pv_mul_input+15
-        and #$0f
-        +pv_process_nibble
+        ldx pv_mul_input+15
+        +pv_inline_xor_htable8_x
         ; --- byte 14 ---
-        lda pv_mul_input+14
-        lsr
-        lsr
-        lsr
-        lsr
-        +pv_process_nibble
-        lda pv_mul_input+14
-        and #$0f
-        +pv_process_nibble
+        +pv_inline_shift_left_8
+        ldx pv_mul_input+14
+        +pv_inline_xor_htable8_x
         ; --- byte 13 ---
-        lda pv_mul_input+13
-        lsr
-        lsr
-        lsr
-        lsr
-        +pv_process_nibble
-        lda pv_mul_input+13
-        and #$0f
-        +pv_process_nibble
+        +pv_inline_shift_left_8
+        ldx pv_mul_input+13
+        +pv_inline_xor_htable8_x
         ; --- byte 12 ---
-        lda pv_mul_input+12
-        lsr
-        lsr
-        lsr
-        lsr
-        +pv_process_nibble
-        lda pv_mul_input+12
-        and #$0f
-        +pv_process_nibble
+        +pv_inline_shift_left_8
+        ldx pv_mul_input+12
+        +pv_inline_xor_htable8_x
         ; --- byte 11 ---
-        lda pv_mul_input+11
-        lsr
-        lsr
-        lsr
-        lsr
-        +pv_process_nibble
-        lda pv_mul_input+11
-        and #$0f
-        +pv_process_nibble
+        +pv_inline_shift_left_8
+        ldx pv_mul_input+11
+        +pv_inline_xor_htable8_x
         ; --- byte 10 ---
-        lda pv_mul_input+10
-        lsr
-        lsr
-        lsr
-        lsr
-        +pv_process_nibble
-        lda pv_mul_input+10
-        and #$0f
-        +pv_process_nibble
+        +pv_inline_shift_left_8
+        ldx pv_mul_input+10
+        +pv_inline_xor_htable8_x
         ; --- byte 9 ---
-        lda pv_mul_input+9
-        lsr
-        lsr
-        lsr
-        lsr
-        +pv_process_nibble
-        lda pv_mul_input+9
-        and #$0f
-        +pv_process_nibble
+        +pv_inline_shift_left_8
+        ldx pv_mul_input+9
+        +pv_inline_xor_htable8_x
         ; --- byte 8 ---
-        lda pv_mul_input+8
-        lsr
-        lsr
-        lsr
-        lsr
-        +pv_process_nibble
-        lda pv_mul_input+8
-        and #$0f
-        +pv_process_nibble
+        +pv_inline_shift_left_8
+        ldx pv_mul_input+8
+        +pv_inline_xor_htable8_x
         ; --- byte 7 ---
-        lda pv_mul_input+7
-        lsr
-        lsr
-        lsr
-        lsr
-        +pv_process_nibble
-        lda pv_mul_input+7
-        and #$0f
-        +pv_process_nibble
+        +pv_inline_shift_left_8
+        ldx pv_mul_input+7
+        +pv_inline_xor_htable8_x
         ; --- byte 6 ---
-        lda pv_mul_input+6
-        lsr
-        lsr
-        lsr
-        lsr
-        +pv_process_nibble
-        lda pv_mul_input+6
-        and #$0f
-        +pv_process_nibble
+        +pv_inline_shift_left_8
+        ldx pv_mul_input+6
+        +pv_inline_xor_htable8_x
         ; --- byte 5 ---
-        lda pv_mul_input+5
-        lsr
-        lsr
-        lsr
-        lsr
-        +pv_process_nibble
-        lda pv_mul_input+5
-        and #$0f
-        +pv_process_nibble
+        +pv_inline_shift_left_8
+        ldx pv_mul_input+5
+        +pv_inline_xor_htable8_x
         ; --- byte 4 ---
-        lda pv_mul_input+4
-        lsr
-        lsr
-        lsr
-        lsr
-        +pv_process_nibble
-        lda pv_mul_input+4
-        and #$0f
-        +pv_process_nibble
+        +pv_inline_shift_left_8
+        ldx pv_mul_input+4
+        +pv_inline_xor_htable8_x
         ; --- byte 3 ---
-        lda pv_mul_input+3
-        lsr
-        lsr
-        lsr
-        lsr
-        +pv_process_nibble
-        lda pv_mul_input+3
-        and #$0f
-        +pv_process_nibble
+        +pv_inline_shift_left_8
+        ldx pv_mul_input+3
+        +pv_inline_xor_htable8_x
         ; --- byte 2 ---
-        lda pv_mul_input+2
-        lsr
-        lsr
-        lsr
-        lsr
-        +pv_process_nibble
-        lda pv_mul_input+2
-        and #$0f
-        +pv_process_nibble
+        +pv_inline_shift_left_8
+        ldx pv_mul_input+2
+        +pv_inline_xor_htable8_x
         ; --- byte 1 ---
-        lda pv_mul_input+1
-        lsr
-        lsr
-        lsr
-        lsr
-        +pv_process_nibble
-        lda pv_mul_input+1
-        and #$0f
-        +pv_process_nibble
+        +pv_inline_shift_left_8
+        ldx pv_mul_input+1
+        +pv_inline_xor_htable8_x
         ; --- byte 0 ---
-        lda pv_mul_input+0
-        lsr
-        lsr
-        lsr
-        lsr
-        +pv_process_nibble
-        lda pv_mul_input+0
-        and #$0f
-        +pv_process_nibble
-
+        +pv_inline_shift_left_8
+        ldx pv_mul_input+0
+        +pv_inline_xor_htable8_x
         rts
+
 
 pv_mul_input:   !fill 16, 0    ; saved copy of input accumulator
 pv_mul_byte_idx: !byte 0
