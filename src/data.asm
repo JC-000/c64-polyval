@@ -129,7 +129,7 @@ polyval_temp:    !fill 16, 0   ; scratch space for current block
 polyval_htable:  !fill 256, 0  ; 4-bit table: H*{0..15}, 16 entries * 16 bytes
 
 ; -----------------------------------------------------------------------------
-; 8-bit Shoup window tables for polyval_multiply.
+; 8-bit Shoup window tables for polyval_multiply (LONG profile only).
 ; Laid out as 16 page-aligned 256-byte "slices" so abs,x addressing lets us
 ; XOR byte j of entry i with a single `eor slice_j,x` where X = i.
 ;
@@ -137,7 +137,10 @@ polyval_htable:  !fill 256, 0  ; 4-bit table: H*{0..15}, 16 entries * 16 bytes
 ;   polyval_reduce8_slice_j  + i = byte j of (i * x^128)     (reduction result)
 ;
 ; Both tables are built at polyval_precompute_table time.
+; SHORT profile omits these (~8 KB RAM saved) since it uses only the 4-bit
+; polyval_htable above.
 ; -----------------------------------------------------------------------------
+!if POLYVAL_PROFILE = POLYVAL_PROFILE_LONG {
 !align 255, 0, 0
 polyval_htable8:
 polyval_htable8_s0:  !fill 256, 0
@@ -174,3 +177,4 @@ polyval_reduce8_s12: !fill 256, 0
 polyval_reduce8_s13: !fill 256, 0
 polyval_reduce8_s14: !fill 256, 0
 polyval_reduce8_s15: !fill 256, 0
+}       ; !if POLYVAL_PROFILE = POLYVAL_PROFILE_LONG
