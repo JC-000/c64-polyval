@@ -40,7 +40,7 @@ start:
         ldx #0
         lda #0
 @clear_key:
-        sta key_data,x
+        sta aes_current_key,x
         inx
         cpx #32
         bne @clear_key
@@ -61,3 +61,22 @@ start:
 
         ; enter main input loop
         jmp main_loop
+
+; =============================================================================
+; clear_buffers - clear demo-app input and encrypted buffers
+; (App-level helper; lives outside the library because it touches
+; input_buffer / encrypt_buffer / input_length / encrypt_length, all of
+; which are demo-app state.)
+; =============================================================================
+clear_buffers:
+        lda #0
+        ldx #0
+@loop:
+        sta input_buffer,x
+        sta encrypt_buffer,x
+        inx
+        cpx #input_buf_size
+        bne @loop
+        sta input_length        ; clear input length
+        sta encrypt_length      ; clear encrypted length
+        rts

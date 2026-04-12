@@ -3,25 +3,36 @@
 ; Related: aes_decrypt.asm, tables.asm (S-box, round constants)
 ; =============================================================================
 
-; =============================================================================
-; clear_buffers - clear input and encrypted buffers
-; =============================================================================
-clear_buffers:
-        lda #0
-        ldx #0
-@loop:
-        sta input_buffer,x
-        sta encrypt_buffer,x
-        inx
-        cpx #input_buf_size
-        bne @loop
-        sta input_length        ; clear input length
-        sta encrypt_length      ; clear encrypted length
-        rts
+; NOTE: clear_buffers (app-level helper that wiped the demo input/encrypt
+; buffers) used to live here. It referenced input_buffer/encrypt_buffer/
+; input_length/encrypt_length — all demo-app symbols — so it has been moved
+; to the demo app (src/boot.asm).
 
 ; =============================================================================
-; aes_encrypt_block - encrypt one 16-byte block in aes_state
-; uses expanded key in expanded_key
+; aes_encrypt_block - AES-256 encrypt one 16-byte block in place
+;
+; Runs the full 14-round AES-256 encryption on aes_state using the round
+; keys in aes_expanded_key. Standard FIPS-197 rounds: initial
+; AddRoundKey, then 13 x {SubBytes, ShiftRows, MixColumns, AddRoundKey},
+; then final {SubBytes, ShiftRows, AddRoundKey}.
+;
+; Entry:
+;   A, X, Y      n/a
+;   memory       aes_state        = 16-byte plaintext block
+;                aes_expanded_key = 240-byte key schedule from
+;                                   aes_key_expansion (or an equivalent
+;                                   15-round schedule installed by the
+;                                   caller, as GCM-SIV does)
+;
+; Exit:
+;   A, X, Y      undefined
+;   memory       aes_state        = ciphertext block (16 bytes)
+;                aes_mc_a0..b3    = clobbered (MixColumns scratch)
+;
+; Clobbers: A, X, Y, aes_state, aes_mc_a0..b3, zp_round
+; Cycles:   unmeasured
+; IRQ-safe: no
+; Reentrant: no
 ; =============================================================================
 aes_encrypt_block:
         ; initial round key addition
@@ -215,7 +226,7 @@ aes_add_round_key:
         ldx #0
 @loop:
         lda aes_state,x
-        eor expanded_key,y
+        eor aes_expanded_key,y
         sta aes_state,x
         iny
         inx
@@ -224,14 +235,32 @@ aes_add_round_key:
         rts
 
 ; =============================================================================
-; aes_key_expansion - expand 256-bit key to round keys
+; aes_key_expansion - expand a 256-bit AES key into the 240-byte schedule
+;
+; FIPS-197 AES-256 key schedule: 14+1 round keys of 16 bytes each,
+; derived from aes_current_key using SubWord, RotWord, and the Rcon
+; table (in lib/tables.asm).
+;
+; Entry:
+;   A, X, Y      n/a
+;   memory       aes_current_key  = 32-byte AES-256 key
+;
+; Exit:
+;   A, X, Y      undefined
+;   memory       aes_expanded_key = 240 bytes of round keys
+;                aes_current_key  = preserved
+;
+; Clobbers: A, X, Y, aes_expanded_key, zp_count, zp_tmp1..zp_tmp4
+; Cycles:   unmeasured
+; IRQ-safe: no
+; Reentrant: no
 ; =============================================================================
 aes_key_expansion:
         ; copy original key to first 32 bytes of expanded key
         ldx #0
 @copy_key:
-        lda key_data,x
-        sta expanded_key,x
+        lda aes_current_key,x
+        sta aes_expanded_key,x
         inx
         cpx #32
         bne @copy_key
@@ -247,13 +276,13 @@ aes_key_expansion:
         tax
 
         ; get w[i-1] (previous word)
-        lda expanded_key-4,x
+        lda aes_expanded_key-4,x
         sta zp_tmp1
-        lda expanded_key-3,x
+        lda aes_expanded_key-3,x
         sta zp_tmp2
-        lda expanded_key-2,x
+        lda aes_expanded_key-2,x
         sta zp_tmp3
-        lda expanded_key-1,x
+        lda aes_expanded_key-1,x
         sta zp_tmp4
 
         ; check if i mod 8 == 0
@@ -324,21 +353,21 @@ aes_key_expansion:
         asl
         tax
 
-        lda expanded_key-32,x   ; w[i-8]
+        lda aes_expanded_key-32,x   ; w[i-8]
         eor zp_tmp1
-        sta expanded_key,x
+        sta aes_expanded_key,x
 
-        lda expanded_key-31,x
+        lda aes_expanded_key-31,x
         eor zp_tmp2
-        sta expanded_key+1,x
+        sta aes_expanded_key+1,x
 
-        lda expanded_key-30,x
+        lda aes_expanded_key-30,x
         eor zp_tmp3
-        sta expanded_key+2,x
+        sta aes_expanded_key+2,x
 
-        lda expanded_key-29,x
+        lda aes_expanded_key-29,x
         eor zp_tmp4
-        sta expanded_key+3,x
+        sta aes_expanded_key+3,x
 
         ; next word
         inc zp_count

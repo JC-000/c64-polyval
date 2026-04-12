@@ -4,8 +4,31 @@
 ; =============================================================================
 
 ; =============================================================================
-; aes_decrypt_block - decrypt one 16-byte block in aes_state
-; standard inverse cipher for aes-256 (14 rounds)
+; aes_decrypt_block - AES-256 decrypt one 16-byte block in place
+;
+; Runs the full 14-round inverse AES-256 cipher on aes_state using the
+; round keys in aes_expanded_key. FIPS-197 order: AddRoundKey at round
+; 14, then 13 x {InvShiftRows, InvSubBytes, AddRoundKey, InvMixColumns},
+; then final {InvShiftRows, InvSubBytes, AddRoundKey}.
+;
+; Entry:
+;   A, X, Y      n/a
+;   memory       aes_state        = 16-byte ciphertext block
+;                aes_expanded_key = 240-byte key schedule from
+;                                   aes_key_expansion
+;
+; Exit:
+;   A, X, Y      undefined
+;   memory       aes_state        = plaintext block (16 bytes)
+;                aes_mc_a0..b3    = clobbered (InvMixColumns scratch)
+;
+; Clobbers: A, X, Y, aes_state, aes_mc_a0..b3, zp_round
+; Cycles:   unmeasured
+; IRQ-safe: no
+; Reentrant: no
+; Note: GCM-SIV never invokes aes_decrypt_block; decryption is done via
+;       AES-CTR on encrypt_block. This routine is exposed for direct
+;       AES users.
 ; =============================================================================
 aes_decrypt_block:
         ; round 14: initial add round key
@@ -109,91 +132,91 @@ aes_inv_mix_columns:
 
         ; load column bytes to temp storage
         lda aes_state,x
-        sta mc_a0
+        sta aes_mc_a0
         lda aes_state+1,x
-        sta mc_a1
+        sta aes_mc_a1
         lda aes_state+2,x
-        sta mc_a2
+        sta aes_mc_a2
         lda aes_state+3,x
-        sta mc_a3
+        sta aes_mc_a3
 
         ; b0 = 0e*a0 ^ 0b*a1 ^ 0d*a2 ^ 09*a3
-        lda mc_a0
+        lda aes_mc_a0
         jsr gf_mul_0e
-        sta mc_b0
-        lda mc_a1
+        sta aes_mc_b0
+        lda aes_mc_a1
         jsr gf_mul_0b
-        eor mc_b0
-        sta mc_b0
-        lda mc_a2
+        eor aes_mc_b0
+        sta aes_mc_b0
+        lda aes_mc_a2
         jsr gf_mul_0d
-        eor mc_b0
-        sta mc_b0
-        lda mc_a3
+        eor aes_mc_b0
+        sta aes_mc_b0
+        lda aes_mc_a3
         jsr gf_mul_09
-        eor mc_b0
-        sta mc_b0
+        eor aes_mc_b0
+        sta aes_mc_b0
 
         ; b1 = 09*a0 ^ 0e*a1 ^ 0b*a2 ^ 0d*a3
-        lda mc_a0
+        lda aes_mc_a0
         jsr gf_mul_09
-        sta mc_b1
-        lda mc_a1
+        sta aes_mc_b1
+        lda aes_mc_a1
         jsr gf_mul_0e
-        eor mc_b1
-        sta mc_b1
-        lda mc_a2
+        eor aes_mc_b1
+        sta aes_mc_b1
+        lda aes_mc_a2
         jsr gf_mul_0b
-        eor mc_b1
-        sta mc_b1
-        lda mc_a3
+        eor aes_mc_b1
+        sta aes_mc_b1
+        lda aes_mc_a3
         jsr gf_mul_0d
-        eor mc_b1
-        sta mc_b1
+        eor aes_mc_b1
+        sta aes_mc_b1
 
         ; b2 = 0d*a0 ^ 09*a1 ^ 0e*a2 ^ 0b*a3
-        lda mc_a0
+        lda aes_mc_a0
         jsr gf_mul_0d
-        sta mc_b2
-        lda mc_a1
+        sta aes_mc_b2
+        lda aes_mc_a1
         jsr gf_mul_09
-        eor mc_b2
-        sta mc_b2
-        lda mc_a2
+        eor aes_mc_b2
+        sta aes_mc_b2
+        lda aes_mc_a2
         jsr gf_mul_0e
-        eor mc_b2
-        sta mc_b2
-        lda mc_a3
+        eor aes_mc_b2
+        sta aes_mc_b2
+        lda aes_mc_a3
         jsr gf_mul_0b
-        eor mc_b2
-        sta mc_b2
+        eor aes_mc_b2
+        sta aes_mc_b2
 
         ; b3 = 0b*a0 ^ 0d*a1 ^ 09*a2 ^ 0e*a3
-        lda mc_a0
+        lda aes_mc_a0
         jsr gf_mul_0b
-        sta mc_b3
-        lda mc_a1
+        sta aes_mc_b3
+        lda aes_mc_a1
         jsr gf_mul_0d
-        eor mc_b3
-        sta mc_b3
-        lda mc_a2
+        eor aes_mc_b3
+        sta aes_mc_b3
+        lda aes_mc_a2
         jsr gf_mul_09
-        eor mc_b3
-        sta mc_b3
-        lda mc_a3
+        eor aes_mc_b3
+        sta aes_mc_b3
+        lda aes_mc_a3
         jsr gf_mul_0e
-        eor mc_b3
-        sta mc_b3
+        eor aes_mc_b3
+        sta aes_mc_b3
 
         ; store results back to state
         ldx zp_tmp1             ; restore column offset
-        lda mc_b0
+        lda aes_mc_b0
         sta aes_state,x
-        lda mc_b1
+        lda aes_mc_b1
         sta aes_state+1,x
-        lda mc_b2
+        lda aes_mc_b2
         sta aes_state+2,x
-        lda mc_b3
+        lda aes_mc_b3
         sta aes_state+3,x
 
         inc zp_col
