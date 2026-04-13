@@ -1,0 +1,20 @@
+c64-polyval v0.1.0 library benchmark attestation
+Built:  2026-04-13
+Commit: d23677ce134c59dae669b967d6083136c78d5e6d
+
+Cycle counts (VICE-measured, min over many iterations; LONG profile unless
+noted). Min over median is reported because the VICE binary monitor
+occasionally injects stalls that inflate medians while the lower bound is
+stable against the original text-monitor numbers to within 1 cycle.
+
+  polyval_multiply:            3745 cy min   (identical to ACME baseline)
+  polyval_double:                85 cy min
+  polyval_shift_left_4:         411 cy min
+  polyval_xor_table_entry:      175 cy min
+  polyval_precompute_table:  255259 cy min   (110 cy FASTER than ACME)
+  polyval_update (multi-block): per-block deltas within VICE measurement
+                                noise across N = 1, 4, 16, 64, 256 blocks.
+
+Summary: cycle-parity with ACME on the polyval_multiply hot path, a small
+(+110 cy) improvement on polyval_precompute_table, and no regressions on
+any benchmarked routine.

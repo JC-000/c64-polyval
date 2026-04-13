@@ -6,18 +6,51 @@ POLYVAL (GF(2^128) universal hash from RFC 8452) implementation for the Commodor
 
 This project implements the POLYVAL universal hash function as specified in [RFC 8452](https://datatracker.ietf.org/doc/html/rfc8452), integrated into a complete AES-256-GCM-SIV encryption/decryption system for the C64.
 
+## Library release v0.1.0 (ca65)
+
+The library has been ported to the [cc65/ca65](https://cc65.github.io/) toolchain and published as a versioned, consumer-ready release for downstream projects (`c64-wireguard`, `c64-https`, etc.). The ca65 build lives under `ca65/`, the release artifacts under `ca65/release/v0.1.0/`:
+
+- `polyval_long.lib`, `polyval_short.lib` — ar65 archives, pick one based on your message-length profile
+- `include/abi_v1.inc` — stable public ABI (10 routines + data buffers + 2 ZP symbols)
+- `include/test_probes.inc` — internal test-only surface (NOT stable, do not depend on)
+- `examples/` — canonical consumer stub, ld65 config, Makefile template
+- `attestation/` — test and benchmark results snapshot
+- `README.md` + `MANIFEST.txt` — per-release version notes and file checksums
+
+The ca65 port is opcode-exact against the original ACME build (zero real diffs across ~4500 bytes of crypto code, only 3-byte absolute-address operands differ due to relocation). `polyval_multiply` retains its cycle floor (3745 cy min / ~3917 cy median). See `ca65/release/v0.1.0/README.md` for the consumer-facing release notes.
+
+The original ACME tree under `src/` remains in the repo for historical reference but is slated for removal once downstream projects complete their own ca65 ports. New consumers should target the ca65 library only.
+
 **POLYVAL multiplication strategy:** Shoup 8-bit window. The hash key H is transformed to H' = H * x^{-128} via 128 right-shifts, then a page-aligned sliced `polyval_htable8` (16 pages × 256 bytes, one per output byte) and a paired `polyval_reduce8` carry-reduction table (16 pages) are precomputed from H'. Each 128-bit multiply processes 16 bytes of input using a single fused inner loop that combines shift-by-8, polynomial reduction, and htable XOR with no intermediate passes. An earlier 4-bit nibble variant (`polyval_xor_table_entry` + `polyval_htable`) is retained for reference and precompute bootstrap.
 
 **Polynomial:** x^128 + x^127 + x^126 + x^121 + 1
 
 ## Building
 
-Requires the [ACME cross-assembler](https://sourceforge.net/projects/acme-crossass/).
+### ca65 build (primary, recommended)
+
+Requires the [cc65 toolchain](https://cc65.github.io/) (`ca65`, `ld65`, `ar65`).
 
 ```
+cd ca65
 make                           # assemble (defaults to POLYVAL_PROFILE=long)
 make POLYVAL_PROFILE=short     # assemble with the low-latency SHORT profile
 make POLYVAL_PROFILE=long      # assemble with the throughput LONG profile
+make run                       # assemble and launch in VICE
+make lib                       # library-only verification build
+make consumer-check            # link the canonical consumer stub
+make release                   # rebuild ca65/release/v0.1.0/ artifacts
+make clean                     # remove build artifacts
+```
+
+### ACME build (legacy)
+
+Requires the [ACME cross-assembler](https://sourceforge.net/projects/acme-crossass/). Kept in the repo root for historical reference and for the legacy `tools/` test harness path.
+
+```
+make                           # assemble (defaults to POLYVAL_PROFILE=long)
+make POLYVAL_PROFILE=short     # low-latency SHORT profile
+make POLYVAL_PROFILE=long      # throughput LONG profile
 make run                       # assemble and launch in VICE
 make clean                     # remove build artifacts
 ```
@@ -164,4 +197,8 @@ PRG size grew from 8,154 to ~19,700 bytes, mostly from the two page-aligned Shou
 
 ## Status
 
-The POLYVAL implementation and GCM-SIV integration are functionally complete, passing all 232 tests (217 POLYVAL + 15 GCM-SIV) including all RFC 8452 C.2 vectors for both encryption and decryption. The long-term goal is to merge this into [c64-aes256-ecdsa](https://github.com/JC-000/c64-aes256-ecdsa), replacing the simplified CBC-MAC with true POLYVAL.
+The POLYVAL implementation and GCM-SIV integration are functionally complete. On both the ca65 and ACME builds, the full test suite passes at 217/217 POLYVAL direct tests + 159/165 GCM-SIV tests (6 intentional skips for AAD-bearing RFC 8452 C.2 vectors — the C64 implementation intentionally does not support AAD). All RFC 8452 C.2 encrypt/decrypt vectors with empty AAD pass on both builds.
+
+The ca65 port has been audited against the ACME baseline with opcode-exact byte parity across all crypto routines and cycle-exact parity on `polyval_multiply`. The v0.1.0 library release (`ca65/release/v0.1.0/`) is the recommended consumption path for downstream projects.
+
+The long-term goal is to merge this into [c64-aes256-ecdsa](https://github.com/JC-000/c64-aes256-ecdsa), replacing the simplified CBC-MAC with true POLYVAL.

@@ -1,0 +1,38 @@
+c64-polyval v0.1.0 library release
+Commit: d23677ce134c59dae669b967d6083136c78d5e6d
+Built:  2026-04-13
+
+File                                             Size  MD5
+polyval_long.lib                                54469  1403b5aaa1598b8aa30d9d283109ce75
+polyval_short.lib                              117887  b7d365ebbbc0edf8d6cac557fee631dc
+include/abi_v1.inc                               2946  6d2a236efbc4e4fc350949408462db86
+include/test_probes.inc                          2059  5e7f43fd3055af6a4dc598fc4b0a2a0b
+include/constants_lib.inc                        3730  c814ea9948a96994b397e77f5b7dd9a4
+include/polyval_api.inc                          4687  7f879d5e19f9a4a620c295bc3c223a85
+examples/consumer_stub.s                         1455  3f470274b563350c4099bfe6d9be3dbc
+examples/consumer.cfg                            2331  a4c0486c75acb0ef79c8192b57b34110
+examples/Makefile.example                        1063  212d1dc96b5dc028802ae9654b52ec9e
+attestation/test_results.txt                      819  bf81d2f34ecdfdf4ee5304cd34f69467
+attestation/benchmark_results.txt                 999  519ab04718cc4c78d4990a7bfb5f9eb2
+README.md                                        4983  6f2e8233b1be2bfeee63eb0366d24dcb
+
+Notes
+-----
+- polyval_long.lib and polyval_short.lib are mutually exclusive. A consumer
+  picks exactly one and links against it.
+- The ar65 archiver embeds a small amount of build-time metadata per .o
+  module (~12 bytes total across the archive), so re-running `make release`
+  produces archives of identical size and identical object-module contents
+  but not a byte-identical .lib file. MD5s above are for the specific build
+  recorded by this manifest.
+- abi_v1.inc is the stable consumer-facing ABI. test_probes.inc is NOT
+  stable and exists only so the upstream test suite can reach inner
+  helpers. See README.md for details.
+
+Next steps (user-only - NOT done by this release build)
+-------------------------------------------------------
+- `git tag lib-v0.1.0 <commit>` + `git push origin lib-v0.1.0`
+- Optionally remove the ACME tree under /home/someone/c64-polyval/src/
+  and /home/someone/c64-polyval/tools/ once downstream consumers have
+  migrated off it. This release only adds files under ca65/release/ and
+  a new Makefile target; nothing in src/ or tools/ has been touched.
