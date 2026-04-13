@@ -1,0 +1,37 @@
+# ---------------------------------------------------------------------------
+# Makefile.example - example build wiring for a downstream c64-polyval
+#                    consumer.
+#
+# Rename to `Makefile` in your own project and adjust POLYVAL_PROFILE /
+# POLYVAL_LIB / your .s sources as needed.
+# ---------------------------------------------------------------------------
+
+CA65    := ca65
+LD65    := ld65
+
+# Pick one: polyval_long.lib (faster, ~8.5 KB RAM) or polyval_short.lib
+# (slower, ~256 B RAM). The POLYVAL_PROFILE ca65 symbol MUST match whichever
+# archive you link against: 2=long, 1=short.
+POLYVAL_PROFILE ?= 2
+POLYVAL_LIB     ?= polyval_long.lib
+
+CA65FLAGS := --cpu 6502 -I . -D POLYVAL_PROFILE=$(POLYVAL_PROFILE)
+LD65FLAGS := -C consumer.cfg
+
+SRCS := consumer_stub.s
+OBJS := $(SRCS:.s=.o)
+TARGET := consumer.prg
+
+.PHONY: all clean
+.DEFAULT_GOAL := all
+
+all: $(TARGET)
+
+%.o: %.s
+	$(CA65) $(CA65FLAGS) -o $@ $<
+
+$(TARGET): $(OBJS) $(POLYVAL_LIB) consumer.cfg
+	$(LD65) $(LD65FLAGS) -o $(TARGET) $(OBJS) $(POLYVAL_LIB)
+
+clean:
+	rm -f $(OBJS) $(TARGET)

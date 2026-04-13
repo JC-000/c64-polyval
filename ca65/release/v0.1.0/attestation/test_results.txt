@@ -1,0 +1,20 @@
+c64-polyval v0.1.0 library release attestation
+Built:  2026-04-13
+Commit: d23677ce134c59dae669b967d6083136c78d5e6d
+
+Test suite results (both profiles, LONG and SHORT):
+
+  tools/test_polyval_direct.py:       217/217 pass
+  tools/test_gcmsiv_polyval.py:       159/165 pass, 6 skip
+                                       (6 skips are pre-existing, AAD-not-
+                                        supported test cases - match ACME
+                                        baseline)
+
+Zero regressions vs the ACME baseline.
+Opcode-exact byte parity confirmed across all crypto routines (~4500 bytes
+of emitted code).
+
+Self-containment:
+  `make lib`            passes (library-only link, no app symbols).
+  `make consumer-check` passes (consumer stub links against public API
+                         only, via lib_only.cfg).

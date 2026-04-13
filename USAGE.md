@@ -1,5 +1,17 @@
 # c64-polyval library usage guide
 
+> **New consumers should use the ca65 library release, not this guide.**
+> The versioned release at `ca65/release/v0.1.0/` ships pre-built `ar65` archives
+> (`polyval_long.lib`, `polyval_short.lib`), a stable ABI header (`include/abi_v1.inc`),
+> a canonical consumer example, and integration attestation. See
+> [`ca65/release/v0.1.0/README.md`](ca65/release/v0.1.0/README.md) for the ca65 integration path.
+>
+> This document describes the **legacy ACME source-include integration mode**,
+> kept for historical reference. It will be removed once downstream projects
+> complete their own ca65 ports.
+
+---
+
 This document shows how to drop the POLYVAL / AES-256 / AES-256-GCM-SIV
 library under `src/lib/` into another Commodore 64 assembly project.
 
