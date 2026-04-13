@@ -1,5 +1,5 @@
 c64-polyval v0.1.0 library release
-Commit: d23677ce134c59dae669b967d6083136c78d5e6d
+Commit: 1a93e2ab145ec2083cef2352cabba99e5a7d35c4
 Built:  2026-04-13
 
 File                                             Size  MD5
@@ -29,10 +29,12 @@ Notes
   stable and exists only so the upstream test suite can reach inner
   helpers. See README.md for details.
 
-Next steps (user-only - NOT done by this release build)
--------------------------------------------------------
-- `git tag lib-v0.1.0 <commit>` + `git push origin lib-v0.1.0`
-- Optionally remove the ACME tree under /home/someone/c64-polyval/src/
-  and /home/someone/c64-polyval/tools/ once downstream consumers have
-  migrated off it. This release only adds files under ca65/release/ and
-  a new Makefile target; nothing in src/ or tools/ has been touched.
+Release state
+-------------
+- Tagged: lib-v0.1.0 on commit 1a93e2ab145ec2083cef2352cabba99e5a7d35c4
+  (master branch merge of PR #10). Downstream consumers should pin to
+  this tag.
+- ACME tree under src/ and tools/ remains in-repo as historical
+  reference and will be removed in a follow-up commit once downstream
+  projects (c64-wireguard, c64-https) complete their own ca65 ports
+  and confirm they can import from v0.1.0.
