@@ -1,42 +1,56 @@
 ; =============================================================================
-; display.asm - display_hex_block, print_hex_byte, print_hex_digit, print_string
+; display.s - display_hex_block, print_hex_byte, print_hex_digit, print_string,
+;             print_decimal (ca65 port of display.asm)
 ; =============================================================================
+
+.include "constants_app.inc"
+.include "constants_lib.inc"
+
+.import decimal_flag
+
+.export display_hex_block
+.export print_hex_byte
+.export print_hex_digit
+.export print_string
+.export print_decimal
+
+.segment "CODE"
 
 ; =============================================================================
 ; display_hex_block - display bytes in hex format
 ; =============================================================================
 display_hex_block:
-        sta zp_temp
+        sta     zp_temp
 
 @row_loop:
-        ldx zp_temp
+        ldx     zp_temp
 @byte_loop:
-        ldy #0
-        lda (zp_ptr),y
-        jsr print_hex_byte
+        ldy     #0
+        lda     (zp_ptr),y
+        jsr     print_hex_byte
 
-        lda #$20
-        jsr chrout
+        lda     #$20
+        jsr     chrout
 
-        inc zp_ptr
-        bne @no_carry
-        inc zp_ptr+1
+        inc     zp_ptr
+        bne     @no_carry
+        inc     zp_ptr+1
 @no_carry:
 
-        dec zp_count
-        beq @done
+        dec     zp_count
+        beq     @done
 
         dex
-        bne @byte_loop
+        bne     @byte_loop
 
-        lda #$0d
-        jsr chrout
+        lda     #$0d
+        jsr     chrout
 
-        jmp @row_loop
+        jmp     @row_loop
 
 @done:
-        lda #$0d
-        jsr chrout
+        lda     #$0d
+        jsr     chrout
         rts
 
 ; =============================================================================
@@ -49,11 +63,11 @@ print_hex_byte:
         lsr
         lsr
         lsr
-        jsr print_hex_digit
+        jsr     print_hex_digit
 
         pla
-        and #$0f
-        jsr print_hex_digit
+        and     #$0f
+        jsr     print_hex_digit
 
         rts
 
@@ -61,31 +75,31 @@ print_hex_byte:
 ; print_hex_digit - print a single hex digit (0-15)
 ; =============================================================================
 print_hex_digit:
-        cmp #10
-        bcs @letter
+        cmp     #10
+        bcs     @letter
         clc
-        adc #'0'
-        jmp chrout
+        adc     #'0'
+        jmp     chrout
 @letter:
         clc
-        adc #'A'-10
-        jmp chrout
+        adc     #'A'-10
+        jmp     chrout
 
 ; =============================================================================
 ; print_string - print null-terminated string
 ; =============================================================================
 print_string:
-        sta zp_ptr
-        sty zp_ptr+1
-        ldy #0
+        sta     zp_ptr
+        sty     zp_ptr+1
+        ldy     #0
 @loop:
-        lda (zp_ptr),y
-        beq @done
-        jsr chrout
+        lda     (zp_ptr),y
+        beq     @done
+        jsr     chrout
         iny
-        bne @loop
-        inc zp_ptr+1
-        jmp @loop
+        bne     @loop
+        inc     zp_ptr+1
+        jmp     @loop
 @done:
         rts
 
@@ -93,49 +107,49 @@ print_string:
 ; print_decimal - print A as decimal number
 ; =============================================================================
 print_decimal:
-        ldx #0
-        stx decimal_flag
+        ldx     #0
+        stx     decimal_flag
 
         ; hundreds
-        ldx #0
+        ldx     #0
 @hundreds:
-        cmp #100
-        bcc @tens
-        sbc #100
+        cmp     #100
+        bcc     @tens
+        sbc     #100
         inx
-        jmp @hundreds
+        jmp     @hundreds
 @tens:
         pha
         txa
-        beq @skip_hundreds
-        ora #$30
-        jsr chrout
-        inc decimal_flag
+        beq     @skip_hundreds
+        ora     #$30
+        jsr     chrout
+        inc     decimal_flag
 @skip_hundreds:
         pla
 
         ; tens
-        ldx #0
+        ldx     #0
 @tens_loop:
-        cmp #10
-        bcc @ones
-        sbc #10
+        cmp     #10
+        bcc     @ones
+        sbc     #10
         inx
-        jmp @tens_loop
+        jmp     @tens_loop
 @ones:
         pha
         txa
-        bne @print_tens
-        lda decimal_flag
-        beq @skip_tens
+        bne     @print_tens
+        lda     decimal_flag
+        beq     @skip_tens
 @print_tens:
         txa
-        ora #$30
-        jsr chrout
+        ora     #$30
+        jsr     chrout
 @skip_tens:
         pla
 
         ; ones
-        ora #$30
-        jsr chrout
+        ora     #$30
+        jsr     chrout
         rts

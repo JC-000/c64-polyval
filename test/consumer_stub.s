@@ -11,8 +11,8 @@
 ; Build: make consumer-check
 ; =============================================================================
 
-.include "lib/constants_lib.inc"
-.include "lib/polyval_api.inc"
+.include "constants_lib.inc"
+.include "polyval_api.inc"
 
 ; polyval_acc / pv_mul_input are plain equates from constants_lib.inc; no
 ; .importzp is needed. Referencing them below (e.g. `lda polyval_acc`) will
