@@ -7,7 +7,7 @@
 ; =============================================================================
 
 .include "constants_app.inc"
-.include "lib/constants_lib.inc"
+.include "constants_lib.inc"
 
 ; --- Library symbols ---
 .import gcmsiv_encrypt

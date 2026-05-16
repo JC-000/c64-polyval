@@ -36,7 +36,7 @@ import polyval_reference
 
 
 PROJECT_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
-VECTORS_PATH = os.path.join(PROJECT_ROOT, "test", "rfc8452_vectors.json")
+VECTORS_PATH = os.path.join(PROJECT_ROOT, "tools", "vectors", "rfc8452_vectors.json")
 
 SANITY_SEED = 0xCAFE
 

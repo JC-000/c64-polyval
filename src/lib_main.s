@@ -13,8 +13,8 @@
 ; $4000, and runs nothing useful. It is not intended to execute on a C64.
 ; =============================================================================
 
-.include "lib/constants_lib.inc"
-.include "lib/polyval_api.inc"
+.include "constants_lib.inc"
+.include "polyval_api.inc"
 
 ; ZP addresses (polyval_acc, pv_mul_input, pv_mul_nibble) come from
 ; constants_lib.inc as pure equates, so no .importzp needed here -- ca65

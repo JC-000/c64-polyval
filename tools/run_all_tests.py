@@ -33,6 +33,7 @@ from c64_test_harness import (
 # Import test functions from polyval_direct
 from test_polyval_direct import (
     TestResults,
+    install_zp_wrapper,
     test_init,
     test_double,
     test_right_shift,
@@ -130,6 +131,14 @@ def worker_polyval(transport, labels, seed, iterations, verbose, tls_stdout):
 
     # Set the VERBOSE flag for this run
     test_polyval_direct.VERBOSE = verbose
+
+    # Install ZP staging wrapper — polyval_acc lives in ZP ($10-$1F) which
+    # BASIC/KERNAL clobber between jsr() calls, so every test group routes
+    # through the $C040 wrapper. Without this, polyval_acc reads are stale
+    # and every direct group fails by exception. Standalone main() installs
+    # it; the parallel orchestrator must do it explicitly per-instance too.
+    install_zp_wrapper(transport)
+    print("  ZP staging wrapper installed")
 
     results = TestResults()
 
