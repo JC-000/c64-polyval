@@ -71,7 +71,7 @@ from c64_test_harness import (
 PROJECT_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 PRG_PATH = os.path.join(PROJECT_ROOT, "build", "polyval.prg")
 LABELS_PATH = os.path.join(PROJECT_ROOT, "build", "labels.txt")
-VECTORS_PATH = os.path.join(PROJECT_ROOT, "test", "rfc8452_vectors.json")
+VECTORS_PATH = os.path.join(PROJECT_ROOT, "tools", "vectors", "rfc8452_vectors.json")
 
 DEFAULT_SEED = 8452  # RFC 8452 number; deterministic by default
 DEFAULT_ITERATIONS = 15
