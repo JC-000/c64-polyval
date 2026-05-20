@@ -13,21 +13,48 @@ fold into `c64-aes256-ecdsa` and serve as a primitive for `c64-wireguard` and
 Companion docs (read alongside this file):
 - `README.md` — user-facing overview + build flow.
 - `API.md` — library API reference; §3 (profile selection), §4 (ZP layout),
-  §7–§8 (consumer integration) are load-bearing.
+  §7–§8 (consumer integration), §9 (c64-lib-contract surface) are load-bearing.
 - `CHANGELOG.md` — release history.
-- `docs/RELEASE_NOTES_v0.2.0.md` — current release attestation (size + SHA256).
+- `docs/RELEASE_NOTES_v0.3.0.md` — current release attestation (size + SHA256).
+
+## c64-lib-contract adoption (v0.3.0)
+This library implements the [c64-lib-contract](https://github.com/JC-000/c64-lib-contract)
+SPEC v0.1.0, all six sections:
+- §1 `LIB_VERSION_*` + `LIB_ABI_VERSION` — `src/lib_version.s`
+- §2 `.exportzp` ZP slot inventory — `src/zp_config.s`
+- §3 REU — n/a (c64-polyval makes no REU claims)
+- §4 `LIB_POLYVAL_*` segment naming — every `src/*.s`; `src/c64.cfg` and
+  `src/lib_only.cfg` SEGMENTS{} alias every prefixed segment back to MAIN
+  so the standalone PRG layout is byte-identical to the pre-rename baseline
+- §5 aggregate manifest equates (`LIB_POLYVAL_ZP_USAGE_BYTES`, `_REU_BANKS_USED`,
+  `_RESIDENT_BYTES`, `_COLD_BYTES`) — `src/lib_manifest.s`, profile-conditional
+- §6 ar65 archive build targets — `make lib` / `lib-polyval-{long,short,gcmsiv}`
+
+ZP slots are lowercase with `polyval_` / `pv_` library prefix
+(`polyval_acc`, `pv_mul_input`, `polyval_zp_ptr`, `polyval_aes_round`, ...).
+Pre-v0.3.0 shared `zp_*` names were renamed; consumers vendoring the
+library MUST update their `.importzp` lists.
 
 ## Build
 ```
 make                                  # build/polyval.prg (LONG profile, default)
-make POLYVAL_PROFILE=short             # SHORT profile
-make lib                               # library-only verification at $4000
-make consumer-check                    # link test/consumer_stub.s against the library
-make dist VERSION=v0.2.0               # reproducible source-tarball release
+make POLYVAL_PROFILE=short            # SHORT profile
+make lib                              # build/lib/polyval.a (full ar65 archive — SPEC §6)
+make lib-polyval-long                 # build/lib/polyval-long.a (LONG only, no AES/GCM-SIV)
+make lib-polyval-short                # build/lib/polyval-short.a (SHORT only)
+make lib-polyval-gcmsiv               # build/lib/polyval-gcmsiv.a (full AEAD bundle)
+make lib-verify                       # library-only verification PRG at $4000 (pre-v0.3.0 `make lib`)
+make consumer-check                   # link test/consumer_stub.s against the library
+make dist VERSION=v0.3.0              # reproducible source-tarball release
 ```
-Assembler: ca65/ld65 (cc65 toolchain). Single canonical toolchain as of v0.2.0
-— ACME support was retired. `src/` is flat (no `lib/` subdir); ld65 configs
-live at `src/c64.cfg` (full app) and `src/lib_only.cfg` (library-only).
+Assembler: ca65/ld65/ar65 (cc65 toolchain). Single canonical toolchain as of
+v0.2.0 — ACME support was retired. `src/` is flat (no `lib/` subdir); ld65
+configs live at `src/c64.cfg` (full app) and `src/lib_only.cfg` (library-only).
+
+**Profile-switch gotcha:** `data.o` and `lib_manifest.o` contents are conditional
+on `POLYVAL_PROFILE`. Make's pattern rule doesn't track that as a dependency,
+so always `make clean` between profile switches; the lib-polyval-{long,short}
+archive targets do this automatically via recursive make.
 
 `make dist` produces `c64-polyval-vX.Y.Z.tar.gz` at repo root. The tarball
 ships only `src/`, root docs, and `docs/RELEASE_NOTES_*`; it intentionally
@@ -78,19 +105,31 @@ chasing bugs that don't exist in their code or in VICE.
 
 This rule applies to all Claude sessions in this multi-project workspace.
 
-## Layout (v0.2.0)
+## Layout (v0.3.0)
 ```
-src/                      # ca65 canonical sources + ld65 configs + exports.inc
-test/                     # consumer_stub.s (used by `make consumer-check`)
-tools/                    # test runner, harness, build_release.sh, vectors/
-docs/                     # RELEASE_NOTES_v*.md
-ca65/release/v0.1.0/      # frozen historical artifact — DO NOT MODIFY
+src/
+  lib_version.s          # §1: LIB_VERSION_*/LIB_ABI_VERSION
+  zp_config.s            # §2: .exportzp polyval_* / pv_* slots
+  lib_manifest.s         # §5: LIB_POLYVAL_*_BYTES + REU_BANKS_USED
+  constants_lib.inc      # AES sizes, profile selectors, .include "zp_config.s"
+  polyval_long.s / polyval_short.s
+  aes_encrypt.s / aes_decrypt.s / tables.s
+  gcm_siv.s
+  data.s                 # all BSS + page-aligned tables (segment-partitioned)
+  lib_main.s             # make lib-verify entry stub
+  c64.cfg / lib_only.cfg # ld65 cfgs with LIB_POLYVAL_* SEGMENTS aliases
+  exports.inc            # human-readable cross-module symbol map (NOT an .include)
+test/                    # consumer_stub.s (used by `make consumer-check`)
+tools/                   # test runner, harness, build_release.sh, vectors/
+docs/                    # RELEASE_NOTES_v*.md
+ca65/release/v0.1.0/     # frozen historical artifact — DO NOT MODIFY
 ```
 
 The `ca65/release/v0.1.0/` subtree ships the prior `.lib`-archive release
 intact (MANIFEST.txt, attestation/, examples/, `abi_v1.inc`). It is preserved
 as historical reference and must not be edited. The active ABI is now
-`src/exports.inc`.
+`src/exports.inc` plus the contract files (`lib_version.s`, `zp_config.s`,
+`lib_manifest.s`).
 
 ## Release flow
 1. Bump `VERSION` and `CHANGELOG.md`.
