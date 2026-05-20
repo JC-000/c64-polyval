@@ -34,7 +34,7 @@
 .export polyval_update
 .export polyval_finalize
 
-.segment "CODE"
+.segment "LIB_POLYVAL_SHORT_CODE"
 
 ; -----------------------------------------------------------------------------
 ; Unroll macros for hot 16-byte ZP loops (polyval_acc at $10-$1F)

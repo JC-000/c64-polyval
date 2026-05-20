@@ -10,7 +10,7 @@
 .export aes_inv_sbox
 .export aes_rcon
 
-.segment "RODATA"
+.segment "LIB_POLYVAL_AES_RODATA"
 
 ; ---------------------------------------------------------------------------
 ; AES S-box (256 bytes)

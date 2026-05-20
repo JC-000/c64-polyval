@@ -31,7 +31,7 @@
 .export gf_mul2
 .export gf_mul3
 
-.segment "CODE"
+.segment "LIB_POLYVAL_AES_CODE"
 
 ; =============================================================================
 ; aes_encrypt_block - AES-256 encrypt one 16-byte block in place
