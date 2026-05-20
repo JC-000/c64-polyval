@@ -520,3 +520,142 @@ directory. New consumers should NOT integrate against v0.1.0 —
 use v0.2.0's source-tarball + `src/exports.inc` integration path
 instead. The v0.1.0 tree is kept only for reproducibility of the
 prior release.
+
+## 9. Library contract (c64-lib-contract v0.1.0)
+
+As of v0.3.0, c64-polyval implements
+[c64-lib-contract](https://github.com/JC-000/c64-lib-contract)
+SPEC v0.1.0 in full. The contract pins a small set of cross-library
+symbols every adopter library exports so a downstream consumer
+(c64-wireguard, c64-https, …) can size-check, version-gate, and
+collision-check its dependencies at assemble time. Six SPEC sections
+apply to c64-polyval; §3 (REU bank claims) is N/A because the
+library makes no 17xx REU claims.
+
+### 9.1 §1 — Version identification (`src/lib_version.s`)
+
+Four absolute equates, exported as `:abs`:
+
+| Symbol | Value | Meaning |
+|---|---:|---|
+| `LIB_VERSION_MAJOR` | `0` | Semver major. |
+| `LIB_VERSION_MINOR` | `3` | Semver minor. |
+| `LIB_VERSION_PATCH` | `0` | Semver patch. |
+| `LIB_ABI_VERSION`   | `1` | ABI compatibility level. Coarser than MINOR. |
+
+Consumers `.import` whichever subset they need and gate compilation
+on them — see the worked example in §9.6.
+
+### 9.2 §2 — Zero-page contract (`src/zp_config.s`)
+
+Every ZP slot the library claims is declared as an `.ifndef`-guarded
+equate and `.exportzp`-ed. Consumers `.importzp` the names they
+need (or override them in their own translation unit before
+`.include`-ing `zp_config.s` / `constants_lib.inc`).
+
+| Symbol | Address | Width | Role |
+|---|---:|---:|---|
+| `polyval_zp_ptr2` | `$02` | 2 B | Secondary pointer |
+| `polyval_aes_round` | `$04` | 1 B | AES round counter |
+| `polyval_aes_col` | `$05` | 1 B | AES column counter |
+| `polyval_aes_tmp1` | `$06` | 1 B | AES temp |
+| `polyval_aes_tmp2` | `$07` | 1 B | AES temp |
+| `polyval_aes_tmp3` | `$08` | 1 B | AES temp |
+| `polyval_aes_tmp4` | `$09` | 1 B | AES temp |
+| `polyval_acc` | `$10` | 16 B | POLYVAL 128-bit accumulator |
+| `pv_mul_input` | `$20` | 16 B | POLYVAL multiply scratch |
+| `pv_mul_nibble` | `$30` | 1 B | POLYVAL nibble param |
+| `polyval_zp_ptr` | `$fb` | 2 B | Primary pointer |
+| `polyval_zp_temp` | `$fd` | 1 B | Generic temp |
+| `polyval_zp_count` | `$fe` | 1 B | Generic loop counter |
+
+Total: **45 bytes** claimed across three discontiguous regions
+(`$02–$09`, `$10–$30`, `$fb–$fe`). The sum is exposed via
+`LIB_POLYVAL_ZP_USAGE_BYTES` (§9.4).
+
+Suppress the `.exportzp` block by defining
+`ZP_CONFIG_NO_EXPORTS = 1` before `.include`-ing `zp_config.s`.
+This is what `constants_lib.inc` does internally so transitive
+includes don't try to re-export the same symbols.
+
+### 9.3 §3 — REU bank usage
+
+N/A. c64-polyval is a CPU-RAM-only library; `LIB_POLYVAL_REU_BANKS_USED`
+(§9.4) is therefore `0`.
+
+### 9.4 §5 — Aggregate manifest (`src/lib_manifest.s`)
+
+Four absolute equates for assemble-time size and collision asserts:
+
+| Symbol | LONG profile | SHORT profile | Meaning |
+|---|---:|---:|---|
+| `LIB_POLYVAL_ZP_USAGE_BYTES` | 45 | 45 | Total ZP bytes claimed (§9.2). |
+| `LIB_POLYVAL_REU_BANKS_USED` | 0 | 0 | Bitmask of REU banks; always 0. |
+| `LIB_POLYVAL_RESIDENT_BYTES` | 6500 | 16000 | Approx code+rodata that must stay in CPU RAM at runtime (within ±5%). |
+| `LIB_POLYVAL_COLD_BYTES`     | 1200 | 3000  | Approx code+rodata for boot-only init paths (`aes_key_expansion`, `polyval_precompute_table`); a consumer MAY page-overlay these. |
+
+The two profile-conditional values are picked at assemble time off
+the `POLYVAL_PROFILE` selector (§3 of this document). See
+`src/lib_manifest.s` for the derivation comments and measurement
+methodology.
+
+### 9.5 §6 — Library archive targets
+
+Four ar65 archive Make targets ship the library as a single `.a`
+file consumers can link directly without rebuilding `.o` files:
+
+| Target | Output | Contents |
+|---|---|---|
+| `make lib` | `build/lib/polyval.a` | Full AEAD bundle: POLYVAL LONG + AES-256 + GCM-SIV. |
+| `make lib-polyval-long` | `build/lib/polyval-long.a` | POLYVAL LONG primitive only (no AES, no GCM-SIV). |
+| `make lib-polyval-short` | `build/lib/polyval-short.a` | POLYVAL SHORT primitive only. |
+| `make lib-polyval-gcmsiv` | `build/lib/polyval-gcmsiv.a` | Full AEAD bundle (currently byte-identical to `polyval.a`). |
+
+Each archive bundles the SPEC §1 / §2 / §5 core (`lib_version.o`,
+`zp_config.o`, `lib_manifest.o`) plus the variant-specific .o set;
+see the `LIB_*_OBJS` blocks in the top-level `Makefile` for the
+exact composition.
+
+The previous (pre-v0.3.0) `make lib` target — a library-only
+verification PRG link at `$4000` — is renamed to `make lib-verify`.
+
+### 9.6 Consumer example
+
+A downstream consumer can assemble-time gate on the library
+version, then `.importzp` whatever ZP slots and `.import` whatever
+manifest equates and routines it needs:
+
+```asm
+; consumer.s -----------------------------------------------------------
+.include "exports.inc"          ; promised-stable public ABI
+
+; --- §1: ABI version gate ---
+.import LIB_VERSION_MAJOR, LIB_VERSION_MINOR, LIB_ABI_VERSION
+.assert LIB_ABI_VERSION = 1, error, "c64-polyval ABI mismatch"
+.assert LIB_VERSION_MAJOR = 0 .and LIB_VERSION_MINOR >= 3, error, \
+    "c64-polyval v0.3 or newer required"
+
+; --- §2: ZP slots actually used by this consumer ---
+.importzp polyval_acc, pv_mul_input, pv_mul_nibble
+.importzp polyval_zp_ptr, polyval_zp_temp
+
+; --- §5: assemble-time size check against the consumer's link budget ---
+.import LIB_POLYVAL_ZP_USAGE_BYTES
+.import LIB_POLYVAL_RESIDENT_BYTES
+.assert LIB_POLYVAL_ZP_USAGE_BYTES <= 64, error, "ZP budget overrun"
+.assert LIB_POLYVAL_RESIDENT_BYTES <= 8192, error, "code budget overrun"
+
+; --- Routines + buffers (unchanged from v0.2.0) ---
+.import polyval_init, polyval_precompute_table, polyval_update
+.import gcmsiv_encrypt, gcmsiv_decrypt
+.import polyval_h, polyval_temp
+.import gcmsiv_nonce, gcmsiv_pt_buf, gcmsiv_pt_len, gcmsiv_ct_buf
+.import gcmsiv_dec_buf, gcmsiv_tag
+
+; ... host code, calling the imported routines ...
+```
+
+For consumers vendoring multiple c64-lib-contract adopters, the
+recommendation is to import the `LIB_VERSION_*` and
+`LIB_POLYVAL_*` symbols under disambiguating aliases — see the
+contract SPEC §1 for the canonical pattern.
