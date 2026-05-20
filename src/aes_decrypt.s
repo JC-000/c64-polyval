@@ -32,7 +32,7 @@
 .export gf_mul_0d
 .export gf_mul_0e
 
-.segment "CODE"
+.segment "LIB_POLYVAL_AES_CODE"
 
 ; =============================================================================
 ; aes_decrypt_block - AES-256 decrypt one 16-byte block in place

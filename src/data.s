@@ -29,7 +29,7 @@
 .export polyval_h
 .export polyval_temp
 
-.segment "BSS"
+.segment "LIB_POLYVAL_BSS"
 polyval_h:      .res 16         ; 128-bit hash key H
 polyval_temp:   .res 16         ; scratch space for current block
 
@@ -39,7 +39,7 @@ polyval_temp:   .res 16         ; scratch space for current block
 ; ---------------------------------------------------------------------------
 .export polyval_htable
 
-.segment "POLYVAL_HTABLE"
+.segment "LIB_POLYVAL_HTABLE"
 polyval_htable: .res 256        ; 16 entries * 16 bytes
 
 ; ---------------------------------------------------------------------------
@@ -80,7 +80,7 @@ polyval_htable: .res 256        ; 16 entries * 16 bytes
 .export polyval_htable8_s14
 .export polyval_htable8_s15
 
-.segment "POLYVAL_HTABLE8"
+.segment "LIB_POLYVAL_LONG_HTABLE8"
 polyval_htable8:
 polyval_htable8_s0:  .res 256
 polyval_htable8_s1:  .res 256
@@ -117,7 +117,7 @@ polyval_htable8_s15: .res 256
 .export polyval_reduce8_s14
 .export polyval_reduce8_s15
 
-.segment "POLYVAL_REDUCE8"
+.segment "LIB_POLYVAL_LONG_REDUCE8"
 polyval_reduce8:
 polyval_reduce8_s0:  .res 256
 polyval_reduce8_s1:  .res 256
@@ -147,7 +147,7 @@ polyval_reduce8_s15: .res 256
 .export aes_mc_a0, aes_mc_a1, aes_mc_a2, aes_mc_a3
 .export aes_mc_b0, aes_mc_b1, aes_mc_b2, aes_mc_b3
 
-.segment "BSS"
+.segment "LIB_POLYVAL_AES_BSS"
 aes_current_key:   .res 32
 aes_state:         .res 16
 aes_expanded_key:  .res 240      ; 15 round keys * 16 bytes
@@ -185,6 +185,7 @@ aes_mc_b3:  .res 1
 .export gcmsiv_exp_enc_key
 .export gcmsiv_saved_exp
 
+.segment "LIB_POLYVAL_GCMSIV_BSS"
 gcmsiv_nonce:       .res 12     ; 96-bit nonce
 gcmsiv_pt_buf:      .res 64     ; plaintext buffer
 gcmsiv_pt_len:      .res 1      ; plaintext length
