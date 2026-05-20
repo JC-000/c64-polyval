@@ -66,7 +66,7 @@ CA65FLAGS = -I $(SRC_DIR) -D POLYVAL_PROFILE=$(PROFILE_VAL) -g
 # profile-selected polyval implementation last.
 APP_MODULES = main zp boot main_loop disk_io display gcm_siv_ui strings data_app
 
-LIB_MODULES = tables data aes_encrypt aes_decrypt gcm_siv $(POLYVAL_PROFILE_OBJ)
+LIB_MODULES = lib_version zp_config tables data aes_encrypt aes_decrypt gcm_siv $(POLYVAL_PROFILE_OBJ)
 
 MODULES = $(APP_MODULES) $(LIB_MODULES)
 

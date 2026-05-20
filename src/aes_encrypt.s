@@ -12,7 +12,7 @@
 
 .include "constants_lib.inc"
 
-; Note: ZP symbols (zp_round, zp_col, zp_temp, zp_count, zp_tmp1..zp_tmp4)
+; Note: ZP symbols (polyval_aes_round, polyval_aes_col, polyval_zp_temp, polyval_zp_count, polyval_aes_tmp1..polyval_aes_tmp4)
 ; are numeric equates from constants_lib.inc — no .importzp needed.
 
 ; State + tables
@@ -54,7 +54,7 @@
 ;   memory       aes_state        = ciphertext block (16 bytes)
 ;                aes_mc_a0..b3    = clobbered (MixColumns scratch)
 ;
-; Clobbers: A, X, Y, aes_state, aes_mc_a0..b3, zp_round
+; Clobbers: A, X, Y, aes_state, aes_mc_a0..b3, polyval_aes_round
 ; Cycles:   unmeasured
 ; IRQ-safe: no
 ; Reentrant: no
@@ -62,20 +62,20 @@
 aes_encrypt_block:
         ; initial round key addition
         lda #0
-        sta zp_round
+        sta polyval_aes_round
         jsr aes_add_round_key
 
         ; main rounds (1 to 13)
         lda #1
-        sta zp_round
+        sta polyval_aes_round
 @round_loop:
         jsr aes_sub_bytes
         jsr aes_shift_rows
         jsr aes_mix_columns
         jsr aes_add_round_key
 
-        inc zp_round
-        lda zp_round
+        inc polyval_aes_round
+        lda polyval_aes_round
         cmp #14
         bcc @round_loop
 
@@ -149,71 +149,71 @@ aes_shift_rows:
 ; =============================================================================
 aes_mix_columns:
         lda #0
-        sta zp_col
+        sta polyval_aes_col
 
 @col_loop:
         ; get column offset (col * 4)
-        lda zp_col
+        lda polyval_aes_col
         asl
         asl
         tax
 
         ; load column bytes
         lda aes_state,x
-        sta zp_tmp1             ; a0
+        sta polyval_aes_tmp1             ; a0
         lda aes_state+1,x
-        sta zp_tmp2             ; a1
+        sta polyval_aes_tmp2             ; a1
         lda aes_state+2,x
-        sta zp_tmp3             ; a2
+        sta polyval_aes_tmp3             ; a2
         lda aes_state+3,x
-        sta zp_tmp4             ; a3
+        sta polyval_aes_tmp4             ; a3
 
         ; b0 = 2*a0 ^ 3*a1 ^ a2 ^ a3
-        lda zp_tmp1
+        lda polyval_aes_tmp1
         jsr gf_mul2
         sta aes_state,x
-        lda zp_tmp2
+        lda polyval_aes_tmp2
         jsr gf_mul3
         eor aes_state,x
-        eor zp_tmp3
-        eor zp_tmp4
+        eor polyval_aes_tmp3
+        eor polyval_aes_tmp4
         sta aes_state,x
 
         ; b1 = a0 ^ 2*a1 ^ 3*a2 ^ a3
-        lda zp_tmp2
+        lda polyval_aes_tmp2
         jsr gf_mul2
         sta aes_state+1,x
-        lda zp_tmp3
+        lda polyval_aes_tmp3
         jsr gf_mul3
         eor aes_state+1,x
-        eor zp_tmp1
-        eor zp_tmp4
+        eor polyval_aes_tmp1
+        eor polyval_aes_tmp4
         sta aes_state+1,x
 
         ; b2 = a0 ^ a1 ^ 2*a2 ^ 3*a3
-        lda zp_tmp3
+        lda polyval_aes_tmp3
         jsr gf_mul2
         sta aes_state+2,x
-        lda zp_tmp4
+        lda polyval_aes_tmp4
         jsr gf_mul3
         eor aes_state+2,x
-        eor zp_tmp1
-        eor zp_tmp2
+        eor polyval_aes_tmp1
+        eor polyval_aes_tmp2
         sta aes_state+2,x
 
         ; b3 = 3*a0 ^ a1 ^ a2 ^ 2*a3
-        lda zp_tmp4
+        lda polyval_aes_tmp4
         jsr gf_mul2
         sta aes_state+3,x
-        lda zp_tmp1
+        lda polyval_aes_tmp1
         jsr gf_mul3
         eor aes_state+3,x
-        eor zp_tmp2
-        eor zp_tmp3
+        eor polyval_aes_tmp2
+        eor polyval_aes_tmp3
         sta aes_state+3,x
 
-        inc zp_col
-        lda zp_col
+        inc polyval_aes_col
+        lda polyval_aes_col
         cmp #4
         bne @col_loop
         rts
@@ -232,16 +232,16 @@ gf_mul2:
 ; gf_mul3 - multiply by 3 in gf(2^8)
 ; =============================================================================
 gf_mul3:
-        sta zp_temp
+        sta polyval_zp_temp
         jsr gf_mul2
-        eor zp_temp             ; 3*x = 2*x ^ x
+        eor polyval_zp_temp             ; 3*x = 2*x ^ x
         rts
 
 ; =============================================================================
 ; aes_add_round_key - xor state with round key
 ; =============================================================================
 aes_add_round_key:
-        lda zp_round
+        lda polyval_aes_round
         asl
         asl
         asl
@@ -275,7 +275,7 @@ aes_add_round_key:
 ;   memory       aes_expanded_key = 240 bytes of round keys
 ;                aes_current_key  = preserved
 ;
-; Clobbers: A, X, Y, aes_expanded_key, zp_count, zp_tmp1..zp_tmp4
+; Clobbers: A, X, Y, aes_expanded_key, polyval_zp_count, polyval_aes_tmp1..polyval_aes_tmp4
 ; Cycles:   unmeasured
 ; IRQ-safe: no
 ; Reentrant: no
@@ -292,65 +292,65 @@ aes_key_expansion:
 
         ; generate remaining round keys
         lda #8                  ; start at word 8 (byte 32)
-        sta zp_count            ; word counter
+        sta polyval_zp_count            ; word counter
 
 @expand_loop:
-        lda zp_count
+        lda polyval_zp_count
         asl
         asl                     ; * 4 = byte offset
         tax
 
         ; get w[i-1] (previous word)
         lda aes_expanded_key-4,x
-        sta zp_tmp1
+        sta polyval_aes_tmp1
         lda aes_expanded_key-3,x
-        sta zp_tmp2
+        sta polyval_aes_tmp2
         lda aes_expanded_key-2,x
-        sta zp_tmp3
+        sta polyval_aes_tmp3
         lda aes_expanded_key-1,x
-        sta zp_tmp4
+        sta polyval_aes_tmp4
 
         ; check if i mod 8 == 0
-        lda zp_count
+        lda polyval_zp_count
         and #$07
         bne @check_mod4
 
         ; rotword + subword + rcon
-        lda zp_tmp1
+        lda polyval_aes_tmp1
         pha
-        lda zp_tmp2
-        sta zp_tmp1
-        lda zp_tmp3
-        sta zp_tmp2
-        lda zp_tmp4
-        sta zp_tmp3
+        lda polyval_aes_tmp2
+        sta polyval_aes_tmp1
+        lda polyval_aes_tmp3
+        sta polyval_aes_tmp2
+        lda polyval_aes_tmp4
+        sta polyval_aes_tmp3
         pla
-        sta zp_tmp4
+        sta polyval_aes_tmp4
 
         ; subword
-        ldy zp_tmp1
+        ldy polyval_aes_tmp1
         lda aes_sbox,y
-        sta zp_tmp1
-        ldy zp_tmp2
+        sta polyval_aes_tmp1
+        ldy polyval_aes_tmp2
         lda aes_sbox,y
-        sta zp_tmp2
-        ldy zp_tmp3
+        sta polyval_aes_tmp2
+        ldy polyval_aes_tmp3
         lda aes_sbox,y
-        sta zp_tmp3
-        ldy zp_tmp4
+        sta polyval_aes_tmp3
+        ldy polyval_aes_tmp4
         lda aes_sbox,y
-        sta zp_tmp4
+        sta polyval_aes_tmp4
 
         ; xor with rcon
-        lda zp_count
+        lda polyval_zp_count
         lsr
         lsr
         lsr                     ; i / 8
         tay
         dey                     ; rcon index (0-based)
         lda aes_rcon,y
-        eor zp_tmp1
-        sta zp_tmp1
+        eor polyval_aes_tmp1
+        sta polyval_aes_tmp1
         jmp @do_xor
 
 @check_mod4:
@@ -358,45 +358,45 @@ aes_key_expansion:
         bne @do_xor
 
         ; just subword
-        ldy zp_tmp1
+        ldy polyval_aes_tmp1
         lda aes_sbox,y
-        sta zp_tmp1
-        ldy zp_tmp2
+        sta polyval_aes_tmp1
+        ldy polyval_aes_tmp2
         lda aes_sbox,y
-        sta zp_tmp2
-        ldy zp_tmp3
+        sta polyval_aes_tmp2
+        ldy polyval_aes_tmp3
         lda aes_sbox,y
-        sta zp_tmp3
-        ldy zp_tmp4
+        sta polyval_aes_tmp3
+        ldy polyval_aes_tmp4
         lda aes_sbox,y
-        sta zp_tmp4
+        sta polyval_aes_tmp4
 
 @do_xor:
         ; w[i] = w[i-8] xor temp
-        lda zp_count
+        lda polyval_zp_count
         asl
         asl
         tax
 
         lda aes_expanded_key-32,x   ; w[i-8]
-        eor zp_tmp1
+        eor polyval_aes_tmp1
         sta aes_expanded_key,x
 
         lda aes_expanded_key-31,x
-        eor zp_tmp2
+        eor polyval_aes_tmp2
         sta aes_expanded_key+1,x
 
         lda aes_expanded_key-30,x
-        eor zp_tmp3
+        eor polyval_aes_tmp3
         sta aes_expanded_key+2,x
 
         lda aes_expanded_key-29,x
-        eor zp_tmp4
+        eor polyval_aes_tmp4
         sta aes_expanded_key+3,x
 
         ; next word
-        inc zp_count
-        lda zp_count
+        inc polyval_zp_count
+        lda polyval_zp_count
         cmp #60                 ; 60 words = 240 bytes
         bcs @expand_done
         jmp @expand_loop

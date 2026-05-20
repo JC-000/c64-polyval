@@ -15,7 +15,7 @@
 
 .include "constants_lib.inc"
 
-; ZP symbols (polyval_acc, pv_mul_input, pv_mul_nibble, zp_ptr2) come in
+; ZP symbols (polyval_acc, pv_mul_input, pv_mul_nibble, polyval_zp_ptr2) come in
 ; as numeric equates from constants_lib.inc. ca65 emits 2-byte ZP
 ; addressing automatically for operands whose value is in $00..$FF *and
 ; whose value is known at the time of encoding*. Since the .include
@@ -1187,15 +1187,15 @@ polyval_precompute_table:
         asl
         clc
         adc #<polyval_htable
-        sta zp_ptr2
+        sta polyval_zp_ptr2
         lda #>polyval_htable
         adc #0
-        sta zp_ptr2+1
+        sta polyval_zp_ptr2+1
 
         ldy #0
 @store_odd:
         lda polyval_acc,y
-        sta (zp_ptr2),y
+        sta (polyval_zp_ptr2),y
         iny
         cpy #16
         bne @store_odd

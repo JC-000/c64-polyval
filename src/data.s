@@ -13,33 +13,14 @@
 ;     each go in their own POLYVAL_* segment in c64.cfg, which has
 ;     align = $100. The linker places each on a page boundary.
 ;
-; ZP symbols used by the library are equates (fixed addresses $10, $20, $30)
-; pulled from constants_lib.inc and re-exported via .exportzp so the test
-; harness (and sibling .s files) can resolve them as ZP.
+; ZP symbols used by the library are declared in zp_config.s (the canonical
+; c64-lib-contract §2 ZP inventory) and pulled in transitively via
+; constants_lib.inc with ZP_CONFIG_NO_EXPORTS=1. The `.exportzp` directives
+; live exclusively in zp_config.s (compiled as its own .o); this file no
+; longer re-exports them.
 ; =============================================================================
 
 .include "constants_lib.inc"
-
-; ---------------------------------------------------------------------------
-; Zero-page: equates from constants_lib.inc, exported as ZP.
-; These are absolute addresses (not .res reservations) to match the ACME
-; layout byte-for-byte. polyval_acc must land at $10-$1F, pv_mul_input at
-; $20-$2F, pv_mul_nibble at $30. Anything else is host policy and is not
-; re-exported here.
-; ---------------------------------------------------------------------------
-.exportzp polyval_acc
-.exportzp pv_mul_input
-.exportzp pv_mul_nibble
-.exportzp zp_ptr
-.exportzp zp_ptr2
-.exportzp zp_temp
-.exportzp zp_count
-.exportzp zp_round
-.exportzp zp_col
-.exportzp zp_tmp1
-.exportzp zp_tmp2
-.exportzp zp_tmp3
-.exportzp zp_tmp4
 
 ; ---------------------------------------------------------------------------
 ; POLYVAL state - small buffers in BSS.

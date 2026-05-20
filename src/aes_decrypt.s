@@ -7,7 +7,7 @@
 
 .include "constants_lib.inc"
 
-; Note: ZP symbols (zp_round, zp_col, zp_temp, zp_tmp1) are numeric
+; Note: ZP symbols (polyval_aes_round, polyval_aes_col, polyval_zp_temp, polyval_aes_tmp1) are numeric
 ; equates from constants_lib.inc — no .importzp needed.
 
 ; State + tables
@@ -53,7 +53,7 @@
 ;   memory       aes_state        = plaintext block (16 bytes)
 ;                aes_mc_a0..b3    = clobbered (InvMixColumns scratch)
 ;
-; Clobbers: A, X, Y, aes_state, aes_mc_a0..b3, zp_round
+; Clobbers: A, X, Y, aes_state, aes_mc_a0..b3, polyval_aes_round
 ; Cycles:   unmeasured
 ; IRQ-safe: no
 ; Reentrant: no
@@ -64,12 +64,12 @@
 aes_decrypt_block:
         ; round 14: initial add round key
         lda #14
-        sta zp_round
+        sta polyval_aes_round
         jsr aes_add_round_key
 
         ; rounds 13 down to 1
         lda #13
-        sta zp_round
+        sta polyval_aes_round
 
 @round_loop:
         jsr aes_inv_shift_rows
@@ -77,14 +77,14 @@ aes_decrypt_block:
         jsr aes_add_round_key
         jsr aes_inv_mix_columns
 
-        dec zp_round
-        lda zp_round
+        dec polyval_aes_round
+        lda polyval_aes_round
         bne @round_loop
 
         ; round 0: final round (no inv mix columns)
         jsr aes_inv_shift_rows
         jsr aes_inv_sub_bytes
-        ; zp_round is already 0
+        ; polyval_aes_round is already 0
         jsr aes_add_round_key
 
         rts
@@ -152,13 +152,13 @@ aes_inv_shift_rows:
 ; =============================================================================
 aes_inv_mix_columns:
         lda #0
-        sta zp_col
+        sta polyval_aes_col
 
 @col_loop:
-        lda zp_col
+        lda polyval_aes_col
         asl
         asl
-        sta zp_tmp1             ; save column offset
+        sta polyval_aes_tmp1             ; save column offset
         tax
 
         ; load column bytes to temp storage
@@ -240,7 +240,7 @@ aes_inv_mix_columns:
         sta aes_mc_b3
 
         ; store results back to state
-        ldx zp_tmp1             ; restore column offset
+        ldx polyval_aes_tmp1             ; restore column offset
         lda aes_mc_b0
         sta aes_state,x
         lda aes_mc_b1
@@ -250,8 +250,8 @@ aes_inv_mix_columns:
         lda aes_mc_b3
         sta aes_state+3,x
 
-        inc zp_col
-        lda zp_col
+        inc polyval_aes_col
+        lda polyval_aes_col
         cmp #4
         beq @col_done
         jmp @col_loop
@@ -262,41 +262,41 @@ aes_inv_mix_columns:
 ; gf_mul_09 - multiply by 9 in gf(2^8): 9 = 8 + 1
 ; =============================================================================
 gf_mul_09:
-        sta zp_temp
+        sta polyval_zp_temp
         jsr gf_mul2             ; 2
         jsr gf_mul2             ; 4
         jsr gf_mul2             ; 8
-        eor zp_temp             ; 8 + 1 = 9
+        eor polyval_zp_temp             ; 8 + 1 = 9
         rts
 
 ; =============================================================================
 ; gf_mul_0b - multiply by 11 in gf(2^8): 11 = 8 + 2 + 1
 ; =============================================================================
 gf_mul_0b:
-        sta zp_temp
+        sta polyval_zp_temp
         jsr gf_mul2             ; 2
         pha                     ; save 2
         jsr gf_mul2             ; 4
         jsr gf_mul2             ; 8
-        eor zp_temp             ; 8 + 1 = 9
-        sta zp_temp
+        eor polyval_zp_temp             ; 8 + 1 = 9
+        sta polyval_zp_temp
         pla                     ; get 2
-        eor zp_temp             ; 9 + 2 = 11
+        eor polyval_zp_temp             ; 9 + 2 = 11
         rts
 
 ; =============================================================================
 ; gf_mul_0d - multiply by 13 in gf(2^8): 13 = 8 + 4 + 1
 ; =============================================================================
 gf_mul_0d:
-        sta zp_temp
+        sta polyval_zp_temp
         jsr gf_mul2             ; 2
         jsr gf_mul2             ; 4
         pha                     ; save 4
         jsr gf_mul2             ; 8
-        eor zp_temp             ; 8 + 1 = 9
-        sta zp_temp
+        eor polyval_zp_temp             ; 8 + 1 = 9
+        sta polyval_zp_temp
         pla                     ; get 4
-        eor zp_temp             ; 9 + 4 = 13
+        eor polyval_zp_temp             ; 9 + 4 = 13
         rts
 
 ; =============================================================================
@@ -308,10 +308,10 @@ gf_mul_0e:
         jsr gf_mul2             ; 4
         pha                     ; save 4
         jsr gf_mul2             ; 8
-        sta zp_temp
+        sta polyval_zp_temp
         pla                     ; get 4
-        eor zp_temp             ; 8 + 4 = 12
-        sta zp_temp
+        eor polyval_zp_temp             ; 8 + 4 = 12
+        sta polyval_zp_temp
         pla                     ; get 2
-        eor zp_temp             ; 12 + 2 = 14
+        eor polyval_zp_temp             ; 12 + 2 = 14
         rts

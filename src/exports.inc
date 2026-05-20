@@ -25,8 +25,8 @@
 ; -----------------------------------------------------------------------------
 ; constants_lib.inc - Library-wide equates (pure .inc, no code, no .export)
 ; EXPORTS (as ca65 equates, picked up by `.include`):
-;   ZP equates: zp_ptr, zp_ptr2, zp_temp, zp_count, zp_round, zp_col,
-;               zp_tmp1, zp_tmp2, zp_tmp3, zp_tmp4,
+;   ZP equates: polyval_zp_ptr, polyval_zp_ptr2, polyval_zp_temp, polyval_zp_count, polyval_aes_round, polyval_aes_col,
+;               polyval_aes_tmp1, polyval_aes_tmp2, polyval_aes_tmp3, polyval_aes_tmp4,
 ;               polyval_acc, pv_mul_input, pv_mul_nibble
 ;   AES sizes:  aes_block_size, aes_key_size, aes_rounds, aes_expanded_key_size
 ;   Profile:    POLYVAL_PROFILE_SHORT (=1), POLYVAL_PROFILE_LONG (=2),
@@ -42,12 +42,18 @@
 ; -----------------------------------------------------------------------------
 
 ; -----------------------------------------------------------------------------
+; zp_config.s - canonical c64-lib-contract §2 ZP slot inventory
+; EXPORTS (via .exportzp, in this translation unit only):
+;   polyval_acc, pv_mul_input, pv_mul_nibble,
+;   polyval_zp_ptr, polyval_zp_ptr2, polyval_zp_temp, polyval_zp_count,
+;   polyval_aes_round, polyval_aes_col,
+;   polyval_aes_tmp1, polyval_aes_tmp2, polyval_aes_tmp3, polyval_aes_tmp4
+; IMPORTS: (none - all .ifndef-guarded equates with default addresses)
+; -----------------------------------------------------------------------------
+
+; -----------------------------------------------------------------------------
 ; data.s - Library mutable state (BSS) + page-aligned Shoup tables
 ; EXPORTS:
-;   ZP (via .exportzp):
-;     polyval_acc, pv_mul_input, pv_mul_nibble,
-;     zp_ptr, zp_ptr2, zp_temp, zp_count,
-;     zp_round, zp_col, zp_tmp1, zp_tmp2, zp_tmp3, zp_tmp4
 ;   POLYVAL buffers:
 ;     polyval_h, polyval_temp, polyval_htable
 ;   POLYVAL LONG-only Shoup 8-bit window tables:
@@ -83,7 +89,7 @@
 ; IMPORTS:
 ;   data: aes_state, aes_expanded_key, aes_current_key
 ;   tables: aes_sbox, aes_rcon
-;   (ZP scratch: zp_ptr, zp_round, zp_col, zp_tmp1..zp_tmp4 from
+;   (ZP scratch: polyval_zp_ptr, polyval_aes_round, polyval_aes_col, polyval_aes_tmp1..polyval_aes_tmp4 from
 ;    constants_lib.inc equates -- no .importzp needed)
 ; -----------------------------------------------------------------------------
 
@@ -98,7 +104,7 @@
 ;         aes_mc_a0..aes_mc_a3, aes_mc_b0..aes_mc_b3
 ;   tables: aes_inv_sbox
 ;   aes_encrypt: aes_add_round_key, gf_mul2
-;   (ZP scratch: zp_ptr, zp_round, zp_col, zp_tmp1..zp_tmp4 from
+;   (ZP scratch: polyval_zp_ptr, polyval_aes_round, polyval_aes_col, polyval_aes_tmp1..polyval_aes_tmp4 from
 ;    constants_lib.inc equates)
 ; -----------------------------------------------------------------------------
 
@@ -114,8 +120,8 @@
 ;   data: polyval_h, polyval_temp, polyval_htable,
 ;         polyval_htable8, polyval_htable8_s0..polyval_htable8_s15,
 ;         polyval_reduce8, polyval_reduce8_s0..polyval_reduce8_s15
-;   (ZP: polyval_acc, pv_mul_input, pv_mul_nibble, zp_ptr, zp_temp,
-;    zp_count from constants_lib.inc equates -- no .importzp needed)
+;   (ZP: polyval_acc, pv_mul_input, pv_mul_nibble, polyval_zp_ptr, polyval_zp_temp,
+;    polyval_zp_count from constants_lib.inc equates -- no .importzp needed)
 ; -----------------------------------------------------------------------------
 
 ; -----------------------------------------------------------------------------
@@ -130,8 +136,8 @@
 ;   polyval_shift_left_4, polyval_xor_table_entry, polyval_finalize
 ; IMPORTS:
 ;   data: polyval_h, polyval_temp, polyval_htable
-;   (ZP: polyval_acc, pv_mul_input, pv_mul_nibble, zp_ptr, zp_temp,
-;    zp_count from constants_lib.inc equates)
+;   (ZP: polyval_acc, pv_mul_input, pv_mul_nibble, polyval_zp_ptr, polyval_zp_temp,
+;    polyval_zp_count from constants_lib.inc equates)
 ; -----------------------------------------------------------------------------
 
 ; -----------------------------------------------------------------------------
@@ -156,8 +162,8 @@
 ;         gcmsiv_block_idx, gcmsiv_ct_idx, gcmsiv_ks_idx,
 ;         gcmsiv_tag_valid, gcmsiv_verify_tag,
 ;         gcmsiv_saved_key, gcmsiv_exp_enc_key, gcmsiv_saved_exp
-;   (ZP: polyval_acc, pv_mul_input, zp_ptr, zp_temp, zp_count,
-;    zp_tmp1..zp_tmp4 from constants_lib.inc equates)
+;   (ZP: polyval_acc, pv_mul_input, polyval_zp_ptr, polyval_zp_temp, polyval_zp_count,
+;    polyval_aes_tmp1..polyval_aes_tmp4 from constants_lib.inc equates)
 ; -----------------------------------------------------------------------------
 
 ; -----------------------------------------------------------------------------
