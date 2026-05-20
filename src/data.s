@@ -13,33 +13,14 @@
 ;     each go in their own POLYVAL_* segment in c64.cfg, which has
 ;     align = $100. The linker places each on a page boundary.
 ;
-; ZP symbols used by the library are equates (fixed addresses $10, $20, $30)
-; pulled from constants_lib.inc and re-exported via .exportzp so the test
-; harness (and sibling .s files) can resolve them as ZP.
+; ZP symbols used by the library are declared in zp_config.s (the canonical
+; c64-lib-contract §2 ZP inventory) and pulled in transitively via
+; constants_lib.inc with ZP_CONFIG_NO_EXPORTS=1. The `.exportzp` directives
+; live exclusively in zp_config.s (compiled as its own .o); this file no
+; longer re-exports them.
 ; =============================================================================
 
 .include "constants_lib.inc"
-
-; ---------------------------------------------------------------------------
-; Zero-page: equates from constants_lib.inc, exported as ZP.
-; These are absolute addresses (not .res reservations) to match the ACME
-; layout byte-for-byte. polyval_acc must land at $10-$1F, pv_mul_input at
-; $20-$2F, pv_mul_nibble at $30. Anything else is host policy and is not
-; re-exported here.
-; ---------------------------------------------------------------------------
-.exportzp polyval_acc
-.exportzp pv_mul_input
-.exportzp pv_mul_nibble
-.exportzp zp_ptr
-.exportzp zp_ptr2
-.exportzp zp_temp
-.exportzp zp_count
-.exportzp zp_round
-.exportzp zp_col
-.exportzp zp_tmp1
-.exportzp zp_tmp2
-.exportzp zp_tmp3
-.exportzp zp_tmp4
 
 ; ---------------------------------------------------------------------------
 ; POLYVAL state - small buffers in BSS.
@@ -48,7 +29,7 @@
 .export polyval_h
 .export polyval_temp
 
-.segment "BSS"
+.segment "LIB_POLYVAL_BSS"
 polyval_h:      .res 16         ; 128-bit hash key H
 polyval_temp:   .res 16         ; scratch space for current block
 
@@ -58,7 +39,7 @@ polyval_temp:   .res 16         ; scratch space for current block
 ; ---------------------------------------------------------------------------
 .export polyval_htable
 
-.segment "POLYVAL_HTABLE"
+.segment "LIB_POLYVAL_HTABLE"
 polyval_htable: .res 256        ; 16 entries * 16 bytes
 
 ; ---------------------------------------------------------------------------
@@ -99,7 +80,7 @@ polyval_htable: .res 256        ; 16 entries * 16 bytes
 .export polyval_htable8_s14
 .export polyval_htable8_s15
 
-.segment "POLYVAL_HTABLE8"
+.segment "LIB_POLYVAL_LONG_HTABLE8"
 polyval_htable8:
 polyval_htable8_s0:  .res 256
 polyval_htable8_s1:  .res 256
@@ -136,7 +117,7 @@ polyval_htable8_s15: .res 256
 .export polyval_reduce8_s14
 .export polyval_reduce8_s15
 
-.segment "POLYVAL_REDUCE8"
+.segment "LIB_POLYVAL_LONG_REDUCE8"
 polyval_reduce8:
 polyval_reduce8_s0:  .res 256
 polyval_reduce8_s1:  .res 256
@@ -166,7 +147,7 @@ polyval_reduce8_s15: .res 256
 .export aes_mc_a0, aes_mc_a1, aes_mc_a2, aes_mc_a3
 .export aes_mc_b0, aes_mc_b1, aes_mc_b2, aes_mc_b3
 
-.segment "BSS"
+.segment "LIB_POLYVAL_AES_BSS"
 aes_current_key:   .res 32
 aes_state:         .res 16
 aes_expanded_key:  .res 240      ; 15 round keys * 16 bytes
@@ -204,6 +185,7 @@ aes_mc_b3:  .res 1
 .export gcmsiv_exp_enc_key
 .export gcmsiv_saved_exp
 
+.segment "LIB_POLYVAL_GCMSIV_BSS"
 gcmsiv_nonce:       .res 12     ; 96-bit nonce
 gcmsiv_pt_buf:      .res 64     ; plaintext buffer
 gcmsiv_pt_len:      .res 1      ; plaintext length

@@ -83,7 +83,7 @@
 ; link-time references. JSR emits an absolute reference, and LDA abs / LDA
 ; zp emits address references to each public buffer / ZP symbol.
 ; ---------------------------------------------------------------------------
-.segment "CODE"
+.segment "LIB_POLYVAL_VERIFY_CODE"
 
 lib_main_entry:
         ; POLYVAL routines

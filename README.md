@@ -66,6 +66,34 @@ python3 tools/benchmark_polyval.py        # CIA-timer cycle benchmarks
 python3 tools/polyval_reference.py        # Python reference self-test (no VICE)
 ```
 
+## Library contract
+
+c64-polyval implements [c64-lib-contract](https://github.com/JC-000/c64-lib-contract)
+SPEC v0.1.0 in full — see the
+[SPEC](https://github.com/JC-000/c64-lib-contract/blob/main/SPEC.md)
+and the
+[adopters table](https://github.com/JC-000/c64-lib-contract/blob/main/adopters.md).
+All six sections that apply to a CPU-RAM-only crypto library are
+covered:
+
+- §1 — `LIB_VERSION_MAJOR / _MINOR / _PATCH` and `LIB_ABI_VERSION`
+  exported from `src/lib_version.s`.
+- §2 — every claimed zero-page slot declared in `src/zp_config.s`
+  under the `polyval_*` prefix.
+- §3 — N/A; c64-polyval makes no REU claims
+  (`LIB_POLYVAL_REU_BANKS_USED = 0`).
+- §4 — library `.segment` directives use the `LIB_POLYVAL_*`
+  prefix; consumer ld65 configs can map them anywhere.
+- §5 — aggregate manifest equates (`LIB_POLYVAL_ZP_USAGE_BYTES`,
+  `LIB_POLYVAL_RESIDENT_BYTES`, `LIB_POLYVAL_COLD_BYTES`,
+  `LIB_POLYVAL_REU_BANKS_USED`) in `src/lib_manifest.s`.
+- §6 — `make lib`, `make lib-polyval-long`, `make lib-polyval-short`,
+  and `make lib-polyval-gcmsiv` produce ar65 archive bundles under
+  `build/lib/`.
+
+See `API.md` §9 for the consumer-facing symbol surface and a worked
+import example.
+
 ## API
 
 See [`API.md`](API.md) for the complete integration reference:

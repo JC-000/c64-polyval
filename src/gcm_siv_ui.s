@@ -143,11 +143,11 @@ do_gcm_siv_encrypt:
         jsr     print_string
 
         lda     #<gcmsiv_nonce
-        sta     zp_ptr
+        sta     polyval_zp_ptr
         lda     #>gcmsiv_nonce
-        sta     zp_ptr+1
+        sta     polyval_zp_ptr+1
         lda     #12
-        sta     zp_count
+        sta     polyval_zp_count
         lda     #12
         jsr     display_hex_block
 
@@ -160,11 +160,11 @@ do_gcm_siv_encrypt:
         jsr     print_string
 
         lda     #<gcmsiv_ct_buf
-        sta     zp_ptr
+        sta     polyval_zp_ptr
         lda     #>gcmsiv_ct_buf
-        sta     zp_ptr+1
+        sta     polyval_zp_ptr+1
         lda     gcmsiv_pt_len
-        sta     zp_count
+        sta     polyval_zp_count
         lda     #8
         jsr     display_hex_block
 
@@ -174,11 +174,11 @@ do_gcm_siv_encrypt:
         jsr     print_string
 
         lda     #<gcmsiv_tag
-        sta     zp_ptr
+        sta     polyval_zp_ptr
         lda     #>gcmsiv_tag
-        sta     zp_ptr+1
+        sta     polyval_zp_ptr+1
         lda     #16
-        sta     zp_count
+        sta     polyval_zp_count
         lda     #16
         jsr     display_hex_block
 
@@ -291,11 +291,11 @@ do_gcm_siv_decrypt:
         jsr     print_string
 
         lda     #<gcmsiv_dec_buf
-        sta     zp_ptr
+        sta     polyval_zp_ptr
         lda     #>gcmsiv_dec_buf
-        sta     zp_ptr+1
+        sta     polyval_zp_ptr+1
         lda     gcmsiv_pt_len
-        sta     zp_count
+        sta     polyval_zp_count
         lda     #8
         jsr     display_hex_block
 

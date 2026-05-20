@@ -6,59 +6,22 @@
 ; This is the ca65 equivalent of src/lib/constants_lib.asm. Ported mechanically:
 ; `!ifndef X { X = $val }` becomes `.ifndef X / X = $val / .endif`.
 ;
-; Zero-page symbols declared here are *values only* (addresses). The actual
-; `.res` reservations + `.exportzp` live in data.s, which must pick these
-; equates up by `.include`ing this file before declaring the ZP segment.
+; Zero-page slot equates are now declared in src/zp_config.s per
+; c64-lib-contract SPEC.md §2 (zero-page contract). We pull them in via
+; `.include "zp_config.s"` below, suppressing the dedicated file's
+; `.exportzp` block (ZP_CONFIG_NO_EXPORTS=1) so the exports land in exactly
+; one translation unit (zp_config.o), not in every consumer of this header.
 ; =============================================================================
 
 .ifndef CONSTANTS_LIB_INC_
 CONSTANTS_LIB_INC_ = 1
 
 ; ---------------------------------------------------------------------------
-; Zero-page variables used by library code.
-; Each ZP equate is wrapped in .ifndef so a host can pre-define its own ZP
-; layout before .include'ing this file. Defaults preserve the standalone
-; demo-app layout.
+; Zero-page variables: pulled from zp_config.s. The .exportzp directives
+; only fire when zp_config.s is assembled as its own translation unit.
 ; ---------------------------------------------------------------------------
-.ifndef zp_ptr
-    zp_ptr       = $fb              ; 2-byte pointer
-.endif
-.ifndef zp_temp
-    zp_temp      = $fd              ; temp storage
-.endif
-.ifndef zp_count
-    zp_count     = $fe              ; loop counter
-.endif
-.ifndef zp_ptr2
-    zp_ptr2      = $02              ; second pointer (2 bytes)
-.endif
-.ifndef zp_round
-    zp_round     = $04              ; aes round counter
-.endif
-.ifndef zp_col
-    zp_col       = $05              ; aes column counter
-.endif
-.ifndef zp_tmp1
-    zp_tmp1      = $06              ; aes temp
-.endif
-.ifndef zp_tmp2
-    zp_tmp2      = $07              ; aes temp
-.endif
-.ifndef zp_tmp3
-    zp_tmp3      = $08              ; aes temp
-.endif
-.ifndef zp_tmp4
-    zp_tmp4      = $09              ; aes temp
-.endif
-.ifndef polyval_acc
-    polyval_acc  = $10              ; 16-byte POLYVAL accumulator ($10-$1F)
-.endif
-.ifndef pv_mul_input
-    pv_mul_input = $20              ; 16-byte multiply input scratch ($20-$2F)
-.endif
-.ifndef pv_mul_nibble
-    pv_mul_nibble = $30             ; 1-byte nibble param for polyval_xor_table_entry
-.endif
+ZP_CONFIG_NO_EXPORTS = 1
+.include "zp_config.s"
 
 ; ---------------------------------------------------------------------------
 ; AES constants

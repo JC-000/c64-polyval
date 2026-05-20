@@ -64,7 +64,7 @@
 .export gcmsiv_gen_keystream
 .export gcmsiv_derive_ctr
 
-.segment "CODE"
+.segment "LIB_POLYVAL_GCMSIV_CODE"
 
 ; =============================================================================
 ; gcmsiv_encrypt - full AES-256-GCM-SIV encryption (RFC 8452)

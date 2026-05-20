@@ -20,24 +20,24 @@
 ; display_hex_block - display bytes in hex format
 ; =============================================================================
 display_hex_block:
-        sta     zp_temp
+        sta     polyval_zp_temp
 
 @row_loop:
-        ldx     zp_temp
+        ldx     polyval_zp_temp
 @byte_loop:
         ldy     #0
-        lda     (zp_ptr),y
+        lda     (polyval_zp_ptr),y
         jsr     print_hex_byte
 
         lda     #$20
         jsr     chrout
 
-        inc     zp_ptr
+        inc     polyval_zp_ptr
         bne     @no_carry
-        inc     zp_ptr+1
+        inc     polyval_zp_ptr+1
 @no_carry:
 
-        dec     zp_count
+        dec     polyval_zp_count
         beq     @done
 
         dex
@@ -89,16 +89,16 @@ print_hex_digit:
 ; print_string - print null-terminated string
 ; =============================================================================
 print_string:
-        sta     zp_ptr
-        sty     zp_ptr+1
+        sta     polyval_zp_ptr
+        sty     polyval_zp_ptr+1
         ldy     #0
 @loop:
-        lda     (zp_ptr),y
+        lda     (polyval_zp_ptr),y
         beq     @done
         jsr     chrout
         iny
         bne     @loop
-        inc     zp_ptr+1
+        inc     polyval_zp_ptr+1
         jmp     @loop
 @done:
         rts
