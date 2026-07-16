@@ -15,11 +15,14 @@ Companion docs (read alongside this file):
 - `API.md` — library API reference; §3 (profile selection), §4 (ZP layout),
   §7–§8 (consumer integration), §9 (c64-lib-contract surface) are load-bearing.
 - `CHANGELOG.md` — release history.
-- `docs/RELEASE_NOTES_v0.3.0.md` — current release attestation (size + SHA256).
+- `docs/RELEASE_NOTES_v0.4.0.md` — current release attestation (size + SHA256).
+- `docs/precalc-tables.md` — c64-lib-contract §8.0 precalc-table enumeration.
 
-## c64-lib-contract adoption (v0.3.0)
-This library implements the [c64-lib-contract](https://github.com/JC-000/c64-lib-contract)
-SPEC v0.1.0, all six sections:
+## c64-lib-contract adoption (v0.4.0)
+This library implements the [c64-lib-contract](https://github.com/JC-000/c64-lib-contract),
+currently at SPEC v0.4.0. §1–§6 (v0.1.0 baseline) shipped in v0.3.0; §8.0
+(precalc-table catch-loop, applies to every adopter regardless of §8.1–§8.3
+applicability) shipped in v0.4.0:
 - §1 `LIB_VERSION_*` + `LIB_ABI_VERSION` — `src/lib_version.s`
 - §2 `.exportzp` ZP slot inventory — `src/zp_config.s`
 - §3 REU — n/a (c64-polyval makes no REU claims)
@@ -29,11 +32,23 @@ SPEC v0.1.0, all six sections:
 - §5 aggregate manifest equates (`LIB_POLYVAL_ZP_USAGE_BYTES`, `_REU_BANKS_USED`,
   `_RESIDENT_BYTES`, `_COLD_BYTES`) — `src/lib_manifest.s`, profile-conditional
 - §6 ar65 archive build targets — `make lib` / `lib-polyval-{long,short,gcmsiv}`
+- §8 shared primitives (§8.1–§8.3: `sqtab` / `reu_mul` / `ct_mul_8x8`) — n/a;
+  GF(2^128) carry-less multiplication has no shared shape with the 8×8
+  quarter-square-multiply libraries (`c64-nist-curves`, `c64-x25519`,
+  `c64-ChaCha20-Poly1305`) that converged on that primitive
+- §8.0 precalc-table enumeration (mandatory regardless of §8.1–§8.3) —
+  `src/precalc_table.inc` (canonical macro) + `LIB_PRECALC_TABLE` invocations
+  in `src/lib_manifest.s`; rationale in `docs/precalc-tables.md`
 
 ZP slots are lowercase with `polyval_` / `pv_` library prefix
 (`polyval_acc`, `pv_mul_input`, `polyval_zp_ptr`, `polyval_aes_round`, ...).
 Pre-v0.3.0 shared `zp_*` names were renamed; consumers vendoring the
 library MUST update their `.importzp` lists.
+
+**When bumping `VERSION`, also check `src/lib_version.s`.** The v0.3.0 →
+v0.4.0 release fixed a bug where `LIB_VERSION_MINOR`/`_PATCH` had drifted
+from the `VERSION` file and stayed stale for an entire release cycle — the
+release commit doesn't update `src/lib_version.s` automatically.
 
 ## Build
 ```
@@ -45,7 +60,7 @@ make lib-polyval-short                # build/lib/polyval-short.a (SHORT only)
 make lib-polyval-gcmsiv               # build/lib/polyval-gcmsiv.a (full AEAD bundle)
 make lib-verify                       # library-only verification PRG at $4000 (pre-v0.3.0 `make lib`)
 make consumer-check                   # link test/consumer_stub.s against the library
-make dist VERSION=v0.3.0              # reproducible source-tarball release
+make dist VERSION=v0.4.0              # reproducible source-tarball release
 ```
 Assembler: ca65/ld65/ar65 (cc65 toolchain). Single canonical toolchain as of
 v0.2.0 — ACME support was retired. `src/` is flat (no `lib/` subdir); ld65
@@ -57,8 +72,11 @@ so always `make clean` between profile switches; the lib-polyval-{long,short}
 archive targets do this automatically via recursive make.
 
 `make dist` produces `c64-polyval-vX.Y.Z.tar.gz` at repo root. The tarball
-ships only `src/`, root docs, and `docs/RELEASE_NOTES_*`; it intentionally
-omits `tools/`, `test/`, `build/`, and `ca65/`.
+ships only `src/`, root docs, `docs/RELEASE_NOTES_*`, and
+`docs/precalc-tables.md`; it intentionally omits `tools/`, `test/`, `build/`,
+and `ca65/`. (`docs/precalc-tables.md` is staged by an explicit `cp` in
+`tools/build_release.sh`, not a glob — a new `docs/*.md` file doesn't ship
+automatically.)
 
 ## Profile choice
 LONG: ~3.9k cy multiply, ~255k cy precompute, larger BSS. Best for
@@ -105,12 +123,13 @@ chasing bugs that don't exist in their code or in VICE.
 
 This rule applies to all Claude sessions in this multi-project workspace.
 
-## Layout (v0.3.0)
+## Layout (v0.4.0)
 ```
 src/
   lib_version.s          # §1: LIB_VERSION_*/LIB_ABI_VERSION
   zp_config.s            # §2: .exportzp polyval_* / pv_* slots
-  lib_manifest.s         # §5: LIB_POLYVAL_*_BYTES + REU_BANKS_USED
+  lib_manifest.s         # §5: LIB_POLYVAL_*_BYTES + REU_BANKS_USED; §8.0 LIB_PRECALC_TABLE invocations
+  precalc_table.inc      # §8.0: canonical LIB_PRECALC_TABLE macro (copied verbatim)
   constants_lib.inc      # AES sizes, profile selectors, .include "zp_config.s"
   polyval_long.s / polyval_short.s
   aes_encrypt.s / aes_decrypt.s / tables.s
@@ -121,7 +140,7 @@ src/
   exports.inc            # human-readable cross-module symbol map (NOT an .include)
 test/                    # consumer_stub.s (used by `make consumer-check`)
 tools/                   # test runner, harness, build_release.sh, vectors/
-docs/                    # RELEASE_NOTES_v*.md
+docs/                    # RELEASE_NOTES_v*.md, precalc-tables.md
 ca65/release/v0.1.0/     # frozen historical artifact — DO NOT MODIFY
 ```
 
@@ -132,8 +151,10 @@ as historical reference and must not be edited. The active ABI is now
 `lib_manifest.s`).
 
 ## Release flow
-1. Bump `VERSION` and `CHANGELOG.md`.
-2. Write `docs/RELEASE_NOTES_vX.Y.Z.md` (use the v0.2.0 file as a template).
+1. Bump `VERSION`, `CHANGELOG.md`, **and `LIB_VERSION_MINOR`/`_PATCH` in
+   `src/lib_version.s`** (the v0.3.0 release forgot the last one and it went
+   unnoticed for a full release cycle — see `API.md` §9.1).
+2. Write `docs/RELEASE_NOTES_vX.Y.Z.md` (use the v0.3.0 file as a template).
 3. `make clean && make dist VERSION=vX.Y.Z` — produces the tarball + stamps
    size/SHA256 into the release notes (two-pass).
 4. Verify reproducibility: re-run `make dist`, SHA256 must be identical.

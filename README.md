@@ -34,10 +34,11 @@ high-throughput LONG build for session-stable H (TLS 1.3, WireGuard).
 make                              # build build/polyval.prg (LONG profile, default)
 make POLYVAL_PROFILE=short        # SHORT profile (low-memory, per-message H)
 make POLYVAL_PROFILE=long         # LONG profile (high-throughput, stable H)
-make lib                          # library-only verification link
+make lib                          # build/lib/polyval.a (full ar65 archive)
+make lib-verify                   # library-only verification link (pre-v0.3.0 `make lib`)
 make consumer-check               # assemble + link test/consumer_stub.s
 make run                          # build then launch in VICE
-make dist VERSION=v0.2.0          # reproducible source tarball
+make dist VERSION=v0.4.0          # reproducible source tarball
 make clean                        # rm -rf build/
 ```
 
@@ -69,12 +70,12 @@ python3 tools/polyval_reference.py        # Python reference self-test (no VICE)
 ## Library contract
 
 c64-polyval implements [c64-lib-contract](https://github.com/JC-000/c64-lib-contract)
-SPEC v0.1.0 in full — see the
+(currently at SPEC v0.4.0) — see the
 [SPEC](https://github.com/JC-000/c64-lib-contract/blob/main/SPEC.md)
 and the
 [adopters table](https://github.com/JC-000/c64-lib-contract/blob/main/adopters.md).
-All six sections that apply to a CPU-RAM-only crypto library are
-covered:
+All sections that apply to a CPU-RAM-only crypto library with no
+shared 8×8 quarter-square-multiply surface are covered:
 
 - §1 — `LIB_VERSION_MAJOR / _MINOR / _PATCH` and `LIB_ABI_VERSION`
   exported from `src/lib_version.s`.
@@ -90,6 +91,13 @@ covered:
 - §6 — `make lib`, `make lib-polyval-long`, `make lib-polyval-short`,
   and `make lib-polyval-gcmsiv` produce ar65 archive bundles under
   `build/lib/`.
+- §8 (shared primitives, §8.1–§8.3) — N/A; GF(2^128) carry-less
+  multiplication shares no shape with the 8×8 quarter-square-multiply
+  primitive the elliptic-curve / ChaCha20 libraries converged on.
+- §8.0 — precalculated-table enumeration (required of every adopter
+  regardless of §8.1–§8.3 applicability): `src/precalc_table.inc` +
+  `LIB_PRECALC_TABLE` invocations in `src/lib_manifest.s`, documented
+  in [`docs/precalc-tables.md`](docs/precalc-tables.md).
 
 See `API.md` §9 for the consumer-facing symbol surface and a worked
 import example.
