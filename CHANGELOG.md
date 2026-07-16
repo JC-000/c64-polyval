@@ -9,6 +9,44 @@ Releases: https://github.com/JC-000/c64-polyval/releases — tagged releases
 track `MAJOR.MINOR.PATCH` and are the supported consumption points for
 downstream projects (see `API.md` §8 for the integration contract).
 
+## v0.4.0 — 2026-07-16
+
+Adopts [c64-lib-contract](https://github.com/JC-000/c64-lib-contract)
+SPEC §8.0 (the "catch loop" precalculated-table enumeration, added to
+the contract in v0.3.1 and still applicable at the contract's current
+v0.4.0). §8.1–§8.3 (shared 8×8 quarter-square-multiply primitives)
+remain N/A for c64-polyval — GF(2^128) carry-less multiplication has
+no equivalent shared shape with the elliptic-curve / ChaCha20
+libraries — so no `LIB_POLYVAL_SHARED_PRIMITIVES` equate is emitted.
+This is a v0.x **MINOR** bump: new exported symbols, no removals.
+
+### Added
+
+- `src/precalc_table.inc` — canonical `LIB_PRECALC_TABLE` macro,
+  copied verbatim from the contract repo per SPEC §8.0.
+- `src/lib_manifest.s` now `.include`s it and registers five tables
+  that clear the §8.0 floor (≥ 256 B AND hot-loop-read /
+  page-aligned): `polyval_htable` (256 B, both profiles),
+  `polyval_htable8` / `polyval_reduce8` (4096 B each, LONG profile
+  only), `aes_sbox` / `aes_inv_sbox` (256 B each, both profiles).
+  All classified `PRECALC_SHARED_NO` (algorithm-specific).
+- `docs/precalc-tables.md` — the required human-readable enumeration:
+  name, size, region, source file, classification, and rationale per
+  table, plus the below-floor exempt list.
+- `tools/build_release.sh` now stages `docs/precalc-tables.md` into
+  the release tarball.
+
+### Fixed
+
+- `src/lib_version.s` exported `LIB_VERSION_MINOR = 2` /
+  `LIB_VERSION_PATCH = 0` (i.e. "v0.2.0") ever since the v0.3.0
+  release — the release commit (`0e7dd34`) bumped the `VERSION` file
+  and `API.md` §9.1's documented value to 0.3.0 but never updated
+  `src/lib_version.s` itself, so a consumer `.assert`ing
+  `LIB_VERSION_MINOR >= 3` per `API.md` §9.6's own worked example
+  would have failed to link against the actual v0.3.0 release. Now
+  correctly exports 0.4.0.
+
 ## v0.3.0 — 2026-05-20
 
 Adopts the [c64-lib-contract](https://github.com/JC-000/c64-lib-contract)

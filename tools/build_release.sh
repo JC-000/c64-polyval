@@ -16,10 +16,11 @@
 # header (`gzip -n`). The same source tree therefore produces a
 # byte-identical tarball across machines.
 #
-# File list: the canonical v0.2.0 vendoring set --
+# File list: the canonical v0.4.0 vendoring set --
 #   * top-level docs: README.md, API.md, CHANGELOG.md, LICENSE, VERSION
 #   * docs/RELEASE_NOTES_<tag>.md (with the on-disk copy stamped, see
 #     "Two-pass attestation" below)
+#   * docs/precalc-tables.md -- c64-lib-contract SPEC §8.0 enumeration
 #   * src/ -- every *.s, every *.inc, c64.cfg, lib_only.cfg, and
 #     include/ subdir (currently include/zp.inc)
 # `src/main.s`, `src/boot.s`, `src/main_loop.s`, etc. ARE included --
@@ -135,6 +136,9 @@ cp README.md API.md CHANGELOG.md LICENSE VERSION "$STAGE_ROOT/"
 
 # --- Release notes (placeholder form; on-disk stamped after build) -------
 cp "$NOTES_REL" "$STAGE_ROOT/$NOTES_REL"
+
+# --- Precalc-table enumeration (c64-lib-contract SPEC §8.0) --------------
+cp docs/precalc-tables.md "$STAGE_ROOT/docs/precalc-tables.md"
 
 # --- src/ : *.s, *.inc, linker configs, include/ ------------------------
 for f in src/*.s src/*.inc src/c64.cfg src/lib_only.cfg; do

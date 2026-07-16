@@ -59,6 +59,11 @@ LIB_MANIFEST_S_INCLUDED = 1
 ; values below.
 .include "constants_lib.inc"
 
+; c64-lib-contract SPEC §8.0 catch-loop: canonical LIB_PRECALC_TABLE
+; macro, copied verbatim from the contract repo. See the registrations
+; below and docs/precalc-tables.md for the full enumeration.
+.include "precalc_table.inc"
+
 
 ; -----------------------------------------------------------------------------
 ; Zero-page usage
@@ -191,6 +196,35 @@ LIB_MANIFEST_S_INCLUDED = 1
     LIB_POLYVAL_COLD_BYTES = 3000
   .endif
 .endif
+
+
+; -----------------------------------------------------------------------------
+; §8.0 catch-loop: precalculated-table enumeration
+; -----------------------------------------------------------------------------
+; c64-lib-contract SPEC §8.0 requires every adopter to enumerate any
+; precalculated table meeting the floor (>= 256 B AND one of:
+; REU-resident, hot-loop-read, page-aligned for fetch alignment) via
+; the LIB_PRECALC_TABLE macro, in addition to the docs/precalc-tables.md
+; human-readable row. c64-polyval consumes none of the §8.1-§8.3 shared
+; primitives (GF(2^128) carry-less multiply has no 8x8 quarter-square
+; table), so LIB_POLYVAL_SHARED_PRIMITIVES is not emitted -- but the
+; enumeration duty applies regardless. See docs/precalc-tables.md for
+; the classification rationale behind each PRECALC_SHARED_NO below.
+;
+; polyval_htable is built by both profiles; polyval_htable8 and
+; polyval_reduce8 exist only under the LONG profile (SHORT computes the
+; 4-bit Shoup window on the fly instead of precomputing all 16 nibble
+; positions x 16 possible values).
+; -----------------------------------------------------------------------------
+LIB_PRECALC_TABLE "polyval_htable", 256, PRECALC_REGION_RAM, PRECALC_SHARED_NO
+
+.if POLYVAL_PROFILE = POLYVAL_PROFILE_LONG
+LIB_PRECALC_TABLE "polyval_htable8",  4096, PRECALC_REGION_RAM, PRECALC_SHARED_NO
+LIB_PRECALC_TABLE "polyval_reduce8",  4096, PRECALC_REGION_RAM, PRECALC_SHARED_NO
+.endif
+
+LIB_PRECALC_TABLE "aes_sbox",     256, PRECALC_REGION_RODATA, PRECALC_SHARED_NO
+LIB_PRECALC_TABLE "aes_inv_sbox", 256, PRECALC_REGION_RODATA, PRECALC_SHARED_NO
 
 
 ; --- Exports ---

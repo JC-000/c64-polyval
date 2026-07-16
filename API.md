@@ -521,16 +521,26 @@ use v0.2.0's source-tarball + `src/exports.inc` integration path
 instead. The v0.1.0 tree is kept only for reproducibility of the
 prior release.
 
-## 9. Library contract (c64-lib-contract v0.1.0)
+## 9. Library contract (c64-lib-contract v0.4.0)
 
 As of v0.3.0, c64-polyval implements
 [c64-lib-contract](https://github.com/JC-000/c64-lib-contract)
-SPEC v0.1.0 in full. The contract pins a small set of cross-library
-symbols every adopter library exports so a downstream consumer
-(c64-wireguard, c64-https, …) can size-check, version-gate, and
-collision-check its dependencies at assemble time. Six SPEC sections
-apply to c64-polyval; §3 (REU bank claims) is N/A because the
-library makes no 17xx REU claims.
+SPEC v0.1.0 §1–§6 in full. The contract pins a small set of
+cross-library symbols every adopter library exports so a downstream
+consumer (c64-wireguard, c64-https, …) can size-check, version-gate,
+and collision-check its dependencies at assemble time. Six SPEC
+sections apply to c64-polyval; §3 (REU bank claims) is N/A because
+the library makes no 17xx REU claims.
+
+The contract has since advanced to v0.4.0. §7 (Semver expectations)
+is a doc-only renumbering with no export surface — no action needed.
+§8 (Shared primitives: `sqtab`, `reu_mul`, `ct_mul_8x8`) covers the
+8×8 quarter-square-multiply primitive shared by the elliptic-curve
+and ChaCha20 field-arithmetic libraries; GF(2^128) carry-less
+multiplication has no equivalent shape, so §8.1–§8.3 are N/A and
+`LIB_POLYVAL_SHARED_PRIMITIVES` is correctly not exported. §8.0's
+precalculated-table enumeration duty *does* apply regardless of
+§8.1–§8.3 applicability — see §9.6 below, added in v0.4.0.
 
 ### 9.1 §1 — Version identification (`src/lib_version.s`)
 
@@ -539,7 +549,7 @@ Four absolute equates, exported as `:abs`:
 | Symbol | Value | Meaning |
 |---|---:|---|
 | `LIB_VERSION_MAJOR` | `0` | Semver major. |
-| `LIB_VERSION_MINOR` | `3` | Semver minor. |
+| `LIB_VERSION_MINOR` | `4` | Semver minor. |
 | `LIB_VERSION_PATCH` | `0` | Semver patch. |
 | `LIB_ABI_VERSION`   | `1` | ABI compatibility level. Coarser than MINOR. |
 
@@ -619,7 +629,35 @@ exact composition.
 The previous (pre-v0.3.0) `make lib` target — a library-only
 verification PRG link at `$4000` — is renamed to `make lib-verify`.
 
-### 9.6 Consumer example
+### 9.6 §8.0 — Precalculated-table enumeration (`src/lib_manifest.s`, `docs/precalc-tables.md`)
+
+Added in v0.4.0. SPEC §8.0 requires every adopter to enumerate any
+precalculated table meeting the floor (≥ 256 B AND one of:
+REU-resident, hot-loop-read, or page-aligned for fetch alignment) —
+regardless of whether the library consumes any §8.1–§8.3 shared
+primitive. `src/precalc_table.inc` is the canonical `LIB_PRECALC_TABLE`
+macro copied verbatim from the contract repo; `src/lib_manifest.s`
+invokes it once per enumerated table, exporting three equates each
+(`LIB_PRECALC_<name>_{SIZE,REGION,SHARED}`):
+
+| Table | Size | Region | Profile |
+|---|---:|---|---|
+| `polyval_htable` | 256 B | RAM | LONG + SHORT |
+| `polyval_htable8` | 4096 B | RAM | LONG only |
+| `polyval_reduce8` | 4096 B | RAM | LONG only |
+| `aes_sbox` | 256 B | RODATA | LONG + SHORT |
+| `aes_inv_sbox` | 256 B | RODATA | LONG + SHORT |
+
+All five are classified algorithm-specific (`PRECALC_SHARED_NO`) — no
+current adopter shares POLYVAL's GF(2^128) tables or AES's S-box
+shape. See [`docs/precalc-tables.md`](../docs/precalc-tables.md) for
+the full rationale per table, including the below-floor exempt list
+(`aes_rcon`, key-schedule/GCM-SIV scratch buffers) and the
+future-audit note flagging `aes_sbox` / `aes_inv_sbox` as the first
+candidate if an AES-consuming library ever joins the contract.
+Cross-adopter audit: `od65 --dump-exports build/lib_manifest.o | grep LIB_PRECALC`.
+
+### 9.7 Consumer example
 
 A downstream consumer can assemble-time gate on the library
 version, then `.importzp` whatever ZP slots and `.import` whatever
@@ -632,8 +670,8 @@ manifest equates and routines it needs:
 ; --- §1: ABI version gate ---
 .import LIB_VERSION_MAJOR, LIB_VERSION_MINOR, LIB_ABI_VERSION
 .assert LIB_ABI_VERSION = 1, error, "c64-polyval ABI mismatch"
-.assert LIB_VERSION_MAJOR = 0 .and LIB_VERSION_MINOR >= 3, error, \
-    "c64-polyval v0.3 or newer required"
+.assert LIB_VERSION_MAJOR = 0 .and LIB_VERSION_MINOR >= 4, error, \
+    "c64-polyval v0.4 or newer required"
 
 ; --- §2: ZP slots actually used by this consumer ---
 .importzp polyval_acc, pv_mul_input, pv_mul_nibble

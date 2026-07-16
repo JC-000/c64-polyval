@@ -7,8 +7,8 @@
 ; Consumers import these for assembly-time compatibility checks:
 ;
 ;   .import LIB_VERSION_MAJOR, LIB_VERSION_MINOR, LIB_VERSION_PATCH
-;   .if LIB_VERSION_MAJOR <> 0 .or LIB_VERSION_MINOR < 2
-;       .error "c64-polyval v0.2 or newer is required"
+;   .if LIB_VERSION_MAJOR <> 0 .or LIB_VERSION_MINOR < 4
+;       .error "c64-polyval v0.4 or newer is required"
 ;   .endif
 ;
 ; Versioning policy: semver 2.0.0 - https://semver.org/
@@ -37,7 +37,7 @@
 .setcpu "6502"
 
 LIB_VERSION_MAJOR = 0
-LIB_VERSION_MINOR = 2
+LIB_VERSION_MINOR = 4
 LIB_VERSION_PATCH = 0
 LIB_ABI_VERSION   = 1
 
