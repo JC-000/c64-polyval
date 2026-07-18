@@ -1,6 +1,12 @@
 ; precalc_table.inc — canonical per c64-lib-contract SPEC §8.0 catch-loop.
-; Copy verbatim from this repo's root into each adopter's src/. Updates
-; land via coordinated cross-repo PR; do not edit local copies.
+;
+; CANONICAL SOURCE. The fenced code block in SPEC.md §8.0 is shown for
+; readability; this file is the byte-for-byte source adopters copy into
+; their own src/precalc_table.inc. Updates land via coordinated cross-repo
+; PR; do not edit your local copy.
+;
+; Smoke-tested in examples/precalc_table_smoke.s and exercised by `make verify`
+; at this repo's root.
 
 .ifndef PRECALC_TABLE_INC_INCLUDED
 PRECALC_TABLE_INC_INCLUDED = 1
@@ -32,9 +38,9 @@ PRECALC_SHARED_YES     = $01
 ;   LIB_PRECALC_<name>_SHARED   = shared
 ;
 ; SIZE is exported without an address-size hint so values > 16 bits
-; (e.g. the 131072-byte REU mul table) export cleanly as 'far' without
-; a "far but exported absolute" warning. REGION and SHARED are
-; byte-valued and exported without a hint for consistency.
+; (e.g. the 131072-byte REU mul table) export cleanly as 'far'
+; without a "far but exported absolute" warning. REGION and SHARED
+; are byte-valued and exported without a hint for consistency.
 
 .macro LIB_PRECALC_TABLE name, size_bytes, region, shared
     .ident (.sprintf("LIB_PRECALC_%s_SIZE",   name)) = size_bytes
