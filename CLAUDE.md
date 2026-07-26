@@ -25,7 +25,12 @@ currently at SPEC v0.4.0. §1–§6 (v0.1.0 baseline) shipped in v0.3.0; §8.0
 applicability) shipped in v0.4.0:
 - §1 `LIB_VERSION_*` + `LIB_ABI_VERSION` — `src/lib_version.s`
 - §2 `.exportzp` ZP slot inventory — `src/zp_config.s`
-- §3 REU — n/a (c64-polyval makes no REU claims)
+- §3 REU — n/a (c64-polyval makes no REU claims). Zero-REU /
+  turbo-clean scaling is documented as an explicit contract feature
+  (issue #19): no I/O on any path, both profiles scale with CPU clock,
+  and any future REU-resident variant must be an optional profile,
+  never the default — see API.md §9.3 and README "Turbo / accelerated
+  hosts"
 - §4 `LIB_POLYVAL_*` segment naming — every `src/*.s`; `src/c64.cfg` and
   `src/lib_only.cfg` SEGMENTS{} alias every prefixed segment back to MAIN
   so the standalone PRG layout is byte-identical to the pre-rename baseline

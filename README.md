@@ -15,6 +15,9 @@ high-throughput LONG build for session-stable H (TLS 1.3, WireGuard).
   AAD only.
 - Single stable public ABI across both POLYVAL profiles — consumers swap
   one for the other without source changes.
+- Zero-REU / zero-I/O: pure CPU + RAM on every path, so it runs
+  unmodified on expansion-less machines and scales with CPU clock on
+  turbo hosts (see "Turbo / accelerated hosts" below).
 - `make consumer-check` link gate that assembles `test/consumer_stub.s`
   against the public headers and links it against the library, catching
   ABI drift before a release.
@@ -130,6 +133,23 @@ practical crossover where LONG starts winning consistently is around
 a full message faster despite its slower per-block inner loop; above
 that, LONG pulls ahead. See `API.md` §3 for the full discussion and
 the math.
+
+## Turbo / accelerated hosts
+
+c64-polyval never touches the REU, any I/O register, or the KERNAL —
+both profiles are pure CPU + RAM on every path
+(`LIB_POLYVAL_REU_BANKS_USED = 0`). Two guarantees follow:
+
+- Runs unmodified on expansion-less machines.
+- Per-block cost **and** precompute scale ~linearly with CPU clock on
+  accelerated hosts (Ultimate 64 / C64 Ultimate turbo, SuperCPU-class).
+  There is no ~1 MHz-anchored wall-clock floor of the kind
+  REU-DMA-bound hot paths hit, and the SHORT/LONG crossover
+  (~68 blocks) is clock-invariant.
+
+See `API.md` §3 for the scaling discussion and §9.3 for the policy any
+future REU-resident variant must follow (optional profile with a
+manifest delta — never the default path).
 
 ## Release
 
