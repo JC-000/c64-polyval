@@ -9,6 +9,21 @@ Releases: https://github.com/JC-000/c64-polyval/releases — tagged releases
 track `MAJOR.MINOR.PATCH` and are the supported consumption points for
 downstream projects (see `API.md` §8 for the integration contract).
 
+## Unreleased
+
+### Documentation
+
+- Zero-REU / turbo-clean scaling documented as an explicit contract
+  feature ([#19](https://github.com/JC-000/c64-polyval/issues/19),
+  prompted by c64-nist-curves #69/#71): new README "Turbo /
+  accelerated hosts" section and Features bullet; API.md §1 platform
+  statement strengthened, §3 turbo-scaling paragraph added, §9.3
+  expanded with the consumer-facing guarantees and a stated policy
+  that any future REU-resident variant must ship as an *optional
+  profile* with a manifest delta, never the default path (also in the
+  `src/lib_manifest.s` §3 comment block). Comment/docs only — no code
+  or binary changes.
+
 ## v0.4.0 — 2026-07-16
 
 Adopts [c64-lib-contract](https://github.com/JC-000/c64-lib-contract)

@@ -101,8 +101,12 @@ LIB_MANIFEST_S_INCLUDED = 1
 ; (polyval_htable, polyval_htable8, polyval_reduce8) live in CPU BSS
 ; segments, not REU.
 ;
-; A future variant that offloads htable8/reduce8 to REU would override
-; this equate at that point.
+; Policy (API.md §9.3, issue #19): a future variant that offloads
+; htable8/reduce8 to REU must ship as an OPTIONAL profile overriding
+; this equate -- never the default or only path. REU DMA transfers at
+; the ~1 MHz bus rate regardless of CPU turbo, so an REU-resident hot
+; path would put a speed-invariant wall-clock floor under turbo hosts
+; and a hard REU dependency under stock ones (c64-nist-curves #69/#71).
 ; -----------------------------------------------------------------------------
 .ifndef LIB_POLYVAL_REU_BANKS_USED
   LIB_POLYVAL_REU_BANKS_USED = 0

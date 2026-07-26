@@ -35,7 +35,11 @@ two ca65 header files in `src/`:
   `POLYVAL_PROFILE` selector. `.include` before any consumer code that
   references library ZP slots.
 
-Target platform: 6502 @ 1 MHz, stock Commodore 64. No REU is required.
+Target platform: 6502 @ 1 MHz, stock Commodore 64. No REU — or any
+other expansion hardware — is required or ever touched: the library is
+pure CPU + RAM on every code path, with no I/O-register or KERNAL
+access. It therefore runs unmodified on expansion-less machines, and
+its throughput scales with CPU clock on accelerated hosts (see §3).
 Source is ca65/ld65 assembly for the cc65 toolchain; build via `make`.
 See `README.md` for toolchain install notes.
 
@@ -184,6 +188,20 @@ crossover gives roughly 15 blocks on precompute-included workloads;
 the practical break-even where LONG starts winning consistently is
 around 68 blocks (≈1 KB of plaintext per message). Pick SHORT below
 that, LONG above.
+
+**Turbo / accelerated hosts.** Neither profile touches the REU or any
+other ~1 MHz-anchored I/O — every table lives in CPU RAM and every
+path is pure CPU work — so per-block cost *and* precompute scale
+~linearly with CPU clock on accelerated hosts (Ultimate 64 / C64
+Ultimate turbo, SuperCPU-class). There is no speed-invariant
+wall-clock floor of the kind REU-DMA-bound hot paths hit: REU DMA
+always transfers at the ~1 MHz C64 bus rate regardless of CPU turbo
+(c64-nist-curves measured an 87%-of-wall-time floor at 64 MHz before
+its optional on-chip profile — see JC-000/c64-nist-curves#69/#71 and
+§9.3 of this document). Because both cycle counts scale identically,
+the SHORT/LONG crossover *in blocks* is clock-invariant; turbo only
+shrinks the absolute cost of the LONG precompute (~255k cy → ~4 ms at
+64 MHz).
 
 The Python test and benchmark scripts honour the same selector via an
 environment variable:
@@ -592,6 +610,23 @@ includes don't try to re-export the same symbols.
 
 N/A. c64-polyval is a CPU-RAM-only library; `LIB_POLYVAL_REU_BANKS_USED`
 (§9.4) is therefore `0`.
+
+The zero is a **contract feature, not an accident**: no code path in
+either profile touches the 17xx REU, any `$D000–$DFFF` hardware
+register, or the KERNAL. Consumers comparing sibling libraries
+(c64-https, c64-wireguard) can rely on the two properties this
+implies — the library runs unmodified on expansion-less machines, and
+it carries no ~1 MHz-anchored wall-clock floor on turbo hosts (§3,
+"Turbo / accelerated hosts").
+
+**Policy for future REU-resident variants** (e.g. REU-backed LONG
+tables to free ~8.5 KB of RAM): following the c64-nist-curves
+precedent (JC-000/c64-nist-curves#69/#71), any such variant must ship
+as an *optional profile* with its own manifest delta (an override of
+`LIB_POLYVAL_REU_BANKS_USED`), never as the default or only path.
+The RAM saving would be bought with a speed-invariant wall-clock
+floor at turbo and a hard REU dependency at stock, inverting the
+guarantees above.
 
 ### 9.4 §5 — Aggregate manifest (`src/lib_manifest.s`)
 
