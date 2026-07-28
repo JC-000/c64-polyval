@@ -41,7 +41,7 @@ make lib                          # build/lib/polyval.a (full ar65 archive)
 make lib-verify                   # library-only verification link (pre-v0.3.0 `make lib`)
 make consumer-check               # assemble + link test/consumer_stub.s
 make run                          # build then launch in VICE
-make dist VERSION=v0.4.0          # reproducible source tarball
+make dist VERSION=v0.4.1          # reproducible source tarball
 make clean                        # rm -rf build/
 ```
 
@@ -57,9 +57,10 @@ python3 tools/run_all_tests.py [--seed N] [--iterations N] [--verbose]
 
 Runs both the `test_polyval_direct.py` regression suite (217 tests,
 direct `jsr()` against every POLYVAL routine) and the
-`test_gcmsiv_polyval.py` end-to-end suite (~15 tests, RFC 8452 C.2
-vectors + tampered-tag detection + random roundtrips) in parallel
-under two VICE instances.
+`test_gcmsiv_polyval.py` end-to-end suite (165 tests, RFC 8452 C.2
+vectors + tampered-tag detection + random roundtrips; 6 of the C.2
+vectors skip by design — non-empty AAD is unsupported) in parallel
+under two VICE instances. Expected: 376/376 pass, 6 skip.
 
 Individual suites can be run directly:
 
@@ -73,7 +74,7 @@ python3 tools/polyval_reference.py        # Python reference self-test (no VICE)
 ## Library contract
 
 c64-polyval implements [c64-lib-contract](https://github.com/JC-000/c64-lib-contract)
-(currently at SPEC v0.4.0) — see the
+(currently at SPEC v0.4.1) — see the
 [SPEC](https://github.com/JC-000/c64-lib-contract/blob/main/SPEC.md)
 and the
 [adopters table](https://github.com/JC-000/c64-lib-contract/blob/main/adopters.md).
@@ -153,8 +154,8 @@ manifest delta — never the default path).
 
 ## Release
 
-`make dist VERSION=v0.2.0` produces a reproducible source tarball
-`c64-polyval-v0.2.0.tar.gz` rooted at the named git tag. Tagged
+`make dist VERSION=vX.Y.Z` produces a reproducible source tarball
+`c64-polyval-vX.Y.Z.tar.gz` rooted at the named git tag. Tagged
 releases are published at
 https://github.com/JC-000/c64-polyval/releases; consumers should pin
 to a specific `vX.Y.Z` tag (typically as a git submodule) and consult

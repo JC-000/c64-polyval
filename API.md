@@ -539,7 +539,7 @@ use v0.2.0's source-tarball + `src/exports.inc` integration path
 instead. The v0.1.0 tree is kept only for reproducibility of the
 prior release.
 
-## 9. Library contract (c64-lib-contract v0.4.0)
+## 9. Library contract (c64-lib-contract v0.4.1)
 
 As of v0.3.0, c64-polyval implements
 [c64-lib-contract](https://github.com/JC-000/c64-lib-contract)
@@ -550,7 +550,9 @@ and collision-check its dependencies at assemble time. Six SPEC
 sections apply to c64-polyval; §3 (REU bank claims) is N/A because
 the library makes no 17xx REU claims.
 
-The contract has since advanced to v0.4.0. §7 (Semver expectations)
+The contract has since advanced to v0.4.1 (v0.4.1 itself is doc-only
+— no symbol, macro, section, or build-target semantics changed from
+v0.4.0). §7 (Semver expectations)
 is a doc-only renumbering with no export surface — no action needed.
 §8 (Shared primitives: `sqtab`, `reu_mul`, `ct_mul_8x8`) covers the
 8×8 quarter-square-multiply primitive shared by the elliptic-curve

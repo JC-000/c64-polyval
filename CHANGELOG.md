@@ -9,7 +9,12 @@ Releases: https://github.com/JC-000/c64-polyval/releases — tagged releases
 track `MAJOR.MINOR.PATCH` and are the supported consumption points for
 downstream projects (see `API.md` §8 for the integration contract).
 
-## Unreleased
+## v0.4.1 — 2026-07-28
+
+Docs-only **PATCH** release: rolls up the issue-#19 turbo-scaling
+documentation and a documentation-currency pass (contract SPEC v0.4.1
+references, corrected test counts). The only source change is the
+`LIB_VERSION_PATCH` bump itself — no code, ABI, or binary changes.
 
 ### Documentation
 
@@ -23,6 +28,23 @@ downstream projects (see `API.md` §8 for the integration contract).
   profile* with a manifest delta, never the default path (also in the
   `src/lib_manifest.s` §3 comment block). Comment/docs only — no code
   or binary changes.
+- Contract-currency refresh: c64-lib-contract references in README,
+  API.md §9, and CLAUDE.md bumped from SPEC v0.4.0 to SPEC v0.4.1.
+  The contract's v0.4.1 is itself doc-only (no symbol, macro,
+  section, or build-target semantics changed), so no adoption work
+  was required — verified against the upstream SPEC changelog, and
+  `src/precalc_table.inc` re-confirmed byte-identical to the
+  canonical root file.
+- README test section corrected: the `test_gcmsiv_polyval.py`
+  end-to-end suite had grown to 165 tests (README still said "~15");
+  expected totals (376/376 pass, 6 AAD-by-design skips) now stated.
+  Release example generalized to `vX.Y.Z`.
+
+### Changed
+
+- `src/lib_version.s`: `LIB_VERSION_PATCH` 0 → 1 (with the matching
+  `VERSION` file bump — the two are checked together per the v0.3.0
+  drift lesson, API.md §9.1).
 
 ## v0.4.0 — 2026-07-16
 
