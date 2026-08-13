@@ -24,7 +24,9 @@ currently at SPEC v0.4.1 (v0.4.1 is doc-only — the normative surface is
 unchanged from SPEC v0.4.0). §1–§6 (v0.1.0 baseline) shipped in v0.3.0; §8.0
 (precalc-table catch-loop, applies to every adopter regardless of §8.1–§8.3
 applicability) shipped in v0.4.0:
-- §1 `LIB_VERSION_*` + `LIB_ABI_VERSION` — `src/lib_version.s`
+- §1 `LIB_POLYVAL_VERSION_*` + `LIB_POLYVAL_ABI_VERSION` (v0.7.0
+  prefixed form; deprecated bare `LIB_VERSION_*` aliases gated on
+  `LIB_NO_BARE_EXPORTS`) — `src/lib_version.s`
 - §2 `.exportzp` ZP slot inventory — `src/zp_config.s`
 - §3 REU — n/a (c64-polyval makes no REU claims). Zero-REU /
   turbo-clean scaling is documented as an explicit contract feature
@@ -161,9 +163,12 @@ as historical reference and must not be edited. The active ABI is now
 `lib_manifest.s`).
 
 ## Release flow
-1. Bump `VERSION`, `CHANGELOG.md`, **and `LIB_VERSION_MINOR`/`_PATCH` in
-   `src/lib_version.s`** (the v0.3.0 release forgot the last one and it went
-   unnoticed for a full release cycle — see `API.md` §9.1).
+1. Bump `VERSION`, `CHANGELOG.md`, **and `LIB_POLYVAL_VERSION_MINOR`/`_PATCH`
+   in `src/lib_version.s`** (the bare `LIB_VERSION_*` aliases follow
+   automatically; the v0.3.0 release forgot this file entirely and it went
+   unnoticed for a full release cycle — see `API.md` §9.1). Also check the
+   value column of the §9.1 table in `API.md` — the v0.4.1 release bumped
+   the file but left the table at PATCH 0.
 2. Write `docs/RELEASE_NOTES_vX.Y.Z.md` (use the v0.3.0 file as a template).
 3. `make clean && make dist VERSION=vX.Y.Z` — produces the tarball + stamps
    size/SHA256 into the release notes (two-pass).
