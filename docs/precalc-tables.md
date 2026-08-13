@@ -13,9 +13,14 @@ shared shape today), so every table below is classified
 algorithm-specific.
 
 Each row here has a matching `LIB_PRECALC_TABLE` invocation in
-[`src/lib_manifest.s`](../src/lib_manifest.s), exported as
-`LIB_PRECALC_<name>_{SIZE,REGION,SHARED}` per the canonical
-[`precalc_table.inc`](../src/precalc_table.inc) macro.
+[`src/lib_manifest.s`](../src/lib_manifest.s), exported per the
+canonical [`precalc_table.inc`](../src/precalc_table.inc) macro as
+`LIB_POLYVAL_PRECALC_<name>_{SIZE,REGION,SHARED}` (SPEC v0.7.0
+library-prefixed form, `"POLYVAL"` passed as the fifth macro argument)
+plus the deprecated bare `LIB_PRECALC_<name>_{SIZE,REGION,SHARED}`
+triple, which is gated on `LIB_NO_BARE_EXPORTS` and removed at
+contract v1.0. Audits should grep `_PRECALC_`, which matches both
+forms.
 
 ## Enumerated tables
 

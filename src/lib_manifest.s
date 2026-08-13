@@ -215,20 +215,27 @@ LIB_MANIFEST_S_INCLUDED = 1
 ; enumeration duty applies regardless. See docs/precalc-tables.md for
 ; the classification rationale behind each PRECALC_SHARED_NO below.
 ;
+; The fifth macro argument is the SPEC v0.7.0 library prefix: each
+; invocation emits both LIB_POLYVAL_PRECALC_<name>_* (collision-free,
+; permanent) and the deprecated bare LIB_PRECALC_<name>_* triple, the
+; latter gated on LIB_NO_BARE_EXPORTS (removed at contract v1.0). The
+; prefix names the declaring library, never the table -- table names
+; stay unprefixed per SPEC §8.1.
+;
 ; polyval_htable is built by both profiles; polyval_htable8 and
 ; polyval_reduce8 exist only under the LONG profile (SHORT computes the
 ; 4-bit Shoup window on the fly instead of precomputing all 16 nibble
 ; positions x 16 possible values).
 ; -----------------------------------------------------------------------------
-LIB_PRECALC_TABLE "polyval_htable", 256, PRECALC_REGION_RAM, PRECALC_SHARED_NO
+LIB_PRECALC_TABLE "polyval_htable", 256, PRECALC_REGION_RAM, PRECALC_SHARED_NO, "POLYVAL"
 
 .if POLYVAL_PROFILE = POLYVAL_PROFILE_LONG
-LIB_PRECALC_TABLE "polyval_htable8",  4096, PRECALC_REGION_RAM, PRECALC_SHARED_NO
-LIB_PRECALC_TABLE "polyval_reduce8",  4096, PRECALC_REGION_RAM, PRECALC_SHARED_NO
+LIB_PRECALC_TABLE "polyval_htable8",  4096, PRECALC_REGION_RAM, PRECALC_SHARED_NO, "POLYVAL"
+LIB_PRECALC_TABLE "polyval_reduce8",  4096, PRECALC_REGION_RAM, PRECALC_SHARED_NO, "POLYVAL"
 .endif
 
-LIB_PRECALC_TABLE "aes_sbox",     256, PRECALC_REGION_RODATA, PRECALC_SHARED_NO
-LIB_PRECALC_TABLE "aes_inv_sbox", 256, PRECALC_REGION_RODATA, PRECALC_SHARED_NO
+LIB_PRECALC_TABLE "aes_sbox",     256, PRECALC_REGION_RODATA, PRECALC_SHARED_NO, "POLYVAL"
+LIB_PRECALC_TABLE "aes_inv_sbox", 256, PRECALC_REGION_RODATA, PRECALC_SHARED_NO, "POLYVAL"
 
 
 ; --- Exports ---
