@@ -17,6 +17,13 @@
 ; --- c64-lib-contract §1: version constants -------------------------------
 ; Imported so the linker pulls lib_version.o out of the (future P5) archive
 ; per the c64-x25519 forced-extraction pattern. .word references below.
+; Both the v0.7.0 prefixed form (permanent) and the deprecated bare form
+; (present because this stub builds without LIB_NO_BARE_EXPORTS) are
+; imported, so consumer-check fails if either export set regresses.
+.import LIB_POLYVAL_VERSION_MAJOR
+.import LIB_POLYVAL_VERSION_MINOR
+.import LIB_POLYVAL_VERSION_PATCH
+.import LIB_POLYVAL_ABI_VERSION
 .import LIB_VERSION_MAJOR
 .import LIB_VERSION_MINOR
 .import LIB_VERSION_PATCH
@@ -59,5 +66,7 @@ consumer_entry:
 .segment "RODATA"
 
 public_version_refs:
+        .word   LIB_POLYVAL_VERSION_MAJOR, LIB_POLYVAL_VERSION_MINOR
+        .word   LIB_POLYVAL_VERSION_PATCH, LIB_POLYVAL_ABI_VERSION
         .word   LIB_VERSION_MAJOR, LIB_VERSION_MINOR
         .word   LIB_VERSION_PATCH, LIB_ABI_VERSION

@@ -564,17 +564,26 @@ precalculated-table enumeration duty *does* apply regardless of
 
 ### 9.1 §1 — Version identification (`src/lib_version.s`)
 
-Four absolute equates, exported as `:abs`:
+Four absolute equates, exported as `:abs` in two forms per SPEC
+v0.7.0:
 
-| Symbol | Value | Meaning |
-|---|---:|---|
-| `LIB_VERSION_MAJOR` | `0` | Semver major. |
-| `LIB_VERSION_MINOR` | `4` | Semver minor. |
-| `LIB_VERSION_PATCH` | `0` | Semver patch. |
-| `LIB_ABI_VERSION`   | `1` | ABI compatibility level. Coarser than MINOR. |
+| Symbol (prefixed, permanent) | Deprecated bare alias | Value | Meaning |
+|---|---|---:|---|
+| `LIB_POLYVAL_VERSION_MAJOR` | `LIB_VERSION_MAJOR` | `0` | Semver major. |
+| `LIB_POLYVAL_VERSION_MINOR` | `LIB_VERSION_MINOR` | `4` | Semver minor. |
+| `LIB_POLYVAL_VERSION_PATCH` | `LIB_VERSION_PATCH` | `1` | Semver patch. |
+| `LIB_POLYVAL_ABI_VERSION`   | `LIB_ABI_VERSION`   | `1` | ABI compatibility level. Coarser than MINOR. |
+
+The bare names are identical across every contract adopter, so a
+consumer linking two libraries cannot import both manifests
+(contract #43); they are deprecated, removed at contract v1.0, and
+gated on `LIB_NO_BARE_EXPORTS` (`ca65 -D LIB_NO_BARE_EXPORTS=1`) so a
+composing consumer can suppress them build-wide. New consumers should
+import the `LIB_POLYVAL_*` form. The bare aliases are defined in
+terms of the prefixed literals, so the two forms cannot drift.
 
 Consumers `.import` whichever subset they need and gate compilation
-on them — see the worked example in §9.6.
+on them — see the worked example in §9.7.
 
 ### 9.2 §2 — Zero-page contract (`src/zp_config.s`)
 
@@ -716,11 +725,12 @@ manifest equates and routines it needs:
 ; consumer.s -----------------------------------------------------------
 .include "exports.inc"          ; promised-stable public ABI
 
-; --- §1: ABI version gate ---
-.import LIB_VERSION_MAJOR, LIB_VERSION_MINOR, LIB_ABI_VERSION
-.assert LIB_ABI_VERSION = 1, error, "c64-polyval ABI mismatch"
-.assert LIB_VERSION_MAJOR = 0 .and LIB_VERSION_MINOR >= 4, error, \
-    "c64-polyval v0.4 or newer required"
+; --- §1: ABI version gate (v0.7.0 prefixed form) ---
+.import LIB_POLYVAL_VERSION_MAJOR, LIB_POLYVAL_VERSION_MINOR
+.import LIB_POLYVAL_ABI_VERSION
+.assert LIB_POLYVAL_ABI_VERSION = 1, error, "c64-polyval ABI mismatch"
+.assert LIB_POLYVAL_VERSION_MAJOR = 0 .and LIB_POLYVAL_VERSION_MINOR >= 4, \
+    error, "c64-polyval v0.4 or newer required"
 
 ; --- §2: ZP slots actually used by this consumer ---
 .importzp polyval_acc, pv_mul_input, pv_mul_nibble
@@ -742,7 +752,8 @@ manifest equates and routines it needs:
 ; ... host code, calling the imported routines ...
 ```
 
-For consumers vendoring multiple c64-lib-contract adopters, the
-recommendation is to import the `LIB_VERSION_*` and
-`LIB_POLYVAL_*` symbols under disambiguating aliases — see the
-contract SPEC §1 for the canonical pattern.
+Consumers vendoring multiple c64-lib-contract adopters build every
+library with `ca65 -D LIB_NO_BARE_EXPORTS=1` and import each
+library's prefixed `LIB_<X>_*` symbols side by side — the bare
+`LIB_VERSION_*` names collide across adopters and are removed at
+contract v1.0. See the contract SPEC §1.

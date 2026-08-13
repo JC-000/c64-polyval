@@ -81,8 +81,11 @@ and the
 All sections that apply to a CPU-RAM-only crypto library with no
 shared 8×8 quarter-square-multiply surface are covered:
 
-- §1 — `LIB_VERSION_MAJOR / _MINOR / _PATCH` and `LIB_ABI_VERSION`
-  exported from `src/lib_version.s`.
+- §1 — `LIB_POLYVAL_VERSION_MAJOR / _MINOR / _PATCH` and
+  `LIB_POLYVAL_ABI_VERSION` exported from `src/lib_version.s`
+  (SPEC v0.7.0 prefixed form), plus the deprecated bare
+  `LIB_VERSION_*` aliases, gated on `LIB_NO_BARE_EXPORTS` until
+  contract v1.0 removes them.
 - §2 — every claimed zero-page slot declared in `src/zp_config.s`
   under the `polyval_*` prefix.
 - §3 — N/A; c64-polyval makes no REU claims
