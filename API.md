@@ -674,16 +674,25 @@ REU-resident, hot-loop-read, or page-aligned for fetch alignment) —
 regardless of whether the library consumes any §8.1–§8.3 shared
 primitive. `src/precalc_table.inc` is the canonical `LIB_PRECALC_TABLE`
 macro copied verbatim from the contract repo; `src/lib_manifest.s`
-invokes it once per enumerated table, exporting three equates each
-(`LIB_PRECALC_<name>_{SIZE,REGION,SHARED}`):
+invokes it once per enumerated table with `"POLYVAL"` as the SPEC
+v0.7.0 library-prefix argument, exporting
+`LIB_POLYVAL_PRECALC_<name>_{SIZE,REGION,SHARED}` plus the deprecated
+bare `LIB_PRECALC_<name>_*` triple (gated on `LIB_NO_BARE_EXPORTS`,
+removed at contract v1.0):
 
-| Table | Size | Region | Profile |
+| Table | Size | Region | Ships in |
 |---|---:|---|---|
-| `polyval_htable` | 256 B | RAM | LONG + SHORT |
-| `polyval_htable8` | 4096 B | RAM | LONG only |
-| `polyval_reduce8` | 4096 B | RAM | LONG only |
-| `aes_sbox` | 256 B | RODATA | LONG + SHORT |
-| `aes_inv_sbox` | 256 B | RODATA | LONG + SHORT |
+| `polyval_htable` | 256 B | RAM | every build (both profiles) |
+| `polyval_htable8` | 4096 B | RAM | LONG-profile builds only |
+| `polyval_reduce8` | 4096 B | RAM | LONG-profile builds only |
+| `aes_sbox` | 256 B | RODATA | AEAD bundle only (`polyval.a` / `polyval-gcmsiv.a`) |
+| `aes_inv_sbox` | 256 B | RODATA | AEAD bundle only (`polyval.a` / `polyval-gcmsiv.a`) |
+
+Manifest rows are gated on the same two axes: the LONG-only tables on
+`POLYVAL_PROFILE`, and the AES tables on `LIB_POLYVAL_NO_AES`, which
+the `lib-polyval-{long,short}` targets define so the POLYVAL-only
+archives (which omit `src/tables.s`) do not enumerate tables they do
+not ship (issue #23).
 
 All five are classified algorithm-specific (`PRECALC_SHARED_NO`) — no
 current adopter shares POLYVAL's GF(2^128) tables or AES's S-box
@@ -692,7 +701,10 @@ the full rationale per table, including the below-floor exempt list
 (`aes_rcon`, key-schedule/GCM-SIV scratch buffers) and the
 future-audit note flagging `aes_sbox` / `aes_inv_sbox` as the first
 candidate if an AES-consuming library ever joins the contract.
-Cross-adopter audit: `od65 --dump-exports build/lib_manifest.o | grep LIB_PRECALC`.
+Cross-adopter audit: `od65 --dump-exports build/lib_manifest.o | grep _PRECALC_`
+(the `_PRECALC_` pattern matches both the prefixed and bare forms; a
+shipped `.a` must have its members extracted with `ar65 x` first —
+`od65` reads objects only and silently reports nothing on archives).
 
 ### 9.7 Consumer example
 

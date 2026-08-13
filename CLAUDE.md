@@ -73,9 +73,13 @@ v0.2.0 — ACME support was retired. `src/` is flat (no `lib/` subdir); ld65
 configs live at `src/c64.cfg` (full app) and `src/lib_only.cfg` (library-only).
 
 **Profile-switch gotcha:** `data.o` and `lib_manifest.o` contents are conditional
-on `POLYVAL_PROFILE`. Make's pattern rule doesn't track that as a dependency,
-so always `make clean` between profile switches; the lib-polyval-{long,short}
-archive targets do this automatically via recursive make.
+on `POLYVAL_PROFILE` (and `lib_manifest.o` additionally on `POLYVAL_NO_AES`,
+which the lib-polyval-{long,short} targets set to suppress the AES manifest
+rows the POLYVAL-only archives don't ship — issue #23). Make's pattern rule
+doesn't track either as a dependency, so always `make clean` between profile
+switches and after any lib-polyval-{long,short} build; those archive targets
+clean before building via recursive make, but leave `-D LIB_POLYVAL_NO_AES=1`
+objects in `build/` afterwards.
 
 `make dist` produces `c64-polyval-vX.Y.Z.tar.gz` at repo root. The tarball
 ships only `src/`, root docs, `docs/RELEASE_NOTES_*`, and

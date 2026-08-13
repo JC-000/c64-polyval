@@ -29,8 +29,22 @@ forms.
 | `polyval_htable` | 256 B | main RAM (page-aligned) | LONG + SHORT | `src/data.s` (`.segment "LIB_POLYVAL_HTABLE"`), built by `polyval_precompute_table` in `src/polyval_long.s` / `src/polyval_short.s` | algorithm-specific | Shoup 4-bit window over GF(2^128): 16 precomputed multiples of H, 16 B each. Indexed `abs,y` in the innermost nibble-processing loop of both profiles, hence page-aligned and hot-loop-read. No sibling library performs GF(2^128) carry-less multiplication, so this shape has no shared-primitive candidate. |
 | `polyval_htable8` | 4096 B | main RAM | LONG only | `src/data.s` (`.segment "LIB_POLYVAL_LONG_HTABLE8"`), built by `polyval_precompute_table` in `src/polyval_long.s` | algorithm-specific | 16 sub-tables (`_s0`..`_s15`) of 256 B each, one per byte position of the 128-bit accumulator, extending the Shoup window to an 8-bit fused shift+reduce+multiply. Hot-loop-read once per input byte in `polyval_multiply` (LONG profile). Exists only when `POLYVAL_PROFILE = POLYVAL_PROFILE_LONG` — the §8.0 registration in `lib_manifest.s` is gated on the same selector. |
 | `polyval_reduce8` | 4096 B | main RAM | LONG only | `src/data.s` (`.segment "LIB_POLYVAL_LONG_REDUCE8"`), built alongside `polyval_htable8` | algorithm-specific | Companion reduction table to `polyval_htable8` — precomputed GF(2^128) modular-reduction constants per byte position, same hot-loop-read access pattern and profile gating. |
-| `aes_sbox` | 256 B | RODATA | LONG + SHORT | `src/tables.s` | algorithm-specific (flagged for future audit) | Standard FIPS-197 AES S-box, read once per byte in every `SubBytes` step of `aes_encrypt_block` / key expansion. Hot-loop-read. Not currently a §8.x candidate because no other current adopter (`c64-nist-curves`, `c64-x25519`, `c64-ChaCha20-Poly1305`) implements AES — but this is the byte-for-byte standard S-box, so if `c64-aes256-ecdsa` or another AES-consuming library joins the contract, this table (and `aes_inv_sbox` below) is the first candidate for a future §8.x promotion audit per the SPEC §8.0 "generalisation" trigger. |
-| `aes_inv_sbox` | 256 B | RODATA | LONG + SHORT | `src/tables.s` | algorithm-specific (flagged for future audit) | Inverse AES S-box, read once per byte in every `InvSubBytes` step of `aes_decrypt_block`. Same future-audit note as `aes_sbox`. |
+| `aes_sbox` | 256 B | RODATA | AEAD bundle only (`polyval.a` / `polyval-gcmsiv.a`) | `src/tables.s` | algorithm-specific (flagged for future audit) | Standard FIPS-197 AES S-box, read once per byte in every `SubBytes` step of `aes_encrypt_block` / key expansion. Hot-loop-read. Not currently a §8.x candidate because no other current adopter (`c64-nist-curves`, `c64-x25519`, `c64-ChaCha20-Poly1305`) implements AES — but this is the byte-for-byte standard S-box, so if `c64-aes256-ecdsa` or another AES-consuming library joins the contract, this table (and `aes_inv_sbox` below) is the first candidate for a future §8.x promotion audit per the SPEC §8.0 "generalisation" trigger. |
+| `aes_inv_sbox` | 256 B | RODATA | AEAD bundle only (`polyval.a` / `polyval-gcmsiv.a`) | `src/tables.s` | algorithm-specific (flagged for future audit) | Inverse AES S-box, read once per byte in every `InvSubBytes` step of `aes_decrypt_block`. Same future-audit note as `aes_sbox`. |
+
+The Profile column tracks two independent axes (issue #23). The
+`polyval_*` tables vary by **profile** — their manifest rows are gated
+on `POLYVAL_PROFILE`, which the per-profile archive targets pin via
+recursive make. The AES tables vary by **archive membership**: they
+live in `src/tables.s`, a member of the AEAD bundle (`polyval.a` /
+`polyval-gcmsiv.a`, and the full-app / `lib-verify` links) but not of
+the POLYVAL-only archives (`polyval-long.a` / `polyval-short.a`).
+Profile cannot express that axis — `polyval-long.a` and
+`polyval-gcmsiv.a` are both built at `PROFILE=long` — so the
+`lib-polyval-{long,short}` targets pass `-D LIB_POLYVAL_NO_AES=1`,
+which suppresses the two AES rows in `src/lib_manifest.s`. A manifest
+must never describe tables its archive does not ship (same defect
+class as [c64-lib-contract#62](https://github.com/JC-000/c64-lib-contract/issues/62)).
 
 ## Below the floor (exempt, not enumerated)
 
