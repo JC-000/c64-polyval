@@ -20,8 +20,9 @@ Companion docs (read alongside this file):
 
 ## c64-lib-contract adoption (current as of v0.5.0)
 This library implements the [c64-lib-contract](https://github.com/JC-000/c64-lib-contract),
-currently at SPEC v0.7.3 (v0.7.1–v0.7.3 are doc-only — the normative surface
-is v0.7.0's). §1–§6 (v0.1.0 baseline) shipped in v0.3.0; §8.0 (precalc-table
+currently at SPEC v0.7.4 (normative surface: v0.7.0's prefixed exports plus
+v0.7.4's `: abs` pin on the macro's `_REGION`/`_SHARED` exports; v0.7.1–v0.7.3
+are doc-only). §1–§6 (v0.1.0 baseline) shipped in v0.3.0; §8.0 (precalc-table
 catch-loop, applies to every adopter regardless of §8.1–§8.3 applicability)
 shipped in v0.4.0; the v0.7.0 prefixed-export surface (§1 `LIB_POLYVAL_VERSION_*`,
 §8.4 `LIB_POLYVAL_PRECALC_*`, bare forms gated on `LIB_NO_BARE_EXPORTS`)
