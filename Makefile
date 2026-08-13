@@ -81,6 +81,20 @@ endif
 # and `.include "include/zp.inc"` against the flat src/ layout.
 CA65FLAGS = -I $(SRC_DIR) -D POLYVAL_PROFILE=$(PROFILE_VAL) -g
 
+# --- Archive-membership gating (issue #23) --------------------------------
+# The POLYVAL-only archives ship no tables.o, so their lib_manifest.o must
+# not enumerate the AES S-box tables (§8.0 catch-loop accuracy). This is a
+# different axis from POLYVAL_PROFILE — polyval-long.a and polyval-gcmsiv.a
+# are both PROFILE=long; only archive membership differs — so it gets its
+# own define. Set by the lib-polyval-{long,short} recursive invocations.
+# Like the profile define, lib_manifest.o content depends on it without a
+# tracked dependency: `make clean` between differently-gated targets (the
+# recursive targets already do).
+POLYVAL_NO_AES ?=
+ifneq ($(POLYVAL_NO_AES),)
+  CA65FLAGS += -D LIB_POLYVAL_NO_AES=1
+endif
+
 # --- Module ordering ------------------------------------------------------
 # Order matters for ld65 segment layout. Recovered from the old
 # ca65/Makefile: APP_MODULES come first, then library modules, then the
@@ -209,11 +223,11 @@ $(LIB_DIR)/polyval-gcmsiv.a: $(LIB_AEAD_OBJS) | $(LIB_DIR)
 # profile or against a stale POLYVAL_PROFILE_OBJ set).
 lib-polyval-long:
 	$(MAKE) clean
-	$(MAKE) POLYVAL_PROFILE=long $(LIB_DIR)/polyval-long.a
+	$(MAKE) POLYVAL_PROFILE=long POLYVAL_NO_AES=1 $(LIB_DIR)/polyval-long.a
 
 lib-polyval-short:
 	$(MAKE) clean
-	$(MAKE) POLYVAL_PROFILE=short $(LIB_DIR)/polyval-short.a
+	$(MAKE) POLYVAL_PROFILE=short POLYVAL_NO_AES=1 $(LIB_DIR)/polyval-short.a
 
 $(LIB_DIR)/polyval-long.a: $(LIB_POLYVAL_LONG_OBJS) | $(LIB_DIR)
 	rm -f $@

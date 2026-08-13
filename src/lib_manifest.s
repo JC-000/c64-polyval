@@ -234,8 +234,19 @@ LIB_PRECALC_TABLE "polyval_htable8",  4096, PRECALC_REGION_RAM, PRECALC_SHARED_N
 LIB_PRECALC_TABLE "polyval_reduce8",  4096, PRECALC_REGION_RAM, PRECALC_SHARED_NO, "POLYVAL"
 .endif
 
+; aes_sbox / aes_inv_sbox live in src/tables.s, which is a member of
+; the AEAD archives (polyval.a / polyval-gcmsiv.a) and the full-app /
+; lib-verify links only. The POLYVAL-only archives (polyval-long.a /
+; polyval-short.a) omit tables.o, so their manifests must not describe
+; 512 B of tables they do not ship (issue #23; same defect class as
+; c64-lib-contract#62). Archive membership is an axis POLYVAL_PROFILE
+; cannot express -- polyval-long.a and polyval-gcmsiv.a are both built
+; at PROFILE=long -- so the lib-polyval-{long,short} Makefile targets
+; pass -D LIB_POLYVAL_NO_AES=1 to suppress these two rows.
+.ifndef LIB_POLYVAL_NO_AES
 LIB_PRECALC_TABLE "aes_sbox",     256, PRECALC_REGION_RODATA, PRECALC_SHARED_NO, "POLYVAL"
 LIB_PRECALC_TABLE "aes_inv_sbox", 256, PRECALC_REGION_RODATA, PRECALC_SHARED_NO, "POLYVAL"
+.endif
 
 
 ; --- Exports ---
