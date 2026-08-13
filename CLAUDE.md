@@ -15,15 +15,18 @@ Companion docs (read alongside this file):
 - `API.md` — library API reference; §3 (profile selection), §4 (ZP layout),
   §7–§8 (consumer integration), §9 (c64-lib-contract surface) are load-bearing.
 - `CHANGELOG.md` — release history.
-- `docs/RELEASE_NOTES_v0.4.1.md` — current release attestation (size + SHA256).
+- `docs/RELEASE_NOTES_v0.5.0.md` — current release attestation (size + SHA256).
 - `docs/precalc-tables.md` — c64-lib-contract §8.0 precalc-table enumeration.
 
-## c64-lib-contract adoption (current as of v0.4.1)
+## c64-lib-contract adoption (current as of v0.5.0)
 This library implements the [c64-lib-contract](https://github.com/JC-000/c64-lib-contract),
-currently at SPEC v0.4.1 (v0.4.1 is doc-only — the normative surface is
-unchanged from SPEC v0.4.0). §1–§6 (v0.1.0 baseline) shipped in v0.3.0; §8.0
-(precalc-table catch-loop, applies to every adopter regardless of §8.1–§8.3
-applicability) shipped in v0.4.0:
+currently at SPEC v0.7.3 (v0.7.1–v0.7.3 are doc-only — the normative surface
+is v0.7.0's). §1–§6 (v0.1.0 baseline) shipped in v0.3.0; §8.0 (precalc-table
+catch-loop, applies to every adopter regardless of §8.1–§8.3 applicability)
+shipped in v0.4.0; the v0.7.0 prefixed-export surface (§1 `LIB_POLYVAL_VERSION_*`,
+§8.4 `LIB_POLYVAL_PRECALC_*`, bare forms gated on `LIB_NO_BARE_EXPORTS`)
+plus per-archive manifest accuracy (`POLYVAL_NO_AES`) shipped in v0.5.0
+(issues #21–#23, PRs #24–#26):
 - §1 `LIB_POLYVAL_VERSION_*` + `LIB_POLYVAL_ABI_VERSION` (v0.7.0
   prefixed form; deprecated bare `LIB_VERSION_*` aliases gated on
   `LIB_NO_BARE_EXPORTS`) — `src/lib_version.s`
@@ -68,7 +71,7 @@ make lib-polyval-short                # build/lib/polyval-short.a (SHORT only)
 make lib-polyval-gcmsiv               # build/lib/polyval-gcmsiv.a (full AEAD bundle)
 make lib-verify                       # library-only verification PRG at $4000 (pre-v0.3.0 `make lib`)
 make consumer-check                   # link test/consumer_stub.s against the library
-make dist VERSION=v0.4.1              # reproducible source-tarball release
+make dist VERSION=v0.5.0              # reproducible source-tarball release
 ```
 Assembler: ca65/ld65/ar65 (cc65 toolchain). Single canonical toolchain as of
 v0.2.0 — ACME support was retired. `src/` is flat (no `lib/` subdir); ld65
@@ -135,7 +138,7 @@ chasing bugs that don't exist in their code or in VICE.
 
 This rule applies to all Claude sessions in this multi-project workspace.
 
-## Layout (v0.4.1)
+## Layout (v0.5.0)
 ```
 src/
   lib_version.s          # §1: LIB_VERSION_*/LIB_ABI_VERSION

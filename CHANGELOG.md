@@ -9,6 +9,68 @@ Releases: https://github.com/JC-000/c64-polyval/releases — tagged releases
 track `MAJOR.MINOR.PATCH` and are the supported consumption points for
 downstream projects (see `API.md` §8 for the integration contract).
 
+## v0.5.0 — 2026-08-13
+
+Adopts the [c64-lib-contract](https://github.com/JC-000/c64-lib-contract)
+v0.7.0 prefixed-export surface (§1 + §8.4, contract at SPEC v0.7.3 at
+release time) and fixes a §8.0 manifest-accuracy defect in the
+POLYVAL-only archives. This is a v0.x **MINOR** bump: new exported
+symbols, no removals or renames, `LIB_POLYVAL_ABI_VERSION` stays 1.
+Linked PRG output is byte-identical to v0.4.1 on both profiles —
+every change is equate-, export-, gating-, or docs-level.
+
+### Added
+
+- §1 prefixed version exports
+  ([#21](https://github.com/JC-000/c64-polyval/issues/21), via
+  [PR #26](https://github.com/JC-000/c64-polyval/pull/26)):
+  `src/lib_version.s` now exports `LIB_POLYVAL_VERSION_{MAJOR,MINOR,PATCH}`
+  and `LIB_POLYVAL_ABI_VERSION` as the permanent, collision-free form.
+  The deprecated bare `LIB_VERSION_*` / `LIB_ABI_VERSION` names remain
+  exported by default (required through contract v0.x, removed at
+  v1.0), are gated on `LIB_NO_BARE_EXPORTS`, and alias the prefixed
+  literals so the two forms cannot drift. `test/consumer_stub.s`
+  imports both forms, so `make consumer-check` guards the full set.
+- §8.4 prefixed precalc-table exports
+  ([#22](https://github.com/JC-000/c64-polyval/issues/22), via
+  [PR #24](https://github.com/JC-000/c64-polyval/pull/24)):
+  `src/precalc_table.inc` re-copied byte-for-byte from the contract
+  root (SHA256-verified); all five `LIB_PRECALC_TABLE` call sites pass
+  `"POLYVAL"` as the fifth argument, emitting
+  `LIB_POLYVAL_PRECALC_<name>_{SIZE,REGION,SHARED}` alongside the
+  bare triple (same `LIB_NO_BARE_EXPORTS` gating). Table names stay
+  unprefixed per SPEC §8.1. Audit greps move from `LIB_PRECALC_` to
+  `_PRECALC_`.
+- Makefile `POLYVAL_NO_AES=1` knob (passes `-D LIB_POLYVAL_NO_AES=1`),
+  set automatically by the `lib-polyval-{long,short}` targets.
+
+### Fixed
+
+- §8.0 manifest accuracy
+  ([#23](https://github.com/JC-000/c64-polyval/issues/23), via
+  [PR #25](https://github.com/JC-000/c64-polyval/pull/25)):
+  `polyval-long.a` / `polyval-short.a` no longer export
+  `LIB_*PRECALC_aes_sbox_*` / `_aes_inv_sbox_*` equates describing
+  512 B of AES tables those archives do not contain (`tables.s` is a
+  member of the AEAD bundle only). The AES rows are gated on
+  `LIB_POLYVAL_NO_AES` — archive membership is an axis
+  `POLYVAL_PROFILE` cannot express, since `polyval-long.a` and
+  `polyval-gcmsiv.a` are both PROFILE=long. Verified by `ar65 x` +
+  `od65 --dump-exports` on every archive's extracted manifest member.
+- API.md §9.1 value table had said `LIB_VERSION_PATCH` = 0 since the
+  v0.4.1 release bumped the export to 1 — the §9.1 drift class hitting
+  the docs side this time. The release checklist now covers the table.
+
+### Changed
+
+- `src/lib_version.s`: `LIB_POLYVAL_VERSION_MINOR` 4 → 5,
+  `LIB_POLYVAL_VERSION_PATCH` 1 → 0 (bare aliases follow), with the
+  matching `VERSION` bump.
+- Docs currency: contract references bumped to SPEC v0.7.3 across
+  README / API.md §9 / CLAUDE.md; `docs/precalc-tables.md` and
+  API.md §9.6 now state which archives carry each table and the
+  od65-reads-objects-not-archives audit caveat.
+
 ## v0.4.1 — 2026-07-28
 
 Docs-only **PATCH** release: rolls up the issue-#19 turbo-scaling

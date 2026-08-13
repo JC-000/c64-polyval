@@ -41,7 +41,7 @@ make lib                          # build/lib/polyval.a (full ar65 archive)
 make lib-verify                   # library-only verification link (pre-v0.3.0 `make lib`)
 make consumer-check               # assemble + link test/consumer_stub.s
 make run                          # build then launch in VICE
-make dist VERSION=v0.4.1          # reproducible source tarball
+make dist VERSION=v0.5.0          # reproducible source tarball
 make clean                        # rm -rf build/
 ```
 
@@ -74,7 +74,7 @@ python3 tools/polyval_reference.py        # Python reference self-test (no VICE)
 ## Library contract
 
 c64-polyval implements [c64-lib-contract](https://github.com/JC-000/c64-lib-contract)
-(currently at SPEC v0.4.1) — see the
+(currently at SPEC v0.7.3) — see the
 [SPEC](https://github.com/JC-000/c64-lib-contract/blob/main/SPEC.md)
 and the
 [adopters table](https://github.com/JC-000/c64-lib-contract/blob/main/adopters.md).
@@ -101,10 +101,13 @@ shared 8×8 quarter-square-multiply surface are covered:
 - §8 (shared primitives, §8.1–§8.3) — N/A; GF(2^128) carry-less
   multiplication shares no shape with the 8×8 quarter-square-multiply
   primitive the elliptic-curve / ChaCha20 libraries converged on.
-- §8.0 — precalculated-table enumeration (required of every adopter
-  regardless of §8.1–§8.3 applicability): `src/precalc_table.inc` +
-  `LIB_PRECALC_TABLE` invocations in `src/lib_manifest.s`, documented
-  in [`docs/precalc-tables.md`](docs/precalc-tables.md).
+- §8.0/§8.4 — precalculated-table enumeration (required of every
+  adopter regardless of §8.1–§8.3 applicability): `src/precalc_table.inc`
+  + `LIB_PRECALC_TABLE` invocations in `src/lib_manifest.s` with the
+  v0.7.0 `"POLYVAL"` prefix argument, documented in
+  [`docs/precalc-tables.md`](docs/precalc-tables.md). Manifest rows are
+  gated so each §6 archive enumerates only the tables it actually
+  ships.
 
 See `API.md` §9 for the consumer-facing symbol surface and a worked
 import example.

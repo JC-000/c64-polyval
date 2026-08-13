@@ -539,7 +539,7 @@ use v0.2.0's source-tarball + `src/exports.inc` integration path
 instead. The v0.1.0 tree is kept only for reproducibility of the
 prior release.
 
-## 9. Library contract (c64-lib-contract v0.4.1)
+## 9. Library contract (c64-lib-contract v0.7.3)
 
 As of v0.3.0, c64-polyval implements
 [c64-lib-contract](https://github.com/JC-000/c64-lib-contract)
@@ -550,10 +550,16 @@ and collision-check its dependencies at assemble time. Six SPEC
 sections apply to c64-polyval; §3 (REU bank claims) is N/A because
 the library makes no 17xx REU claims.
 
-The contract has since advanced to v0.4.1 (v0.4.1 itself is doc-only
-— no symbol, macro, section, or build-target semantics changed from
-v0.4.0). §7 (Semver expectations)
-is a doc-only renumbering with no export surface — no action needed.
+The contract has since advanced to v0.7.3. c64-polyval v0.5.0 adopts
+the v0.7.0 surface: library-prefixed §1 version exports and §8.4
+precalc-table equates (`LIB_POLYVAL_*` forms alongside the deprecated
+bare names, the latter gated on `LIB_NO_BARE_EXPORTS` until contract
+v1.0 removes them) — see §9.1 and §9.6. Contract v0.7.1–v0.7.3 are
+doc-only upstream (flag spelling, `od65`-vs-archive audit guidance,
+§8 bit-constant export prohibition — the last is N/A here since no
+`LIB_POLYVAL_SHARED_PRIMITIVES` mask is emitted). §7 (Semver
+expectations) is a doc-only renumbering with no export surface — no
+action needed.
 §8 (Shared primitives: `sqtab`, `reu_mul`, `ct_mul_8x8`) covers the
 8×8 quarter-square-multiply primitive shared by the elliptic-curve
 and ChaCha20 field-arithmetic libraries; GF(2^128) carry-less
@@ -570,8 +576,8 @@ v0.7.0:
 | Symbol (prefixed, permanent) | Deprecated bare alias | Value | Meaning |
 |---|---|---:|---|
 | `LIB_POLYVAL_VERSION_MAJOR` | `LIB_VERSION_MAJOR` | `0` | Semver major. |
-| `LIB_POLYVAL_VERSION_MINOR` | `LIB_VERSION_MINOR` | `4` | Semver minor. |
-| `LIB_POLYVAL_VERSION_PATCH` | `LIB_VERSION_PATCH` | `1` | Semver patch. |
+| `LIB_POLYVAL_VERSION_MINOR` | `LIB_VERSION_MINOR` | `5` | Semver minor. |
+| `LIB_POLYVAL_VERSION_PATCH` | `LIB_VERSION_PATCH` | `0` | Semver patch. |
 | `LIB_POLYVAL_ABI_VERSION`   | `LIB_ABI_VERSION`   | `1` | ABI compatibility level. Coarser than MINOR. |
 
 The bare names are identical across every contract adopter, so a
