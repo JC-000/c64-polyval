@@ -9,6 +9,26 @@ Releases: https://github.com/JC-000/c64-polyval/releases — tagged releases
 track `MAJOR.MINOR.PATCH` and are the supported consumption points for
 downstream projects (see `API.md` §8 for the integration contract).
 
+## Unreleased
+
+### Added
+
+- c64-lib-contract v0.8.0 §4 segment-placement declarations
+  (contract [#63](https://github.com/JC-000/c64-lib-contract/issues/63)):
+  load-bearing cfg attributes are now declared as comments on the
+  segment lines of `src/c64.cfg` and `src/lib_only.cfg` — `type = ro`
+  on `LIB_POLYVAL_AES_RODATA` (correctness: 522 initialised S-box/rcon
+  bytes are dropped under `type = bss`; ld65 warns but links) and
+  `align = $100` on `LIB_POLYVAL_HTABLE` /
+  `LIB_POLYVAL_LONG_HTABLE8` / `LIB_POLYVAL_LONG_REDUCE8`
+  (performance-only, and declared as such — the library is not
+  constant-time, API.md §6; dropping the attribute is fully silent
+  since `src/data.s` carries no `.align`). New API.md §9.8 documents
+  the declarations and the segments deliberately left undeclared;
+  README §4 bullet, API.md §9 currency paragraph (v0.7.5 + v0.8.0),
+  and CLAUDE.md updated. Docs and cfg comments only — linked PRG
+  output is byte-identical on both profiles.
+
 ## v0.5.0 — 2026-08-13
 
 Adopts the [c64-lib-contract](https://github.com/JC-000/c64-lib-contract)
