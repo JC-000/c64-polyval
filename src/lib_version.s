@@ -6,13 +6,13 @@
 ;
 ; Consumers import these for link-time compatibility checks. An
 ; .import'ed symbol's value is not known until link, so gate with
-; .assert (ld65 evaluates non-constant assertions at link time), never
+; .assert using the lderror action (evaluated by ld65 at link time), never
 ; with .if/.error — that fails to assemble with "Constant expression
 ; expected" (c64-lib-contract issue #73):
 ;
 ;   .import LIB_POLYVAL_VERSION_MAJOR, LIB_POLYVAL_VERSION_MINOR
-;   .assert LIB_POLYVAL_VERSION_MAJOR = 0, error, "c64-polyval 0.x required"
-;   .assert LIB_POLYVAL_VERSION_MINOR >= 4, error, "v0.4 or newer required"
+;   .assert LIB_POLYVAL_VERSION_MAJOR = 0, lderror, "c64-polyval 0.x required"
+;   .assert LIB_POLYVAL_VERSION_MINOR >= 4, lderror, "v0.4 or newer required"
 ;
 ; Versioning policy: semver 2.0.0 - https://semver.org/
 ;   MAJOR             - incompatible API changes (symbol removals,

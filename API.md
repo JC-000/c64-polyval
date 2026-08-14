@@ -737,9 +737,9 @@ manifest equates and routines it needs:
 ; --- §1: ABI version gate (v0.7.0 prefixed form) ---
 .import LIB_POLYVAL_VERSION_MAJOR, LIB_POLYVAL_VERSION_MINOR
 .import LIB_POLYVAL_ABI_VERSION
-.assert LIB_POLYVAL_ABI_VERSION = 1, error, "c64-polyval ABI mismatch"
-.assert LIB_POLYVAL_VERSION_MAJOR = 0 .and LIB_POLYVAL_VERSION_MINOR >= 4, \
-    error, "c64-polyval v0.4 or newer required"
+.assert LIB_POLYVAL_ABI_VERSION = 1, lderror, "c64-polyval exported-surface generation changed"
+.assert LIB_POLYVAL_VERSION_MAJOR = 0, lderror, "c64-polyval 0.x required"
+.assert LIB_POLYVAL_VERSION_MINOR >= 4, lderror, "v0.4 or newer required"
 
 ; --- §2: ZP slots actually used by this consumer ---
 .importzp polyval_acc, pv_mul_input, pv_mul_nibble
@@ -748,8 +748,8 @@ manifest equates and routines it needs:
 ; --- §5: assemble-time size check against the consumer's link budget ---
 .import LIB_POLYVAL_ZP_USAGE_BYTES
 .import LIB_POLYVAL_RESIDENT_BYTES
-.assert LIB_POLYVAL_ZP_USAGE_BYTES <= 64, error, "ZP budget overrun"
-.assert LIB_POLYVAL_RESIDENT_BYTES <= 8192, error, "code budget overrun"
+.assert LIB_POLYVAL_ZP_USAGE_BYTES <= 64, lderror, "ZP budget overrun"
+.assert LIB_POLYVAL_RESIDENT_BYTES <= 8192, lderror, "code budget overrun"
 
 ; --- Routines + buffers (unchanged from v0.2.0) ---
 .import polyval_init, polyval_precompute_table, polyval_update
