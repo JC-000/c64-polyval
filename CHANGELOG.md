@@ -11,6 +11,23 @@ downstream projects (see `API.md` §8 for the integration contract).
 
 ## Unreleased
 
+### Removed
+
+- The bare `zp_dummy` `.exportzp` in `src/zp.s` (with its orphaned
+  `.globalzp` template line in `src/include/zp.inc`), per the
+  c64-lib-contract [#76](https://github.com/JC-000/c64-lib-contract/issues/76)
+  R2 ruling and the [#83](https://github.com/JC-000/c64-lib-contract/issues/83)
+  bare-`zp_*`-name collision class. It was a pre-contract porting
+  placeholder: app-layer only (`zp.o` is in `APP_MODULES`, never a
+  member of any §6 archive), imported by nothing, and not part of the
+  §2 surface or the `LIB_POLYVAL_ZP_USAGE_BYTES` sum — so no consumer
+  export surface shrinks and no ABI-counter implication. The
+  `ZEROPAGE` placeholder byte itself remains (unexported), and
+  `zp.inc` now shows the prefixed-name pattern instead of a live
+  declaration. Exported-vs-summed ZP audit (per the #76 R2
+  all-adopters action): 13 exported slots, all `polyval_`/`pv_`
+  prefixed, widths sum 45 = `LIB_POLYVAL_ZP_USAGE_BYTES`.
+
 ### Documentation
 
 - Contract-currency refresh to SPEC v0.8.3: v0.8.2 is the upstream
