@@ -11,6 +11,19 @@ downstream projects (see `API.md` §8 for the integration contract).
 
 ## Unreleased
 
+### Documentation
+
+- Contract-currency refresh to SPEC v0.8.3: v0.8.2 is the upstream
+  spec-tagging policy (issue #71), v0.8.3 corrects §4's measured risk
+  table per adopter reports (contract
+  [#78](https://github.com/JC-000/c64-lib-contract/issues/78) — this
+  library's §9.8/cfg measurements were part of the record). The cfg
+  annotations and API.md §9.8 now state the corrected semantics: both
+  ld65 diagnostics are shape-conditional (the align warning needs a
+  source-level `.align`; the bss warning keys on byte value), and the
+  `type = bss` mutation additionally displaces everything after the
+  hole in `c64.cfg`, where file-emitting `DATA` follows the segment.
+
 ### Added
 
 - c64-lib-contract v0.8.0 §4 segment-placement declarations

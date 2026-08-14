@@ -539,7 +539,7 @@ use v0.2.0's source-tarball + `src/exports.inc` integration path
 instead. The v0.1.0 tree is kept only for reproducibility of the
 prior release.
 
-## 9. Library contract (c64-lib-contract v0.8.1)
+## 9. Library contract (c64-lib-contract v0.8.3)
 
 As of v0.3.0, c64-polyval implements
 [c64-lib-contract](https://github.com/JC-000/c64-lib-contract)
@@ -550,7 +550,7 @@ and collision-check its dependencies at assemble time. Six SPEC
 sections apply to c64-polyval; §3 (REU bank claims) is N/A because
 the library makes no 17xx REU claims.
 
-The contract has since advanced to v0.8.1. c64-polyval v0.5.0 adopts
+The contract has since advanced to v0.8.3. c64-polyval v0.5.0 adopts
 the v0.7.0 surface: library-prefixed §1 version exports and §8.4
 precalc-table equates (`LIB_POLYVAL_*` forms alongside the deprecated
 bare names, the latter gated on `LIB_NO_BARE_EXPORTS` until contract
@@ -573,7 +573,13 @@ here as comments on the segment lines of `src/c64.cfg` /
 `src/lib_only.cfg` — see §9.8. Contract v0.8.1 is doc-only: it fixes
 the SPEC's own §1 consumer version-guard snippets (issues #73/#74),
 canonicalizing the `.assert`/`lderror` form this library's §9.7
-example and `src/lib_version.s` comment already use.
+example and `src/lib_version.s` comment already use. Contract v0.8.2
+(doc-only) adds the spec-tagging policy — every spec version is now
+tagged (issue #71). Contract v0.8.3 (doc-only) corrects §4's own
+risk table after adopter reports (contract #78; this library's §9.8
+measurements are part of that record): both ld65 diagnostics are
+conditional on library shape, not on the violation, and the common
+shapes are the silent ones.
 §8 (Shared primitives: `sqtab`, `reu_mul`, `ct_mul_8x8`) covers the
 8×8 quarter-square-multiply primitive shared by the elliptic-curve
 and ChaCha20 field-arithmetic libraries; GF(2^128) carry-less
@@ -791,7 +797,7 @@ preserve them. c64-polyval declares, identically in both cfgs:
 
 | Segment | Attribute | Class | Consequence if dropped |
 |---|---|---|---|
-| `LIB_POLYVAL_AES_RODATA` | `type = ro` in a file-emitting area | correctness | 522 initialised bytes (`aes_sbox`, `aes_inv_sbox`, `aes_rcon`) vanish from the image; AES reads power-on garbage. ld65 V2.18 warns but links exit-0. |
+| `LIB_POLYVAL_AES_RODATA` | `type = ro` in a file-emitting area | correctness | 522 initialised bytes (`aes_sbox`, `aes_inv_sbox`, `aes_rcon`) vanish; AES reads power-on garbage, and in `c64.cfg` (where file-emitting `DATA` follows) everything after the hole loads 522 bytes low. ld65 V2.18 warns — only because the bytes are non-zero (SPEC v0.8.3) — and links exit-0. |
 | `LIB_POLYVAL_HTABLE` | `align = $100` | performance | hot-loop `abs,y` reads cross a page for some indices (+1 cycle); documented cycle counts (§2.1, §3) no longer hold. ld65 V2.18 emits **no diagnostic**. |
 | `LIB_POLYVAL_LONG_HTABLE8` | `align = $100` | performance | same — every 256-byte slice inherits the segment's misalignment. Silent. |
 | `LIB_POLYVAL_LONG_REDUCE8` | `align = $100` | performance | same. Silent. |
@@ -805,12 +811,16 @@ place (§6, item 11), so a page-cross cycle is a benchmark deviation,
 not a new leak class. They are declared anyway because the cfgs'
 existing comments already promise the alignment, the §3/§9.4
 cycle-count documentation depends on it, and the failure is the
-silent kind. Second, the align dropout is *more* silent here than
-the SPEC's measured ChaCha20-Poly1305 case: the alignment exists
-only in the cfg (`src/data.s` reserves with `.res`, no `.align`
-directive), so ld65 has nothing to check the placement against and
-prints nothing at all — not even the misalignment warning SPEC §4
-cites.
+silent kind. Second, the align dropout is completely silent: the
+alignment exists only in the cfg (`src/data.s` reserves with `.res`,
+no `.align` directive), so ld65 has no source-side request to check
+and prints nothing at all. SPEC v0.8.3 corrected §4's risk table to
+document exactly this shape — reported from c64-nist-curves'
+adoption and corroborated with this library's measurements on
+contract [#78](https://github.com/JC-000/c64-lib-contract/issues/78):
+the §4 warning fires only against a source-level `.align`, and the
+`bss` warning keys on byte value, so the common library shapes are
+the silent ones.
 
 Not declared: the `LIB_POLYVAL_*_CODE` segments and `ZEROPAGE` /
 `STARTUP` / `LOADADDR` (no non-obvious placement sensitivity; ZP is

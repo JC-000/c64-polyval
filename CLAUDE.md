@@ -20,9 +20,10 @@ Companion docs (read alongside this file):
 
 ## c64-lib-contract adoption (current as of v0.5.0)
 This library implements the [c64-lib-contract](https://github.com/JC-000/c64-lib-contract),
-currently at SPEC v0.8.1 (normative surface: v0.7.0's prefixed exports,
+currently at SPEC v0.8.3 (normative surface: v0.7.0's prefixed exports,
 v0.7.4's `: abs` pin on the macro's `_REGION`/`_SHARED` exports, and v0.8.0's
-§4 segment-placement declarations; v0.7.1–v0.7.3, v0.7.5, and v0.8.1 are doc-only —
+§4 segment-placement declarations; v0.7.1–v0.7.3, v0.7.5, and v0.8.1–v0.8.3
+are doc-only —
 the latter's ABI-generation-counter clarification matches what polyval
 already ships, `LIB_POLYVAL_ABI_VERSION = 1`). §1–§6 (v0.1.0 baseline) shipped in v0.3.0; §8.0 (precalc-table
 catch-loop, applies to every adopter regardless of §8.1–§8.3 applicability)
