@@ -74,7 +74,7 @@ python3 tools/polyval_reference.py        # Python reference self-test (no VICE)
 ## Library contract
 
 c64-polyval implements [c64-lib-contract](https://github.com/JC-000/c64-lib-contract)
-(currently at SPEC v0.8.1) — see the
+(currently at SPEC v0.8.3) — see the
 [SPEC](https://github.com/JC-000/c64-lib-contract/blob/main/SPEC.md)
 and the
 [adopters table](https://github.com/JC-000/c64-lib-contract/blob/main/adopters.md).
