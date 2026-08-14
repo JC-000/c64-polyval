@@ -74,7 +74,7 @@ python3 tools/polyval_reference.py        # Python reference self-test (no VICE)
 ## Library contract
 
 c64-polyval implements [c64-lib-contract](https://github.com/JC-000/c64-lib-contract)
-(currently at SPEC v0.7.4) — see the
+(currently at SPEC v0.8.0) — see the
 [SPEC](https://github.com/JC-000/c64-lib-contract/blob/main/SPEC.md)
 and the
 [adopters table](https://github.com/JC-000/c64-lib-contract/blob/main/adopters.md).
@@ -91,7 +91,13 @@ shared 8×8 quarter-square-multiply surface are covered:
 - §3 — N/A; c64-polyval makes no REU claims
   (`LIB_POLYVAL_REU_BANKS_USED = 0`).
 - §4 — library `.segment` directives use the `LIB_POLYVAL_*`
-  prefix; consumer ld65 configs can map them anywhere.
+  prefix; consumer ld65 configs can map them anywhere. Load-bearing
+  placement attributes (SPEC v0.8.0) are declared as comments on the
+  segment lines of `src/c64.cfg` / `src/lib_only.cfg`: `type = ro`
+  on `LIB_POLYVAL_AES_RODATA` is correctness-critical (522
+  initialised S-box/rcon bytes), `align = $100` on the three
+  runtime-filled table segments is performance-only — see `API.md`
+  §9.8.
 - §5 — aggregate manifest equates (`LIB_POLYVAL_ZP_USAGE_BYTES`,
   `LIB_POLYVAL_RESIDENT_BYTES`, `LIB_POLYVAL_COLD_BYTES`,
   `LIB_POLYVAL_REU_BANKS_USED`) in `src/lib_manifest.s`.

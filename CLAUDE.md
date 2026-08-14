@@ -20,9 +20,11 @@ Companion docs (read alongside this file):
 
 ## c64-lib-contract adoption (current as of v0.5.0)
 This library implements the [c64-lib-contract](https://github.com/JC-000/c64-lib-contract),
-currently at SPEC v0.7.4 (normative surface: v0.7.0's prefixed exports plus
-v0.7.4's `: abs` pin on the macro's `_REGION`/`_SHARED` exports; v0.7.1–v0.7.3
-are doc-only). §1–§6 (v0.1.0 baseline) shipped in v0.3.0; §8.0 (precalc-table
+currently at SPEC v0.8.0 (normative surface: v0.7.0's prefixed exports,
+v0.7.4's `: abs` pin on the macro's `_REGION`/`_SHARED` exports, and v0.8.0's
+§4 segment-placement declarations; v0.7.1–v0.7.3 and v0.7.5 are doc-only —
+the latter's ABI-generation-counter clarification matches what polyval
+already ships, `LIB_POLYVAL_ABI_VERSION = 1`). §1–§6 (v0.1.0 baseline) shipped in v0.3.0; §8.0 (precalc-table
 catch-loop, applies to every adopter regardless of §8.1–§8.3 applicability)
 shipped in v0.4.0; the v0.7.0 prefixed-export surface (§1 `LIB_POLYVAL_VERSION_*`,
 §8.4 `LIB_POLYVAL_PRECALC_*`, bare forms gated on `LIB_NO_BARE_EXPORTS`)
@@ -41,6 +43,13 @@ plus per-archive manifest accuracy (`POLYVAL_NO_AES`) shipped in v0.5.0
 - §4 `LIB_POLYVAL_*` segment naming — every `src/*.s`; `src/c64.cfg` and
   `src/lib_only.cfg` SEGMENTS{} alias every prefixed segment back to MAIN
   so the standalone PRG layout is byte-identical to the pre-rename baseline
+- §4 placement declarations (v0.8.0) — load-bearing cfg attributes declared
+  as comments on the segment lines of both cfgs: `type = ro` on
+  `LIB_POLYVAL_AES_RODATA` (correctness — 522 initialised bytes silently
+  dropped under `type = bss`), `align = $100` on the three table segments
+  (performance-only, honestly labelled — the library is not CT, API.md §6;
+  ld65 emits no diagnostic when dropped since `data.s` has no `.align`) —
+  see API.md §9.8
 - §5 aggregate manifest equates (`LIB_POLYVAL_ZP_USAGE_BYTES`, `_REU_BANKS_USED`,
   `_RESIDENT_BYTES`, `_COLD_BYTES`) — `src/lib_manifest.s`, profile-conditional
 - §6 ar65 archive build targets — `make lib` / `lib-polyval-{long,short,gcmsiv}`
