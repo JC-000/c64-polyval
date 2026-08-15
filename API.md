@@ -539,7 +539,7 @@ use v0.2.0's source-tarball + `src/exports.inc` integration path
 instead. The v0.1.0 tree is kept only for reproducibility of the
 prior release.
 
-## 9. Library contract (c64-lib-contract v0.9.0)
+## 9. Library contract (c64-lib-contract v0.9.1)
 
 As of v0.3.0, c64-polyval implements
 [c64-lib-contract](https://github.com/JC-000/c64-lib-contract)
@@ -550,7 +550,12 @@ and collision-check its dependencies at assemble time. Six SPEC
 sections apply to c64-polyval; §3 (REU bank claims) is N/A because
 the library makes no 17xx REU claims.
 
-The contract has since advanced to v0.9.0. c64-polyval v0.5.0 adopts
+The contract has since advanced to v0.9.1 (a PATCH re-landing three
+review amendments the v0.9.0 merge missed and folding in adopter
+defect reports; its restated §6.2 ZP-scoping rule — slot defines
+reach every TU that defines the slot, never a TU that `.importzp`s
+it — cites this library's PR #34 as the measured evidence for the
+defining-TU direction). c64-polyval v0.5.0 adopts
 the v0.7.0 surface: library-prefixed §1 version exports and §8.4
 precalc-table equates (`LIB_POLYVAL_*` forms alongside the deprecated
 bare names, the latter gated on `LIB_NO_BARE_EXPORTS` until contract
@@ -611,7 +616,7 @@ v0.7.0:
 | Symbol (prefixed, permanent) | Deprecated bare alias | Value | Meaning |
 |---|---|---:|---|
 | `LIB_POLYVAL_VERSION_MAJOR` | `LIB_VERSION_MAJOR` | `0` | Semver major. |
-| `LIB_POLYVAL_VERSION_MINOR` | `LIB_VERSION_MINOR` | `5` | Semver minor. |
+| `LIB_POLYVAL_VERSION_MINOR` | `LIB_VERSION_MINOR` | `6` | Semver minor. |
 | `LIB_POLYVAL_VERSION_PATCH` | `LIB_VERSION_PATCH` | `0` | Semver patch. |
 | `LIB_POLYVAL_ABI_VERSION`   | `LIB_ABI_VERSION`   | `1` | ABI compatibility level. Coarser than MINOR. |
 

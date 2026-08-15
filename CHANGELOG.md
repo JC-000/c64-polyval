@@ -9,7 +9,17 @@ Releases: https://github.com/JC-000/c64-polyval/releases — tagged releases
 track `MAJOR.MINOR.PATCH` and are the supported consumption points for
 downstream projects (see `API.md` §8 for the integration contract).
 
-## Unreleased
+## v0.6.0 — 2026-08-14
+
+The c64-lib-contract v0.9.x alignment roll-up — polyval's re-tag in
+the [#76](https://github.com/JC-000/c64-lib-contract/issues/76)
+phase-3 coordinated adopter wave (gated on the upstream v0.9.0 tag).
+A v0.x **MINOR** bump: the §6.2 `CONTRACT_DEFINES` /
+`CONTRACT_ZP_DEFINES` make-variable surface is new; nothing exported
+by any archive was removed or renamed, so `LIB_POLYVAL_ABI_VERSION`
+stays 1. Linked PRG output remains byte-identical to v0.4.1 on both
+profiles — every change since is equate-, export-, gating-, cfg-, or
+docs-level.
 
 ### Removed
 
@@ -30,6 +40,18 @@ downstream projects (see `API.md` §8 for the integration contract).
 
 ### Documentation
 
+- Consumer version-guard snippets aligned with the canonical SPEC §1
+  `.assert`/`lderror` form (contract
+  [#73](https://github.com/JC-000/c64-lib-contract/issues/73), fixed
+  upstream in v0.8.1): `src/lib_version.s`'s header comment showed an
+  `.if`-on-imported-symbol gate that never assembled; API.md §9.7's
+  combined `.assert` used a `\` line continuation ca65 rejects
+  without `.linecont +`. Both snippets are now single-line `lderror`
+  asserts, compile-tested.
+- Contract-currency: SPEC v0.9.1 re-lands the §6.5 suppression-gate
+  and §2 registry-gate amendments the v0.9.0 merge missed, and its
+  restated §6.2 ZP-scoping rule cites this library's PR #34
+  measurements as the defining-TU-direction evidence.
 - Consumer ZP-override snippets fixed for two copied-snippet defect
   classes the contract catalogued (SPEC v0.7.1 and v0.8.6, which asked
   adopters to re-check): `src/zp_config.s`'s host-override comment
