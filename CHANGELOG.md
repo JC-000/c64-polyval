@@ -9,7 +9,24 @@ Releases: https://github.com/JC-000/c64-polyval/releases — tagged releases
 track `MAJOR.MINOR.PATCH` and are the supported consumption points for
 downstream projects (see `API.md` §8 for the integration contract).
 
-## Unreleased
+## v0.6.1 — 2026-08-15
+
+The contract v0.10.x alignment roll-up. A v0.x **PATCH** bump per this
+library's own policy (bugfix with no API change): the §6.6 footprint
+corrections change exported equate *values* only — no symbols added,
+removed, or renamed; `LIB_POLYVAL_ABI_VERSION` stays 1 — and the
+linked PRG remains byte-identical to v0.4.1 on both profiles.
+
+Footprint deltas per (profile × variant), declared values (SPEC §6.6
+obligation 2; actual code size is unchanged — these are declaration
+corrections, not growth):
+
+| Archive / configuration | RESIDENT | COLD |
+|---|---|---|
+| `polyval.a` / `polyval-gcmsiv.a` (LONG AEAD) | 6500 → 6656 (+156) | 1200 → 1280 (+80) |
+| `POLYVAL_PROFILE=short` link (SHORT AEAD) | 16000 → 16128 (+128) | 3000 → 3072 (+72) |
+| `polyval-long.a` (LONG, no AES) | 6500 → 4352 (−2148) | 1200 → 1280 (+80) |
+| `polyval-short.a` (SHORT, no AES) | 16000 → 13824 (−2176) | 3000 → 3072 (+72) |
 
 ### Documentation
 
