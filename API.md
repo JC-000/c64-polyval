@@ -539,7 +539,7 @@ use v0.2.0's source-tarball + `src/exports.inc` integration path
 instead. The v0.1.0 tree is kept only for reproducibility of the
 prior release.
 
-## 9. Library contract (c64-lib-contract v0.9.1)
+## 9. Library contract (c64-lib-contract v0.10.0)
 
 As of v0.3.0, c64-polyval implements
 [c64-lib-contract](https://github.com/JC-000/c64-lib-contract)
@@ -600,6 +600,20 @@ adds the §2 ZP prefix registry, in which **`polyval_` and `pv_` are
 registered to this library**; adopted in §9.2 and §9.5 below —
 `CONTRACT_DEFINES` / `CONTRACT_ZP_DEFINES` forwarding is the one
 code change, the rest of the chapter is verified conformant as-is.
+Contract v0.9.2 is doc-only upstream (a §2 registry row for
+`chacha20poly1305_`, two §8.2 clarifications, and an
+archive-inspection tooling note) — every item was already satisfied
+or N/A here; no action needed. Contract v0.10.0 is phase 2 of the
+contract-#76 restructuring: **§6.6 lands** (consumer footprint
+asserts against the per-archive §6.4 manifest — the library-side
+obligations are safe-direction round-up values and per-(profile ×
+variant) release-note deltas) and **§6.7 is added** (declared
+non-segment reservations). §6.6 is adopted in §9.4/§9.5 below —
+`LIB_POLYVAL_RESIDENT_BYTES` / `_COLD_BYTES` are now measured per
+archive and rounded UP to the next 256-byte boundary, replacing the
+pre-§6.6 rounded-DOWN, profile-only values; §6.7 is N/A (§9.5),
+since every c64-polyval buffer is segment-resident and the library
+places no §8.x equate-reserved region.
 §8 (Shared primitives: `sqtab`, `reu_mul`, `ct_mul_8x8`) covers the
 8×8 quarter-square-multiply primitive shared by the elliptic-curve
 and ChaCha20 field-arithmetic libraries; GF(2^128) carry-less
@@ -702,19 +716,42 @@ guarantees above.
 
 ### 9.4 §5 — Aggregate manifest (`src/lib_manifest.s`)
 
-Four absolute equates for assemble-time size and collision asserts:
+Four absolute equates for assemble-time size and collision asserts.
+`ZP_USAGE_BYTES` and `REU_BANKS_USED` are configuration-invariant:
 
-| Symbol | LONG profile | SHORT profile | Meaning |
-|---|---:|---:|---|
-| `LIB_POLYVAL_ZP_USAGE_BYTES` | 45 | 45 | Total ZP bytes claimed (§9.2). |
-| `LIB_POLYVAL_REU_BANKS_USED` | 0 | 0 | Bitmask of REU banks; always 0. |
-| `LIB_POLYVAL_RESIDENT_BYTES` | 6500 | 16000 | Approx code+rodata that must stay in CPU RAM at runtime (within ±5%). |
-| `LIB_POLYVAL_COLD_BYTES`     | 1200 | 3000  | Approx code+rodata for boot-only init paths (`aes_key_expansion`, `polyval_precompute_table`); a consumer MAY page-overlay these. |
+| Symbol | Value | Meaning |
+|---|---:|---|
+| `LIB_POLYVAL_ZP_USAGE_BYTES` | 45 | Total ZP bytes claimed (§9.2). |
+| `LIB_POLYVAL_REU_BANKS_USED` | 0 | Bitmask of REU banks; always 0. |
 
-The two profile-conditional values are picked at assemble time off
-the `POLYVAL_PROFILE` selector (§3 of this document). See
-`src/lib_manifest.s` for the derivation comments and measurement
-methodology.
+`RESIDENT_BYTES` and `COLD_BYTES` are **safe-direction** per SPEC
+v0.10.0 §6.6: each declared value is ≥ the measured code+rodata
+segment sum of the archive it ships in, rounded UP to the next
+256-byte boundary (the fleet convention — under one page of headroom
+absorbs incidental growth, and the equate moving is itself the
+signal that a consumer re-look is due). Because declared ≥ actual, a
+consumer's `declared ≤ budget` assert implies `actual ≤ budget`; the
+pre-§6.6 values rounded *down* (6567 → 6500 etc.), which broke
+exactly that implication. Both values are conditional on **both**
+configuration axes — `POLYVAL_PROFILE` *and* `LIB_POLYVAL_NO_AES` —
+so each archive's manifest describes that archive (SPEC §6.4/§6.6;
+previously they were profile-gated only, and the POLYVAL-only
+archives over-claimed ~2.3 KB of AES+GCM-SIV code they do not
+contain). Per-archive values (measured 2026-08-15, ca65/ld65 V2.18):
+
+| Archive | Configuration | `RESIDENT_BYTES` (measured) | `COLD_BYTES` (measured) |
+|---|---|---:|---:|
+| `polyval.a` / `polyval-gcmsiv.a` | LONG, full AEAD | 6656 (6567) | 1280 (1239) |
+| — (`make POLYVAL_PROFILE=short` link) | SHORT, full AEAD | 16128 (16021) | 3072 (3059) |
+| `polyval-long.a` | LONG, `LIB_POLYVAL_NO_AES` | 4352 (4160) | 1280 (1047) |
+| `polyval-short.a` | SHORT, `LIB_POLYVAL_NO_AES` | 13824 (13614) | 3072 (2867) |
+
+`COLD_BYTES` (boot-only init paths: `aes_key_expansion` where AES
+ships, plus `polyval_precompute_table`) is a subset carve-out of the
+`RESIDENT_BYTES` load image, reclaimable after init — the §6.6 pair
+semantics: budget RESIDENT for the image, get COLD back after init.
+See `src/lib_manifest.s` for the full derivation comments and the
+per-configuration measurement methodology.
 
 ### 9.5 §6 — Build and consume
 
@@ -798,9 +835,9 @@ same configuration as the archive it ships in — the
 recursively with `POLYVAL_PROFILE` and `POLYVAL_NO_AES` pinned, so no
 archive ever receives a manifest object assembled under another
 configuration; (2) every manifest row is gated on the same switches
-that gate what it describes — profile-conditional
-`LIB_POLYVAL_RESIDENT_BYTES` / `_COLD_BYTES` on `POLYVAL_PROFILE`,
-the §8.0 table rows on `POLYVAL_PROFILE` / `LIB_POLYVAL_NO_AES`
+that gate what it describes — `LIB_POLYVAL_RESIDENT_BYTES` /
+`_COLD_BYTES` on `POLYVAL_PROFILE` × `LIB_POLYVAL_NO_AES` (both axes
+since the §6.6 adoption; §9.4), the §8.0 table rows on the same pair
 (§9.6). Equate names stay per-library: the exported surface has no
 variant-mangled `LIB_POLYVAL_<VARIANT>_*` names — only the canonical
 §5 four plus the `LIB_POLYVAL_PRECALC_*` families — so §6.4's
@@ -813,6 +850,53 @@ actioned: archive **member** basenames (`lib_version.o`,
 cannot carry two names at once, so this cannot ride a dual-name
 window — it changes only at MAJOR, together with the `lib-verify`
 rename above.
+
+**§6.6 — Consumer footprint asserts (SPEC v0.10.0).** Adopted. The
+library-side obligations are met in `src/lib_manifest.s`:
+(1) `LIB_POLYVAL_RESIDENT_BYTES` / `LIB_POLYVAL_COLD_BYTES` are
+per-archive (§6.4 gating on `POLYVAL_PROFILE` ×
+`LIB_POLYVAL_NO_AES`) and safe-direction — each ≥ the measured
+segment sum of its archive, rounded UP to the next 256-byte
+boundary (the per-archive table in §9.4); (2) the two equates are
+documented as a pair (COLD is a reclaimable-after-init carve-out of
+the RESIDENT image), and release notes state footprint deltas per
+(profile × variant) — one tag carries four footprint pairs, so a
+single per-version delta would be meaningless. The RECOMMENDED
+consumer pattern, polyval-ized from the SPEC (one per linked
+archive, in the consumer's own build; `lderror` because the
+operands are imports; the consumer's memory area publishes its
+extent via `define = yes`):
+
+```asm
+; consumer side — one per linked c64-polyval archive
+.import LIB_POLYVAL_RESIDENT_BYTES
+.import LIB_POLYVAL_COLD_BYTES
+.import __MAIN_SIZE__                  ; cfg: MAIN: ... define = yes;
+.assert LIB_POLYVAL_RESIDENT_BYTES + LIB_POLYVAL_COLD_BYTES <= __MAIN_SIZE__, lderror, "c64-polyval declared footprint exceeds the MAIN budget"
+```
+
+(For c64-polyval COLD lies inside the RESIDENT span, so asserting
+`RESIDENT_BYTES` alone against the load-image budget is also sound;
+the summed form above is the SPEC's portable shape and stays correct
+for consumers overlaying COLD into a different region.) Because the
+declared values are safe-direction, `declared ≤ budget` implies
+`actual ≤ budget`, and a bump that moves a declared number past the
+budget fails the link with a named cause instead of an opaque
+segment overflow discovered mid-bisect.
+
+**§6.7 — Declared non-segment reservations (SPEC v0.10.0).** N/A —
+by construction, and in exactly the shape the clause's Rule 1
+prefers ("prefer a segment when nothing forces the equate"): every
+c64-polyval buffer and table is segment-resident (`.res` in the
+`LIB_POLYVAL_*` BSS/table segments of `src/data.s`), so ld65
+enforces non-overlap natively for all of them. The library places
+no §8.x placement equate reserving address space invisible to ld65
+(it consumes no §8.1–§8.3 shared primitive — see the §9 intro and
+§9.6), so there is no undeclared region to guard and the
+`__MAIN_LAST__` three-line guard TU is not required. If a future
+variant ever introduces an equate-reserved region (e.g. an
+REU-staging window), it must ship the §6.7 guard in a TU that is a
+member of no archive, with a non-weak import.
 
 ### 9.6 §8.0 — Precalculated-table enumeration (`src/lib_manifest.s`, `docs/precalc-tables.md`)
 

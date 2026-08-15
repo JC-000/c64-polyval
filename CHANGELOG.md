@@ -9,6 +9,50 @@ Releases: https://github.com/JC-000/c64-polyval/releases — tagged releases
 track `MAJOR.MINOR.PATCH` and are the supported consumption points for
 downstream projects (see `API.md` §8 for the integration contract).
 
+## Unreleased
+
+### Changed
+
+- **`LIB_POLYVAL_RESIDENT_BYTES` / `LIB_POLYVAL_COLD_BYTES` value
+  corrections** per c64-lib-contract SPEC v0.10.0
+  [§6.6](https://github.com/JC-000/c64-lib-contract/blob/main/SPEC.md)
+  (consumer footprint asserts, contract
+  [#69](https://github.com/JC-000/c64-lib-contract/issues/69) /
+  [#76](https://github.com/JC-000/c64-lib-contract/issues/76) phase 2).
+  Two defects fixed in `src/lib_manifest.s`:
+  1. *Unsafe rounding* — both equates rounded DOWN from measured
+     (6567 → 6500, 1239 → 1200 LONG; 16021 → 16000, 3059 → 3000
+     SHORT), so a consumer's `declared ≤ budget` assert could pass
+     while the actual footprint overran. §6.6 obligation 1: each
+     value must be ≥ the measured segment sum, rounded UP — fleet
+     convention next 256-byte boundary.
+  2. *Per-archive accuracy* — values were gated on `POLYVAL_PROFILE`
+     only, so `polyval-long.a` / `polyval-short.a` (built with
+     `-D LIB_POLYVAL_NO_AES=1`, containing no `tables.o` /
+     `aes_*.o` / `gcm_siv.o`) shipped manifests claiming ~2.3 KB of
+     AES+GCM-SIV code they do not contain (SPEC §6.4/§6.6; same
+     defect class as issue #23). Both equates now gate on
+     `POLYVAL_PROFILE` × `LIB_POLYVAL_NO_AES`.
+
+  Measured (lib_only.cfg link of each archive's exact member set,
+  ca65/ld65 V2.18) → declared:
+
+  | Configuration (archive) | RESIDENT | COLD |
+  |---|---:|---:|
+  | LONG AEAD (`polyval.a` / `polyval-gcmsiv.a`) | 6567 → 6656 | 1239 → 1280 |
+  | SHORT AEAD (`make POLYVAL_PROFILE=short` link) | 16021 → 16128 | 3059 → 3072 |
+  | LONG NO_AES (`polyval-long.a`) | 4160 → 4352 | 1047 → 1280 |
+  | SHORT NO_AES (`polyval-short.a`) | 13614 → 13824 | 2867 → 3072 |
+
+  Linked PRG output stays byte-identical on both profiles (equates
+  emit no segment data). Docs: API.md §9 currency to SPEC v0.10.0
+  (v0.9.2 was doc-only, already satisfied), §9.4 per-archive value
+  table + safe-direction rationale, §9.5 §6.6 adoption with the
+  polyval-ized consumer assert snippet and §6.7 declared N/A (all
+  buffers segment-resident; no §8.x placement equates); release flow
+  now requires per-(profile × variant) footprint deltas in release
+  notes per §6.6 obligation 2.
+
 ## v0.6.0 — 2026-08-14
 
 The c64-lib-contract v0.9.x alignment roll-up — polyval's re-tag in
