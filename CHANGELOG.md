@@ -11,6 +11,18 @@ downstream projects (see `API.md` §8 for the integration contract).
 
 ## Unreleased
 
+### Documentation
+
+- Alignment pass against contract SPEC v0.10.3 (all-clauses
+  mechanical re-verification: canonical `precalc_table.inc`
+  byte-identical, §1/§2 export inventories, §4 annotations, §5/§6.6
+  per-archive values, §6.2 variables, PRG hashes on both profiles —
+  all pass, no code change needed): currency refresh v0.10.0 →
+  v0.10.3 across README / API.md §9 / CLAUDE.md. v0.10.1 (stable-
+  numbers reorder), v0.10.2 (SPEC snippet fixes — this repo audited
+  clean for both forms), and v0.10.3 (§8.4 heading promoted; our
+  citations retroactively correct) require no adoption work.
+
 ### Changed
 
 - **`LIB_POLYVAL_RESIDENT_BYTES` / `LIB_POLYVAL_COLD_BYTES` value
