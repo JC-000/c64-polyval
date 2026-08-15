@@ -38,11 +38,17 @@
 ; A host program can override any slot's address by pre-defining the symbol
 ; before `.include`-ing zp_config.s. The two recommended ways:
 ;
-;   1. Pass `--asm-define polyval_acc=$40` on the ca65 command line. This
-;      defines the symbol globally for the translation unit, and the
-;      .ifndef guard below then skips the default. ALL library translation
-;      units must be assembled with the same --asm-define values, since
-;      each .o bakes in the equate value at assemble time.
+;   1. Pass `-D polyval_acc=0x40` (or `-D polyval_acc='$40'` — the $-hex
+;      MUST be quoted or the shell eats it: unquoted $40 expands as
+;      positional parameter $4 + literal "0" and the slot silently lands
+;      at $00; in make recipes prefer the 0x form, which survives
+;      make+shell unescaped — SPEC v0.8.6) on the ca65 command line.
+;      The flag is `-D`: ca65 rejects `--asm-define` with "Unknown
+;      option" — that spelling is cl65's (SPEC v0.7.1). The define is
+;      global for the translation unit, and the .ifndef guard below
+;      then skips the default. ALL library translation units must be
+;      assembled with the same -D values, since each .o bakes in the
+;      equate value at assemble time.
 ;
 ;   2. Inside a wrapper .s file:
 ;
@@ -51,8 +57,7 @@
 ;
 ; The library's own standalone PRG (`make`) and library-only verification
 ; (`make lib`) assemble with the defaults. Consumer projects rebuild the
-; library from source with --asm-define to pin slots to their preferred
-; layout.
+; library from source with -D to pin slots to their preferred layout.
 ;
 ; Suppressing the .exportzp block
 ; -------------------------------
