@@ -116,9 +116,17 @@ python3 - "$NOTES_REL" <<'PY'
 import re, sys, pathlib
 p = pathlib.Path(sys.argv[1])
 text = p.read_text()
-# Replace any 64-hex-char SHA256 with the placeholder string. The
-# placeholder lives between backticks in the attestation table.
-text = re.sub(r'`[0-9a-f]{64}`', '`SHA256_PLACEHOLDER`', text)
+# Replace the attestation table's SHA256 with the placeholder string.
+# SCOPED to the `| **SHA256** | <hash> |` row on purpose: release notes
+# also carry OTHER 64-hex hashes — the worktree-rebuild byte-identity
+# receipt CLAUDE.md's release flow requires (one PRG hash per profile,
+# per baseline). An unscoped `[0-9a-f]{64}` here placeholder-ised those
+# too, and the unbounded str.replace() below then stamped the tarball's
+# hash over every one of them, rewriting the receipt into a row of
+# identical hashes that reads as a successful identity check. Measured;
+# see the guard below, which now makes that shape fail loudly.
+text = re.sub(r'(\*\*SHA256\*\*\s*\|\s*)`[0-9a-f]{64}`',
+              r'\g<1>`SHA256_PLACEHOLDER`', text)
 # Replace "|" + decimal + " bytes" with placeholder (the attestation
 # table's Size row).
 text = re.sub(r'(\*\*Size\*\*\s*\|\s*)(\d+)( bytes)', r'\g<1>SIZE_PLACEHOLDER\g<3>', text)
@@ -202,6 +210,19 @@ import sys, pathlib
 path, size, sha = sys.argv[1], sys.argv[2], sys.argv[3]
 p = pathlib.Path(path)
 text = p.read_text()
+
+# Exactly one of each placeholder must be present. More than one means
+# the reset step above matched something it should not have (e.g. a
+# byte-identity receipt hash), and stamping would overwrite real
+# measurements with the tarball's hash -- silently, and in a shape that
+# still reads as a valid attestation. Fail loudly instead.
+for name, count in (('SHA256_PLACEHOLDER', text.count('SHA256_PLACEHOLDER')),
+                    ('SIZE_PLACEHOLDER',   text.count('SIZE_PLACEHOLDER'))):
+    if count != 1:
+        sys.exit("release-notes stamping: expected exactly one %s in %s, "
+                 "found %d -- refusing to stamp (see the scoped reset regex "
+                 "above)" % (name, path, count))
+
 text = text.replace('SHA256_PLACEHOLDER', sha)
 text = text.replace('SIZE_PLACEHOLDER', size)
 p.write_text(text)

@@ -15,10 +15,10 @@ Companion docs (read alongside this file):
 - `API.md` — library API reference; §3 (profile selection), §4 (ZP layout),
   §7–§8 (consumer integration), §9 (c64-lib-contract surface) are load-bearing.
 - `CHANGELOG.md` — release history.
-- `docs/RELEASE_NOTES_v0.6.1.md` — current release attestation (size + SHA256).
+- `docs/RELEASE_NOTES_v0.7.0.md` — current release attestation (size + SHA256).
 - `docs/precalc-tables.md` — c64-lib-contract §8.0 precalc-table enumeration.
 
-## c64-lib-contract adoption (current as of v0.6.1)
+## c64-lib-contract adoption (current as of v0.7.0)
 This library implements the [c64-lib-contract](https://github.com/JC-000/c64-lib-contract),
 currently at SPEC v0.10.6 (normative surface: v0.7.0's prefixed exports,
 v0.7.4's `: abs` pin on the macro's `_REGION`/`_SHARED` exports, v0.8.0's
@@ -122,7 +122,7 @@ make lib CONTRACT_ZP_DEFINES='-D polyval_acc=0x40'   # §6.2 ZP slot override ($
 make lib CONTRACT_DEFINES='-D LIB_NO_BARE_EXPORTS=1' # §6.2 global defines (composing consumers)
 make lib-verify                       # library-only verification PRG at $4000 (pre-v0.3.0 `make lib`)
 make consumer-check                   # link test/consumer_stub.s against the library
-make dist VERSION=v0.6.1              # reproducible source-tarball release
+make dist VERSION=v0.7.0              # reproducible source-tarball release
 ```
 Assembler: ca65/ld65/ar65 (cc65 toolchain). Single canonical toolchain as of
 v0.2.0 — ACME support was retired. `src/` is flat (no `lib/` subdir); ld65
@@ -197,7 +197,7 @@ chasing bugs that don't exist in their code or in VICE.
 
 This rule applies to all Claude sessions in this multi-project workspace.
 
-## Layout (v0.6.1)
+## Layout (v0.7.0)
 ```
 src/
   lib_version.s          # §1: LIB_VERSION_*/LIB_ABI_VERSION

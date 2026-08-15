@@ -11,6 +11,94 @@ downstream projects (see `API.md` §8 for the integration contract).
 
 ## Unreleased
 
+## v0.7.0 — 2026-08-15
+
+The SHORT+AEAD reachability release. A v0.x **MINOR** bump: a new §6.1
+archive target (`lib-polyval-gcmsiv-short`) is new consumer-visible
+surface, so MINOR rather than PATCH — but nothing exported was removed
+or renamed, so `LIB_POLYVAL_ABI_VERSION` stays 1 and the linked PRG
+remains byte-identical to v0.4.1 on both profiles.
+
+The cycle closed a defect in which the SHORT+AEAD configuration was
+documented and recommended for RFC 8452 per-message `H`, yet no archive
+delivered it — and the near-miss invocation exited 0 while shipping an
+unlinkable archive whose §6.4 manifest misdescribed it
+([#40](https://github.com/JC-000/c64-polyval/issues/40)). c64-polyval#40
+became the upstream motivating case for contract SPEC v0.10.5's §6.3
+*looks-reachable* rule.
+
+Footprint values per (profile × variant), declared (SPEC §6.6
+obligation 2 — one tag now carries **five** archive rows; no declared
+value moved this cycle):
+
+| Archive / configuration | RESIDENT | COLD |
+|---|---|---|
+| `polyval.a` / `polyval-gcmsiv.a` (LONG AEAD) | 6656 (unchanged) | 1280 (unchanged) |
+| `polyval-gcmsiv-short.a` (SHORT AEAD) | 16128 (**new archive**) | 3072 (**new archive**) |
+| `polyval-long.a` (LONG, no AES) | 4352 (unchanged) | 1280 (unchanged) |
+| `polyval-short.a` (SHORT, no AES) | 13824 (unchanged) | 3072 (unchanged) |
+
+The SHORT AEAD pair (16128 / 3072) is not new *as a value* — v0.6.1
+already declared it for the configuration `API.md` §9.4 listed with `—`
+in its Archive column. v0.7.0 is the release in which an archive finally
+carries it.
+
+### Added
+
+- **`make lib-polyval-gcmsiv-short`** — new SPEC §6.1 archive target
+  producing `build/lib/polyval-gcmsiv-short.a`: the full AEAD bundle
+  (POLYVAL + AES-256 + GCM-SIV) on the **SHORT** profile, i.e. the RFC
+  8452 per-message-`H` configuration
+  ([#40](https://github.com/JC-000/c64-polyval/issues/40)). It follows
+  the `lib-polyval-{long,short}` recursive clean-and-pin shape, so its
+  `lib_manifest.o` is assembled under the same profile pin and the §5
+  equates describe the archive they ship in (SPEC §6.4): `RESIDENT`
+  16128 / `COLD` 3072.
+- **Archive-goal configuration guard.** A `PIN_` table in the `Makefile`
+  declares each archive goal's required
+  `(POLYVAL_PROFILE × LIB_POLYVAL_NO_AES)` pair and asserts it at parse
+  time, so a mismatched invocation is rejected before any object is
+  assembled. Beyond the SHORT+AEAD case below, this closed two silent
+  wrong-artifact paths found in review: naming
+  `build/lib/polyval-gcmsiv-short.a` at the default profile shipped LONG
+  code under the `-short` name, and `build/lib/polyval-short.a` shipped
+  SHORT code carrying the LONG AEAD manifest value (6656 rather than
+  13824) — incoherent, §6.4-violating and pre-existing. It also rejects
+  `make lib POLYVAL_NO_AES=1` (AEAD member set, NO_AES manifest).
+
+### Fixed
+
+- **Release-notes stamping could silently falsify the byte-identity
+  receipt.** `tools/build_release.sh` reset *every* 64-hex hash in the
+  notes to the attestation placeholder, then stamped the tarball's hash
+  over all of them with an unbounded `str.replace`. Since CLAUDE.md's
+  post-[#37](https://github.com/JC-000/c64-polyval/issues/37) release
+  flow requires a worktree-rebuild receipt in the notes, that rewrote
+  the receipt's per-profile PRG hashes into a row of identical values
+  still shaped like a passing identity check. The reset is now scoped to
+  the `| **SHA256** |` attestation row, and stamping aborts unless
+  exactly one placeholder of each kind is present. Measured on a scratch
+  copy before fixing, and the new guard immediately caught a second live
+  instance (prose in the v0.7.0 notes naming the placeholder token).
+
+- **SHORT+AEAD was documented but undeliverable, and failed silently.**
+  `LIB_AEAD_OBJS` hardcoded `polyval_long.o` while `POLYVAL_PROFILE`
+  still reached `CA65FLAGS`, so `make lib POLYVAL_PROFILE=short` exited
+  0 and archived the LONG multiply against a SHORT-assembled `data.o`
+  and `lib_manifest.o`. The result was unlinkable (`polyval_long.o`
+  imports `polyval_htable8_s*` / `polyval_reduce8_s*`, which SHORT
+  `data.o` does not export) *and* SPEC §6.4-violating (the manifest
+  claimed the SHORT footprints over LONG code). `ar65` cannot detect
+  either. `LIB_AEAD_OBJS` now uses `$(POLYVAL_PROFILE_OBJ)`, and the
+  unpinned `lib` / `lib-polyval-gcmsiv` targets reject a non-`long`
+  profile at parse time — they do not `make clean` first, so under a
+  profile switch they would otherwise reuse stale objects from the
+  other profile. `API.md` §9.4's footprint table previously listed this
+  configuration with `—` in the Archive column; it now names the
+  archive. Existing archives (`polyval.a`, `polyval-gcmsiv.a`,
+  `polyval-long.a`, `polyval-short.a`) and both PRGs are byte-identical
+  across this change.
+
 ### Documentation
 
 - SPEC currency **v0.10.4 → v0.10.6** (both tagged upstream 2026-08-15). The
@@ -32,40 +120,6 @@ downstream projects (see `API.md` §8 for the integration contract).
   `precalc_table.inc`, and the library has no deferral switch. Also
   corrects two §6 target enumerations left at four entries when
   `lib-polyval-gcmsiv-short` was added.
-
-### Added
-
-- **`make lib-polyval-gcmsiv-short`** — new SPEC §6.1 archive target
-  producing `build/lib/polyval-gcmsiv-short.a`: the full AEAD bundle
-  (POLYVAL + AES-256 + GCM-SIV) on the **SHORT** profile, i.e. the RFC
-  8452 per-message-`H` configuration
-  ([#40](https://github.com/JC-000/c64-polyval/issues/40)). It follows
-  the `lib-polyval-{long,short}` recursive clean-and-pin shape, so its
-  `lib_manifest.o` is assembled under the same profile pin and the §5
-  equates describe the archive they ship in (SPEC §6.4): `RESIDENT`
-  16128 / `COLD` 3072.
-
-### Fixed
-
-- **SHORT+AEAD was documented but undeliverable, and failed silently.**
-  `LIB_AEAD_OBJS` hardcoded `polyval_long.o` while `POLYVAL_PROFILE`
-  still reached `CA65FLAGS`, so `make lib POLYVAL_PROFILE=short` exited
-  0 and archived the LONG multiply against a SHORT-assembled `data.o`
-  and `lib_manifest.o`. The result was unlinkable (`polyval_long.o`
-  imports `polyval_htable8_s*` / `polyval_reduce8_s*`, which SHORT
-  `data.o` does not export) *and* SPEC §6.4-violating (the manifest
-  claimed the SHORT footprints over LONG code). `ar65` cannot detect
-  either. `LIB_AEAD_OBJS` now uses `$(POLYVAL_PROFILE_OBJ)`, and the
-  unpinned `lib` / `lib-polyval-gcmsiv` targets reject a non-`long`
-  profile at parse time — they do not `make clean` first, so under a
-  profile switch they would otherwise reuse stale objects from the
-  other profile. `API.md` §9.4's footprint table previously listed this
-  configuration with `—` in the Archive column; it now names the
-  archive. Existing archives (`polyval.a`, `polyval-gcmsiv.a`,
-  `polyval-long.a`, `polyval-short.a`) and both PRGs are byte-identical
-  across this change.
-
-### Documentation
 
 - SPEC currency v0.10.3 → **v0.10.4**: the §6.3 clarification scoping
   the "no further target matrix" posture to *define-reachable*
