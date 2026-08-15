@@ -36,9 +36,22 @@
 ; --------------
 ;
 ; A host program can override any slot's address by pre-defining the symbol
-; before `.include`-ing zp_config.s. The two recommended ways:
+; before `.include`-ing zp_config.s. The recommended ways, best first:
 ;
-;   1. Pass `-D polyval_acc=0x40` (or `-D polyval_acc='$40'` — the $-hex
+;   1. At the make level (SPEC §6.2, the recommended mechanism):
+;
+;          make lib CONTRACT_ZP_DEFINES='-D polyval_acc=0x40'
+;
+;      The Makefile appends CONTRACT_ZP_DEFINES to every library
+;      translation unit's ca65 invocation. In this library that IS the
+;      SPEC's "ZP-defining TU(s)" scope: no library TU `.importzp`s its
+;      own slots — each one defines the equates itself via
+;      constants_lib.inc -> this file's .ifndef guards — so all-members
+;      delivery is the conformant (and only correct) scoped delivery.
+;      Values must be $-free (0x hex or decimal): make's $-expansion
+;      mangles every $-hex escape ladder silently (SPEC §2, v0.8.6).
+;
+;   2. Pass `-D polyval_acc=0x40` (or `-D polyval_acc='$40'` — the $-hex
 ;      MUST be quoted or the shell eats it: unquoted $40 expands as
 ;      positional parameter $4 + literal "0" and the slot silently lands
 ;      at $00; in make recipes prefer the 0x form, which survives
@@ -50,7 +63,7 @@
 ;      assembled with the same -D values, since each .o bakes in the
 ;      equate value at assemble time.
 ;
-;   2. Inside a wrapper .s file:
+;   3. Inside a wrapper .s file:
 ;
 ;          polyval_acc = $40
 ;          .include "zp_config.s"

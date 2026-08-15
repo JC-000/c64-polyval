@@ -20,12 +20,14 @@ Companion docs (read alongside this file):
 
 ## c64-lib-contract adoption (current as of v0.5.0)
 This library implements the [c64-lib-contract](https://github.com/JC-000/c64-lib-contract),
-currently at SPEC v0.8.3 (normative surface: v0.7.0's prefixed exports,
-v0.7.4's `: abs` pin on the macro's `_REGION`/`_SHARED` exports, and v0.8.0's
-§4 segment-placement declarations; v0.7.1–v0.7.3, v0.7.5, and v0.8.1–v0.8.3
-are doc-only —
-the latter's ABI-generation-counter clarification matches what polyval
-already ships, `LIB_POLYVAL_ABI_VERSION = 1`). §1–§6 (v0.1.0 baseline) shipped in v0.3.0; §8.0 (precalc-table
+currently at SPEC v0.9.0 (normative surface: v0.7.0's prefixed exports,
+v0.7.4's `: abs` pin on the macro's `_REGION`/`_SHARED` exports, v0.8.0's
+§4 segment-placement declarations, and v0.9.0's §6 build-and-consume
+chapter — `CONTRACT_DEFINES` / `CONTRACT_ZP_DEFINES` forwarding — plus
+the §2 ZP prefix registry, where `polyval_` and `pv_` are registered to
+this library; v0.7.1–v0.7.3, v0.7.5, v0.8.1–v0.8.4 and v0.8.6 are
+doc-only, v0.8.5's §8 export discipline is N/A here). §1–§6 (v0.1.0
+baseline) shipped in v0.3.0; §8.0 (precalc-table
 catch-loop, applies to every adopter regardless of §8.1–§8.3 applicability)
 shipped in v0.4.0; the v0.7.0 prefixed-export surface (§1 `LIB_POLYVAL_VERSION_*`,
 §8.4 `LIB_POLYVAL_PRECALC_*`, bare forms gated on `LIB_NO_BARE_EXPORTS`)
@@ -54,6 +56,20 @@ plus per-archive manifest accuracy (`POLYVAL_NO_AES`) shipped in v0.5.0
 - §5 aggregate manifest equates (`LIB_POLYVAL_ZP_USAGE_BYTES`, `_REU_BANKS_USED`,
   `_RESIDENT_BYTES`, `_COLD_BYTES`) — `src/lib_manifest.s`, profile-conditional
 - §6 ar65 archive build targets — `make lib` / `lib-polyval-{long,short,gcmsiv}`
+- §6.2 consumer-defines forwarding (v0.9.0) — `CONTRACT_DEFINES` (global)
+  and `CONTRACT_ZP_DEFINES` (ZP slot overrides), both `?=` empty, appended
+  to `CA65FLAGS`. Polyval-specific reading: the library has zero `.importzp`
+  sites for its own slots (every TU bakes the equates via constants_lib.inc
+  → zp_config.s `.ifndef` guards), so EVERY member TU is a ZP-defining TU
+  and all-recipes delivery IS the SPEC's scoped delivery — a
+  zp_config.o-only delivery would silently mismatch exported vs baked
+  addresses. Values must be $-free (`0x` hex) — see API.md §9.5
+- §6.4 per-variant manifests — already conformant (recursive clean builds
+  under pinned `POLYVAL_PROFILE`/`POLYVAL_NO_AES`; rows gated on the same
+  switches). §6.1/§6.5 notes: archive basenames already canonical;
+  `lib-verify` grandfathered in the reserved `lib-*` namespace until next
+  MAJOR; archive member basenames take a `polyval_` prefix at next MAJOR
+  (recorded, not actioned)
 - §8 shared primitives (§8.1–§8.3: `sqtab` / `reu_mul` / `ct_mul_8x8`) — n/a;
   GF(2^128) carry-less multiplication has no shared shape with the 8×8
   quarter-square-multiply libraries (`c64-nist-curves`, `c64-x25519`,
@@ -80,6 +96,8 @@ make lib                              # build/lib/polyval.a (full ar65 archive �
 make lib-polyval-long                 # build/lib/polyval-long.a (LONG only, no AES/GCM-SIV)
 make lib-polyval-short                # build/lib/polyval-short.a (SHORT only)
 make lib-polyval-gcmsiv               # build/lib/polyval-gcmsiv.a (full AEAD bundle)
+make lib CONTRACT_ZP_DEFINES='-D polyval_acc=0x40'   # §6.2 ZP slot override ($-free values only)
+make lib CONTRACT_DEFINES='-D LIB_NO_BARE_EXPORTS=1' # §6.2 global defines (composing consumers)
 make lib-verify                       # library-only verification PRG at $4000 (pre-v0.3.0 `make lib`)
 make consumer-check                   # link test/consumer_stub.s against the library
 make dist VERSION=v0.5.0              # reproducible source-tarball release
