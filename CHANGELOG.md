@@ -9,6 +9,22 @@ Releases: https://github.com/JC-000/c64-polyval/releases — tagged releases
 track `MAJOR.MINOR.PATCH` and are the supported consumption points for
 downstream projects (see `API.md` §8 for the integration contract).
 
+## Unreleased
+
+### Documentation
+
+- Post-release review of v0.6.1
+  ([#37](https://github.com/JC-000/c64-polyval/issues/37)): the
+  worktree-rebuild byte-identity receipt was produced post-hoc (claim
+  reproduces exactly — v0.4.1 baseline rebuild hashes match v0.6.1 on
+  both profiles) and appended to the release page and the on-disk
+  notes; the release page's relative `CHANGELOG.md` link replaced
+  with an absolute blob URL. The fleet's pre-tag release-PR review
+  gate is adopted as release-flow step 0 in CLAUDE.md — releases now
+  stage as PRs and wait for the review comment before tagging.
+  README: dist example generalized to `vX.Y.Z` (was stale at
+  `v0.5.0`) and the attestation/receipt practice documented.
+
 ## v0.6.1 — 2026-08-15
 
 The contract v0.10.x alignment roll-up. A v0.x **PATCH** bump per this
