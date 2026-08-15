@@ -189,33 +189,52 @@ LIB_AEAD_OBJS = $(LIB_CORE_OBJS) $(BUILD_DIR)/data.o \
                 $(BUILD_DIR)/gcm_siv.o \
                 $(BUILD_DIR)/$(POLYVAL_PROFILE_OBJ).o
 
-# --- Unpinned AEAD archive profile guard (issue #40) ----------------------
-# `lib` and `lib-polyval-gcmsiv` do not clean before building, so they are
-# only safe under the default profile. The pattern rules do not track
-# POLYVAL_PROFILE as a dependency (the profile-switch gotcha in CLAUDE.md),
-# so `make lib POLYVAL_PROFILE=short` over a LONG build/ tree reuses the
-# stale LONG data.o and lib_manifest.o while assembling a fresh
-# polyval_short.o — an archive whose §6.4 manifest describes the wrong
-# profile. ar65 cannot notice, so it would exit 0 and ship.
+# --- Archive goal configuration guard (issue #40) -------------------------
+# Every archive is defined by a (POLYVAL_PROFILE x LIB_POLYVAL_NO_AES) pair.
+# The lib-polyval-* phony targets set both behind a `make clean`, but make
+# cannot infer the pair from a goal, so any invocation that names an archive
+# without the matching pair silently produces a wrong artifact — exit 0, no
+# diagnostic, and ar65 cannot notice. All three shapes are measured:
 #
-# SHORT+AEAD is reachable through its own §6.1 target instead
-# (lib-polyval-gcmsiv-short), which pins the profile behind a `make clean`
-# exactly as lib-polyval-{long,short} do. That target names
-# polyval-gcmsiv-short.a as its goal, so it is not caught here.
+#   make lib POLYVAL_PROFILE=short
+#     `lib` does not clean, so the pattern rules reuse the stale LONG data.o
+#     and lib_manifest.o (POLYVAL_PROFILE is not a prerequisite — the
+#     profile-switch gotcha in CLAUDE.md) -> manifest describes the wrong
+#     profile.
+#   make build/lib/polyval-gcmsiv-short.a          (default profile)
+#     -> the LONG multiply archived under the -short name: coherent,
+#        correctly manifested, and not the artifact requested.
+#   make build/lib/polyval-short.a                 (default profile)
+#     -> polyval_short.o with a manifest exporting the LONG AEAD footprint
+#        (RESIDENT 6656 rather than 13824): incoherent, SPEC §6.4-violating,
+#        wrong on both axes at once.
 #
-# Parse-time rather than a recipe line: failing before any object is built
-# avoids leaving a half-built tree that a later build would mix in turn.
-AEAD_ARCHIVE_GOALS = lib lib-polyval-gcmsiv \
-                     $(LIB_DIR)/polyval.a $(LIB_DIR)/polyval-gcmsiv.a
-ifneq ($(POLYVAL_PROFILE),long)
-  ifneq ($(filter $(AEAD_ARCHIVE_GOALS),$(MAKECMDGOALS)),)
-    $(error `lib` / `lib-polyval-gcmsiv` build the LONG AEAD archive and do not \
-      clean first, so they require POLYVAL_PROFILE=long (got '$(POLYVAL_PROFILE)'). \
-      For the SHORT full-AEAD archive use `make lib-polyval-gcmsiv-short`; \
-      for the SHORT POLYVAL-only archive use `make lib-polyval-short`; \
-      for a SHORT full-AEAD *PRG* use `make POLYVAL_PROFILE=short`)
-  endif
-endif
+# So each archive goal declares its required pair and asserts it. Guarding
+# at parse time rather than in a recipe means nothing is built before the
+# rejection — a half-built tree is itself the input to the staleness shape.
+#
+# The lib-polyval-{long,short,gcmsiv-short} wrappers are deliberately absent
+# from the table: they establish the pin themselves via a recursive $(MAKE),
+# and their inner invocation names the archive path, which is what gets
+# checked here.
+POLYVAL_PIN = $(POLYVAL_PROFILE)$(if $(POLYVAL_NO_AES),-noaes)
+
+PIN_lib                               = long
+PIN_lib-polyval-gcmsiv                = long
+PIN_$(LIB_DIR)/polyval.a              = long
+PIN_$(LIB_DIR)/polyval-gcmsiv.a       = long
+PIN_$(LIB_DIR)/polyval-gcmsiv-short.a = short
+PIN_$(LIB_DIR)/polyval-long.a         = long-noaes
+PIN_$(LIB_DIR)/polyval-short.a        = short-noaes
+
+$(foreach g,$(MAKECMDGOALS),$(if $(PIN_$(g)),$(if $(filter $(PIN_$(g)),$(POLYVAL_PIN)),,\
+  $(error goal `$(g)` builds the '$(PIN_$(g))' configuration, but this invocation \
+    is '$(POLYVAL_PIN)' (POLYVAL_PROFILE=$(POLYVAL_PROFILE)$(if $(POLYVAL_NO_AES), \
+    POLYVAL_NO_AES=$(POLYVAL_NO_AES))). Use the phony target, which cleans and pins \
+    for you: `make lib` / `lib-polyval-gcmsiv` (LONG AEAD), \
+    `lib-polyval-gcmsiv-short` (SHORT AEAD), `lib-polyval-long` / \
+    `lib-polyval-short` (POLYVAL-only). For a SHORT full-AEAD *PRG*, \
+    `make POLYVAL_PROFILE=short`))))
 
 .PHONY: all lib lib-verify lib-polyval-long lib-polyval-short \
         lib-polyval-gcmsiv lib-polyval-gcmsiv-short consumer-check run clean dist
