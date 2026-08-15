@@ -539,7 +539,7 @@ use v0.2.0's source-tarball + `src/exports.inc` integration path
 instead. The v0.1.0 tree is kept only for reproducibility of the
 prior release.
 
-## 9. Library contract (c64-lib-contract v0.10.0)
+## 9. Library contract (c64-lib-contract v0.10.3)
 
 As of v0.3.0, c64-polyval implements
 [c64-lib-contract](https://github.com/JC-000/c64-lib-contract)
@@ -603,7 +603,17 @@ code change, the rest of the chapter is verified conformant as-is.
 Contract v0.9.2 is doc-only upstream (a §2 registry row for
 `chacha20poly1305_`, two §8.2 clarifications, and an
 archive-inspection tooling note) — every item was already satisfied
-or N/A here; no action needed. Contract v0.10.0 is phase 2 of the
+or N/A here; no action needed. Contract v0.10.1–v0.10.3 are doc-only:
+v0.10.1 is the #76 phase-4 section reorder, resolved with every
+section number unchanged (none of this library's §-citations moved);
+v0.10.2 fixes three SPEC snippet defects (this library audited clean
+for both broken forms — its guards already use `.assert`/`lderror`
+and it carries no `.if ::` selector gates); v0.10.3 promotes the
+precalc catch-loop to a real `### 8.4` heading, making the fleet's
+long-standing §8.4 citations — including this library's —
+retroactively correct, with the canonical `precalc_table.inc`
+deliberately unchanged (re-verified byte-identical here,
+SHA256 `feb98890…`). Contract v0.10.0 is phase 2 of the
 contract-#76 restructuring: **§6.6 lands** (consumer footprint
 asserts against the per-archive §6.4 manifest — the library-side
 obligations are safe-direction round-up values and per-(profile ×

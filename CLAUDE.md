@@ -20,7 +20,7 @@ Companion docs (read alongside this file):
 
 ## c64-lib-contract adoption (current as of v0.6.0)
 This library implements the [c64-lib-contract](https://github.com/JC-000/c64-lib-contract),
-currently at SPEC v0.10.0 (normative surface: v0.7.0's prefixed exports,
+currently at SPEC v0.10.3 (normative surface: v0.7.0's prefixed exports,
 v0.7.4's `: abs` pin on the macro's `_REGION`/`_SHARED` exports, v0.8.0's
 §4 segment-placement declarations, v0.9.0's §6 build-and-consume
 chapter — `CONTRACT_DEFINES` / `CONTRACT_ZP_DEFINES` forwarding — plus
