@@ -6,7 +6,7 @@ The §6.6 footprint corrections change exported equate *values* only —
 no symbols added, removed, or renamed; `LIB_POLYVAL_ABI_VERSION`
 stays 1 — and the linked PRG remains byte-identical to v0.4.1 on
 both profiles. The full per-change log is in
-[`CHANGELOG.md`](../CHANGELOG.md); this file is the concise release
+[`CHANGELOG.md`](https://github.com/JC-000/c64-polyval/blob/v0.6.1/CHANGELOG.md); this file is the concise release
 summary.
 
 ## What's in
@@ -89,6 +89,18 @@ GCM-SIV 159/165 + 6 AAD-by-design skips. `make consumer-check` and
 all four §6 archive targets build clean; per-archive manifest values
 verified via `ar65 x` + `od65 --dump-exports` on every archive's
 `lib_manifest.o`.
+
+### Byte-identity verification (worktree rebuild, appended post-release per [#37](https://github.com/JC-000/c64-polyval/issues/37))
+
+Method: `git worktree add <dir> v0.4.1`; in the baseline worktree and
+at the `v0.6.1` ref: `make clean && make` (LONG) and
+`make clean && make POLYVAL_PROFILE=short` (SHORT);
+`shasum -a 256 build/polyval.prg` after each.
+
+| Profile | v0.4.1 rebuild | v0.6.1 rebuild | |
+|---|---|---|---|
+| LONG | `e93962ac52384bebba478c2a1647647502f16bdc8a48b9069386117dfa9f2d05` | `e93962ac52384bebba478c2a1647647502f16bdc8a48b9069386117dfa9f2d05` | identical |
+| SHORT | `98948d023d33c13308739fef75bbd1248b9a90de1149f4e03b8b1b6e03ecb54a` | `98948d023d33c13308739fef75bbd1248b9a90de1149f4e03b8b1b6e03ecb54a` | identical |
 
 ## Attestation
 

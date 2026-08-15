@@ -41,13 +41,20 @@ make lib                          # build/lib/polyval.a (full ar65 archive)
 make lib-verify                   # library-only verification link (pre-v0.3.0 `make lib`)
 make consumer-check               # assemble + link test/consumer_stub.s
 make run                          # build then launch in VICE
-make dist VERSION=v0.5.0          # reproducible source tarball
+make dist VERSION=vX.Y.Z          # reproducible source tarball
 make clean                        # rm -rf build/
 ```
 
 The Makefile maps `POLYVAL_PROFILE=short|long` to ca65's
 `-D POLYVAL_PROFILE=1|2` and to `polyval_short.o` / `polyval_long.o`
 at link time.
+
+Each release ships a stamped attestation in
+`docs/RELEASE_NOTES_vX.Y.Z.md` (tarball size + SHA256, double-build
+reproducible) and, when it claims binary identity with a prior tag,
+the worktree-rebuild receipt: the baseline tag rebuilt in a separate
+worktree, both profiles, hash pairs stated. Releases are staged as
+PRs and reviewed before tagging (see `CLAUDE.md`, release flow).
 
 ## Test
 
