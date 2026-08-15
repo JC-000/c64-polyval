@@ -37,8 +37,11 @@ high-throughput LONG build for session-stable H (TLS 1.3, WireGuard).
 make                              # build build/polyval.prg (LONG profile, default)
 make POLYVAL_PROFILE=short        # SHORT profile (low-memory, per-message H)
 make POLYVAL_PROFILE=long         # LONG profile (high-throughput, stable H)
-make lib                          # build/lib/polyval.a (full ar65 archive, LONG)
+make lib                          # build/lib/polyval.a (full ar65 archive, LONG AEAD)
+make lib-polyval-gcmsiv           # build/lib/polyval-gcmsiv.a (full AEAD, LONG)
 make lib-polyval-gcmsiv-short     # build/lib/polyval-gcmsiv-short.a (full AEAD, SHORT)
+make lib-polyval-long             # build/lib/polyval-long.a (POLYVAL only, LONG)
+make lib-polyval-short            # build/lib/polyval-short.a (POLYVAL only, SHORT)
 make lib-verify                   # library-only verification link (pre-v0.3.0 `make lib`)
 make consumer-check               # assemble + link test/consumer_stub.s
 make run                          # build then launch in VICE

@@ -11,6 +11,30 @@ downstream projects (see `API.md` §8 for the integration contract).
 
 ## Unreleased
 
+### Documentation
+
+- **Release-flow corrections learned by running it** ([PR
+  #45](https://github.com/JC-000/c64-polyval/pull/45)): step 2 said "all
+  four configurations" when v0.7.0 brought the archive count to five, so
+  it now enumerates per shipped archive and instructs counting rows
+  against the `lib-polyval-*` target list rather than against the
+  previous release's table — counting against the last release is how it
+  went stale. Step 3 records that the notes stamper is fail-closed and
+  what a refusal means (a second 64-hex hash, or a literal placeholder
+  token in prose): fix the notes, not the guard.
+- **`docs/precalc-tables.md` archive membership** — the `aes_sbox` /
+  `aes_inv_sbox` rows listed the AEAD bundle as `polyval.a` /
+  `polyval-gcmsiv.a`, omitting `polyval-gcmsiv-short.a`, which ships
+  `tables.o` and enumerates both S-boxes in its own §8.4 manifest
+  (verified from inside the archive). The prose on the two independent
+  axes is extended with the case v0.7.0 introduced: `polyval-short.a`
+  and `polyval-gcmsiv-short.a` are both `PROFILE=short` yet differ in
+  AES membership, which is precisely why profile alone cannot express
+  that axis.
+- **`README.md` build block** listed only two of the five archive
+  targets after `lib-polyval-gcmsiv-short` was added; all five are now
+  shown, each labelled with its profile and AES membership.
+
 ## v0.7.0 — 2026-08-15
 
 The SHORT+AEAD reachability release. A v0.x **MINOR** bump: a new §6.1
