@@ -202,6 +202,15 @@ as historical reference and must not be edited. The active ABI is now
 `lib_manifest.s`).
 
 ## Release flow
+0. **Release-PR review gate (fleet standing process, adopted after issue
+   #37):** stage every release as a PR (version bumps + CHANGELOG +
+   stamped notes + tarball) and WAIT for the review comment before
+   tagging — do not tag directly on master. Two of this cycle's four
+   fleet releases needed pre-tag amendments; tags are immutable here, so
+   post-hoc fixes can only amend the release page. Release notes MUST
+   state the byte-identity method (worktree-rebuild of the baseline tag,
+   both profiles, hash pairs) whenever they claim binary identity, and
+   MUST use absolute blob URLs (relative links 404 on release pages).
 1. Bump `VERSION`, `CHANGELOG.md`, **and `LIB_POLYVAL_VERSION_MINOR`/`_PATCH`
    in `src/lib_version.s`** (the bare `LIB_VERSION_*` aliases follow
    automatically; the v0.3.0 release forgot this file entirely and it went
