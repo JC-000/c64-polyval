@@ -74,7 +74,7 @@ python3 tools/polyval_reference.py        # Python reference self-test (no VICE)
 ## Library contract
 
 c64-polyval implements [c64-lib-contract](https://github.com/JC-000/c64-lib-contract)
-(currently at SPEC v0.9.1) — see the
+(currently at SPEC v0.10.0) — see the
 [SPEC](https://github.com/JC-000/c64-lib-contract/blob/main/SPEC.md)
 and the
 [adopters table](https://github.com/JC-000/c64-lib-contract/blob/main/adopters.md).
@@ -100,7 +100,15 @@ shared 8×8 quarter-square-multiply surface are covered:
   §9.8.
 - §5 — aggregate manifest equates (`LIB_POLYVAL_ZP_USAGE_BYTES`,
   `LIB_POLYVAL_RESIDENT_BYTES`, `LIB_POLYVAL_COLD_BYTES`,
-  `LIB_POLYVAL_REU_BANKS_USED`) in `src/lib_manifest.s`.
+  `LIB_POLYVAL_REU_BANKS_USED`) in `src/lib_manifest.s`. The two
+  byte-count equates are per-archive and safe-direction per SPEC
+  v0.10.0 §6.6: measured for each (profile × variant) archive and
+  rounded UP to the next 256-byte boundary, so a consumer's
+  `declared ≤ budget` assert implies `actual ≤ budget` — see
+  `API.md` §9.4 for the per-archive value table. §6.7 (declared
+  non-segment reservations) is N/A: every buffer is
+  segment-resident, no placement equate reserves address space
+  invisible to ld65 — see `API.md` §9.5.
 - §6 — `make lib`, `make lib-polyval-long`, `make lib-polyval-short`,
   and `make lib-polyval-gcmsiv` produce ar65 archive bundles under
   `build/lib/` (canonical `polyval[-<variant>].a` basenames). Consumer

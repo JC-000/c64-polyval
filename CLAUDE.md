@@ -20,12 +20,16 @@ Companion docs (read alongside this file):
 
 ## c64-lib-contract adoption (current as of v0.6.0)
 This library implements the [c64-lib-contract](https://github.com/JC-000/c64-lib-contract),
-currently at SPEC v0.9.1 (normative surface: v0.7.0's prefixed exports,
+currently at SPEC v0.10.0 (normative surface: v0.7.0's prefixed exports,
 v0.7.4's `: abs` pin on the macro's `_REGION`/`_SHARED` exports, v0.8.0's
-§4 segment-placement declarations, and v0.9.0's §6 build-and-consume
+§4 segment-placement declarations, v0.9.0's §6 build-and-consume
 chapter — `CONTRACT_DEFINES` / `CONTRACT_ZP_DEFINES` forwarding — plus
 the §2 ZP prefix registry, where `polyval_` and `pv_` are registered to
-this library; v0.7.1–v0.7.3, v0.7.5, v0.8.1–v0.8.4 and v0.8.6 are
+this library, and v0.10.0's §6.6 consumer footprint asserts — per-archive
+safe-direction `RESIDENT`/`COLD` values, rounded UP to the next 256-byte
+boundary, gated on `POLYVAL_PROFILE` × `LIB_POLYVAL_NO_AES`; v0.10.0's
+§6.7 is N/A — all buffers segment-resident, no placement equates.
+v0.7.1–v0.7.3, v0.7.5, v0.8.1–v0.8.4, v0.8.6 and v0.9.2 are
 doc-only, v0.8.5's §8 export discipline is N/A here). §1–§6 (v0.1.0
 baseline) shipped in v0.3.0; §8.0 (precalc-table
 catch-loop, applies to every adopter regardless of §8.1–§8.3 applicability)
@@ -54,7 +58,10 @@ plus per-archive manifest accuracy (`POLYVAL_NO_AES`) shipped in v0.5.0
   ld65 emits no diagnostic when dropped since `data.s` has no `.align`) —
   see API.md §9.8
 - §5 aggregate manifest equates (`LIB_POLYVAL_ZP_USAGE_BYTES`, `_REU_BANKS_USED`,
-  `_RESIDENT_BYTES`, `_COLD_BYTES`) — `src/lib_manifest.s`, profile-conditional
+  `_RESIDENT_BYTES`, `_COLD_BYTES`) — `src/lib_manifest.s`; the byte counts
+  are conditional on `POLYVAL_PROFILE` × `LIB_POLYVAL_NO_AES` and
+  safe-direction per §6.6 (measured per archive, rounded UP to the next
+  256-byte boundary — see API.md §9.4 for the four-configuration table)
 - §6 ar65 archive build targets — `make lib` / `lib-polyval-{long,short,gcmsiv}`
 - §6.2 consumer-defines forwarding (v0.9.0) — `CONTRACT_DEFINES` (global)
   and `CONTRACT_ZP_DEFINES` (ZP slot overrides), both `?=` empty, appended
@@ -202,6 +209,11 @@ as historical reference and must not be edited. The active ABI is now
    value column of the §9.1 table in `API.md` — the v0.4.1 release bumped
    the file but left the table at PATCH 0.
 2. Write `docs/RELEASE_NOTES_vX.Y.Z.md` (use the v0.3.0 file as a template).
+   Release notes MUST state `RESIDENT`/`COLD` footprint deltas **per
+   (profile × variant)** — all four configurations, LONG/SHORT ×
+   AEAD/NO_AES, even when a delta is zero — per c64-lib-contract §6.6
+   obligation 2: one tag carries four footprint pairs, so a single
+   per-version delta is meaningless.
 3. `make clean && make dist VERSION=vX.Y.Z` — produces the tarball + stamps
    size/SHA256 into the release notes (two-pass).
 4. Verify reproducibility: re-run `make dist`, SHA256 must be identical.
