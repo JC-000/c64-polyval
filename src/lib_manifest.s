@@ -148,9 +148,10 @@ LIB_MANIFEST_S_INCLUDED = 1
 ; (ca65/ld65 V2.18); PRG output byte-identical before/after this
 ; manifest change.
 ;
-; AEAD builds (polyval.a / polyval-gcmsiv.a member set: lib_version,
-; zp_config, lib_manifest, tables, data, aes_encrypt, aes_decrypt,
-; gcm_siv, polyval_<profile>):
+; AEAD builds (polyval.a / polyval-gcmsiv.a on LONG,
+; polyval-gcmsiv-short.a on SHORT; member set: lib_version, zp_config,
+; lib_manifest, tables, data, aes_encrypt, aes_decrypt, gcm_siv,
+; polyval_<profile>):
 ;
 ;   LONG  (POLYVAL_PROFILE = POLYVAL_PROFILE_LONG = 2):
 ;     $4000 .. $59A7 (first BSS start) = $19A7 = 6567 measured,
@@ -200,7 +201,7 @@ LIB_MANIFEST_S_INCLUDED = 1
     .ifdef LIB_POLYVAL_NO_AES
       LIB_POLYVAL_RESIDENT_BYTES = 13824  ; measured 13614 (polyval-short.a)
     .else
-      LIB_POLYVAL_RESIDENT_BYTES = 16128  ; measured 16021 (SHORT AEAD link)
+      LIB_POLYVAL_RESIDENT_BYTES = 16128  ; measured 16021 (polyval-gcmsiv-short.a)
     .endif
   .endif
 .endif
@@ -289,7 +290,7 @@ LIB_MANIFEST_S_INCLUDED = 1
     .ifdef LIB_POLYVAL_NO_AES
       LIB_POLYVAL_COLD_BYTES = 3072   ; measured 2867 (polyval-short.a)
     .else
-      LIB_POLYVAL_COLD_BYTES = 3072   ; measured 3059 (SHORT AEAD link)
+      LIB_POLYVAL_COLD_BYTES = 3072   ; measured 3059 (polyval-gcmsiv-short.a)
     .endif
   .endif
 .endif

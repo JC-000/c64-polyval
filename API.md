@@ -752,7 +752,7 @@ contain). Per-archive values (measured 2026-08-15, ca65/ld65 V2.18):
 | Archive | Configuration | `RESIDENT_BYTES` (measured) | `COLD_BYTES` (measured) |
 |---|---|---:|---:|
 | `polyval.a` / `polyval-gcmsiv.a` | LONG, full AEAD | 6656 (6567) | 1280 (1239) |
-| — (`make POLYVAL_PROFILE=short` link) | SHORT, full AEAD | 16128 (16021) | 3072 (3059) |
+| `polyval-gcmsiv-short.a` | SHORT, full AEAD | 16128 (16021) | 3072 (3059) |
 | `polyval-long.a` | LONG, `LIB_POLYVAL_NO_AES` | 4352 (4160) | 1280 (1047) |
 | `polyval-short.a` | SHORT, `LIB_POLYVAL_NO_AES` | 13824 (13614) | 3072 (2867) |
 
@@ -778,7 +778,8 @@ directly without rebuilding `.o` files:
 | `make lib` | `build/lib/polyval.a` | Full AEAD bundle: POLYVAL LONG + AES-256 + GCM-SIV. |
 | `make lib-polyval-long` | `build/lib/polyval-long.a` | POLYVAL LONG primitive only (no AES, no GCM-SIV). |
 | `make lib-polyval-short` | `build/lib/polyval-short.a` | POLYVAL SHORT primitive only. |
-| `make lib-polyval-gcmsiv` | `build/lib/polyval-gcmsiv.a` | Full AEAD bundle (currently byte-identical to `polyval.a`). |
+| `make lib-polyval-gcmsiv` | `build/lib/polyval-gcmsiv.a` | Full AEAD bundle, **LONG** profile (currently byte-identical to `polyval.a`). |
+| `make lib-polyval-gcmsiv-short` | `build/lib/polyval-gcmsiv-short.a` | Full AEAD bundle, **SHORT** profile — the RFC 8452 per-message-`H` configuration. |
 
 Each archive bundles the SPEC §1 / §2 / §5 core (`lib_version.o`,
 `zp_config.o`, `lib_manifest.o`) plus the variant-specific .o set;
@@ -792,6 +793,22 @@ grandfathered name:
 `make lib-verify` is a verification link, not an archive, inside the
 reserved `lib-*` namespace; per §6.1 it stays until this repo's next
 MAJOR, when it becomes `verify-lib`-shaped.
+
+**Profile is a member-set axis, so it takes targets rather than
+defines** (SPEC v0.10.4 §6.3; issue
+[#40](https://github.com/JC-000/c64-polyval/issues/40)).
+`POLYVAL_PROFILE` selects which multiply object is *archived*
+(`polyval_long.o` vs `polyval_short.o`), and no §6.2 `CONTRACT_DEFINES`
+value can swap an archive member — a `-D` reconfigures TUs, it cannot
+change the member set. Each documented profile × variant combination
+therefore has its own §6.1 target, and each carries a `lib_manifest.o`
+assembled under the same pin so the §5 equates describe the archive
+they ship in (§6.4). `lib` and `lib-polyval-gcmsiv` name the **LONG**
+AEAD archive implicitly and do not `make clean` first, so they reject
+`POLYVAL_PROFILE=short` rather than silently reusing objects assembled
+under the other profile; use `make lib-polyval-gcmsiv-short`, which
+pins the profile behind a clean exactly as
+`lib-polyval-{long,short}` do.
 
 The previous (pre-v0.3.0) `make lib` target — a library-only
 verification PRG link at `$4000` — is what `make lib-verify` names

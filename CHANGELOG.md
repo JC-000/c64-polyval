@@ -11,7 +11,47 @@ downstream projects (see `API.md` §8 for the integration contract).
 
 ## Unreleased
 
+### Added
+
+- **`make lib-polyval-gcmsiv-short`** — new SPEC §6.1 archive target
+  producing `build/lib/polyval-gcmsiv-short.a`: the full AEAD bundle
+  (POLYVAL + AES-256 + GCM-SIV) on the **SHORT** profile, i.e. the RFC
+  8452 per-message-`H` configuration
+  ([#40](https://github.com/JC-000/c64-polyval/issues/40)). It follows
+  the `lib-polyval-{long,short}` recursive clean-and-pin shape, so its
+  `lib_manifest.o` is assembled under the same profile pin and the §5
+  equates describe the archive they ship in (SPEC §6.4): `RESIDENT`
+  16128 / `COLD` 3072.
+
+### Fixed
+
+- **SHORT+AEAD was documented but undeliverable, and failed silently.**
+  `LIB_AEAD_OBJS` hardcoded `polyval_long.o` while `POLYVAL_PROFILE`
+  still reached `CA65FLAGS`, so `make lib POLYVAL_PROFILE=short` exited
+  0 and archived the LONG multiply against a SHORT-assembled `data.o`
+  and `lib_manifest.o`. The result was unlinkable (`polyval_long.o`
+  imports `polyval_htable8_s*` / `polyval_reduce8_s*`, which SHORT
+  `data.o` does not export) *and* SPEC §6.4-violating (the manifest
+  claimed the SHORT footprints over LONG code). `ar65` cannot detect
+  either. `LIB_AEAD_OBJS` now uses `$(POLYVAL_PROFILE_OBJ)`, and the
+  unpinned `lib` / `lib-polyval-gcmsiv` targets reject a non-`long`
+  profile at parse time — they do not `make clean` first, so under a
+  profile switch they would otherwise reuse stale objects from the
+  other profile. `API.md` §9.4's footprint table previously listed this
+  configuration with `—` in the Archive column; it now names the
+  archive. Existing archives (`polyval.a`, `polyval-gcmsiv.a`,
+  `polyval-long.a`, `polyval-short.a`) and both PRGs are byte-identical
+  across this change.
+
 ### Documentation
+
+- SPEC currency v0.10.3 → **v0.10.4**: the §6.3 clarification scoping
+  the "no further target matrix" posture to *define-reachable*
+  combinations, and requiring a §6.1 target for any documented axis
+  that changes an archive's member set. `API.md` §9.5 gains a
+  member-set-axis subsection; `README.md` "Profiles" and `CLAUDE.md`
+  gain the profile-is-a-build-time-axis note. The gap this closes
+  predated v0.10.4 — §6.3 ¶1's existing MUST already covered it.
 
 - Post-release review of v0.6.1
   ([#37](https://github.com/JC-000/c64-polyval/issues/37)): the
