@@ -539,7 +539,7 @@ use v0.2.0's source-tarball + `src/exports.inc` integration path
 instead. The v0.1.0 tree is kept only for reproducibility of the
 prior release.
 
-## 9. Library contract (c64-lib-contract v0.8.3)
+## 9. Library contract (c64-lib-contract v0.9.0)
 
 As of v0.3.0, c64-polyval implements
 [c64-lib-contract](https://github.com/JC-000/c64-lib-contract)
@@ -550,7 +550,7 @@ and collision-check its dependencies at assemble time. Six SPEC
 sections apply to c64-polyval; §3 (REU bank claims) is N/A because
 the library makes no 17xx REU claims.
 
-The contract has since advanced to v0.8.3. c64-polyval v0.5.0 adopts
+The contract has since advanced to v0.9.0. c64-polyval v0.5.0 adopts
 the v0.7.0 surface: library-prefixed §1 version exports and §8.4
 precalc-table equates (`LIB_POLYVAL_*` forms alongside the deprecated
 bare names, the latter gated on `LIB_NO_BARE_EXPORTS` until contract
@@ -579,7 +579,22 @@ tagged (issue #71). Contract v0.8.3 (doc-only) corrects §4's own
 risk table after adopter reports (contract #78; this library's §9.8
 measurements are part of that record): both ld65 diagnostics are
 conditional on library shape, not on the violation, and the common
-shapes are the silent ones.
+shapes are the silent ones. Contract v0.8.4 is doc-only: it states
+that `ZEROPAGE` is exempt from §4's prefixed-segment rule because §2
+owns zero-page allocation — matching this library's existing
+`.segment "ZEROPAGE"` usage; no action needed. Contract v0.8.5 adds
+export-discipline rulings to §8.1/§8.2 (the shared-primitive
+consumer-input equates MUST NOT be exported) — N/A here, since
+c64-polyval consumes no §8.1–§8.3 primitive and emits none of those
+equates. Contract v0.8.6 makes the `$`-hex quoting rule normative for
+every `-D` snippet (make-mediated interfaces pass `$`-free `0x`
+values) — already adopted here via the snippet fixes in PR #33.
+Contract v0.9.0 rewrites §6 into the six-clause build-and-consume
+chapter (obligations attach to *archives*, not "the library") and
+adds the §2 ZP prefix registry, in which **`polyval_` and `pv_` are
+registered to this library**; adopted in §9.2 and §9.5 below —
+`CONTRACT_DEFINES` / `CONTRACT_ZP_DEFINES` forwarding is the one
+code change, the rest of the chapter is verified conformant as-is.
 §8 (Shared primitives: `sqtab`, `reu_mul`, `ct_mul_8x8`) covers the
 8×8 quarter-square-multiply primitive shared by the elliptic-curve
 and ChaCha20 field-arithmetic libraries; GF(2^128) carry-less
@@ -616,7 +631,22 @@ on them — see the worked example in §9.7.
 Every ZP slot the library claims is declared as an `.ifndef`-guarded
 equate and `.exportzp`-ed. Consumers `.importzp` the names they
 need (or override them in their own translation unit before
-`.include`-ing `zp_config.s` / `constants_lib.inc`).
+`.include`-ing `zp_config.s` / `constants_lib.inc`). The `polyval_`
+and `pv_` prefixes are registered to c64-polyval in the SPEC §2 ZP
+prefix registry (v0.9.0): every exported slot name begins with one of
+them, and no other adopter may claim either prefix.
+
+The canonical override route is the SPEC §6.2 make variable — no
+Makefile edit, no per-file ca65 chain:
+
+```sh
+make lib CONTRACT_ZP_DEFINES='-D polyval_acc=0x40'
+```
+
+Values must be `$`-free (`0x` hex or decimal) — make's `$`-expansion
+mangles every `$`-hex escape ladder silently (SPEC §2, v0.8.6). See
+§9.5 for why this library forwards `CONTRACT_ZP_DEFINES` to every
+member TU.
 
 | Symbol | Address | Width | Role |
 |---|---:|---:|---|
@@ -681,10 +711,15 @@ the `POLYVAL_PROFILE` selector (§3 of this document). See
 `src/lib_manifest.s` for the derivation comments and measurement
 methodology.
 
-### 9.5 §6 — Library archive targets
+### 9.5 §6 — Build and consume
 
-Four ar65 archive Make targets ship the library as a single `.a`
-file consumers can link directly without rebuilding `.o` files:
+SPEC v0.9.0 rewrote §6 from a single archive-targets clause into a
+six-clause chapter whose obligations attach to archives, not "the
+library". c64-polyval's status per clause:
+
+**§6.1 — Targets and artifact names.** Four ar65 archive Make
+targets ship the library as a single `.a` file consumers can link
+directly without rebuilding `.o` files:
 
 | Target | Output | Contents |
 |---|---|---|
@@ -696,10 +731,83 @@ file consumers can link directly without rebuilding `.o` files:
 Each archive bundles the SPEC §1 / §2 / §5 core (`lib_version.o`,
 `zp_config.o`, `lib_manifest.o`) plus the variant-specific .o set;
 see the `LIB_*_OBJS` blocks in the top-level `Makefile` for the
-exact composition.
+exact composition. The basenames are already canonical
+`<shortname>[-<variant>].a` with `<shortname>` = `polyval` — no
+deprecated-dialect dual-shipping needed. `make lib-app-owned` is
+required only of §8.x-consuming libraries and is N/A here (no §8
+primitive consumed — see the §8 note in the §9 intro and §9.6). One
+grandfathered name:
+`make lib-verify` is a verification link, not an archive, inside the
+reserved `lib-*` namespace; per §6.1 it stays until this repo's next
+MAJOR, when it becomes `verify-lib`-shaped.
 
 The previous (pre-v0.3.0) `make lib` target — a library-only
-verification PRG link at `$4000` — is renamed to `make lib-verify`.
+verification PRG link at `$4000` — is what `make lib-verify` names
+today.
+
+**§6.2 — Consumer defines reach the build.** Every §6.1 target
+accepts the two contract-normative make variables, both defaulting
+empty, appended to `CA65FLAGS` so they reach every ca65 invocation:
+
+```sh
+make lib CONTRACT_DEFINES='-D LIB_NO_BARE_EXPORTS=1'
+make lib CONTRACT_ZP_DEFINES='-D polyval_acc=0x40'
+```
+
+Values must be `$`-free (`0x` hex or decimal, SPEC §2 v0.8.6).
+
+The polyval-specific scoped-delivery reading, stated here because it
+inverts the SPEC's default caution: the SPEC scopes
+`CONTRACT_ZP_DEFINES` to "only the ZP-defining TU(s)" because a
+globally-delivered slot override collides with `.importzp` sites in
+other TUs (`Symbol already defined`). This library has **zero**
+`.importzp` sites for its own slots — every library TU defines the ZP
+equates itself via `constants_lib.inc` → `zp_config.s` `.ifndef`
+guards, baking the address into each `.o` at assemble time. So in
+c64-polyval *every member TU is a ZP-defining TU*: delivering
+`CONTRACT_ZP_DEFINES` to all member recipes is the conformant scoped
+delivery, and the only correct one — a `zp_config.o`-only delivery
+would export the overridden address while every other member had
+baked the default, a silent mismatch with no link-time diagnostic.
+The [nist#104](https://github.com/JC-000/c64-nist-curves/pull/104)
+caveat (a ZP TU built by a generic pattern rule needs an explicit
+rule to receive the scoped variable) is inapplicable for the same
+reason: here the pattern rule delivering to everything is the point.
+
+Recursive propagation: `lib-polyval-{long,short}` re-invoke
+`$(MAKE)`; both variables arrive in the sub-make automatically
+because command-line variable assignments are passed down via
+`MAKEFLAGS` (measured: `zp_config.o` extracted from a
+`make lib-polyval-short CONTRACT_ZP_DEFINES='-D polyval_acc=0x40'`
+archive exports `polyval_acc` at `$40`).
+
+**§6.3 — Reachability.** Every documented configuration axis
+(`POLYVAL_PROFILE`, `POLYVAL_NO_AES`, `LIB_NO_BARE_EXPORTS`, §2 slot
+overrides) is reachable through §6.1 targets plus §6.2 variables with
+no library edits. `lib-app-owned` N/A as above.
+
+**§6.4 — The manifest describes the archive it ships in.** Already
+conformant, both halves: (1) `lib_manifest.o` is assembled under the
+same configuration as the archive it ships in — the
+`lib-polyval-{long,short}` targets `make clean` and rebuild
+recursively with `POLYVAL_PROFILE` and `POLYVAL_NO_AES` pinned, so no
+archive ever receives a manifest object assembled under another
+configuration; (2) every manifest row is gated on the same switches
+that gate what it describes — profile-conditional
+`LIB_POLYVAL_RESIDENT_BYTES` / `_COLD_BYTES` on `POLYVAL_PROFILE`,
+the §8.0 table rows on `POLYVAL_PROFILE` / `LIB_POLYVAL_NO_AES`
+(§9.6). Equate names stay per-library: the exported surface has no
+variant-mangled `LIB_POLYVAL_<VARIANT>_*` names — only the canonical
+§5 four plus the `LIB_POLYVAL_PRECALC_*` families — so §6.4's
+deprecation of mangled names requires nothing here.
+
+**§6.5 — Name surface.** Known future-MAJOR item, recorded, not
+actioned: archive **member** basenames (`lib_version.o`,
+`zp_config.o`, `lib_manifest.o`, …) must take the `polyval_` prefix
+(`polyval_lib_version.o`, …) at this repo's next MAJOR. Members
+cannot carry two names at once, so this cannot ride a dual-name
+window — it changes only at MAJOR, together with the `lib-verify`
+rename above.
 
 ### 9.6 §8.0 — Precalculated-table enumeration (`src/lib_manifest.s`, `docs/precalc-tables.md`)
 
@@ -727,7 +835,8 @@ Manifest rows are gated on the same two axes: the LONG-only tables on
 `POLYVAL_PROFILE`, and the AES tables on `LIB_POLYVAL_NO_AES`, which
 the `lib-polyval-{long,short}` targets define so the POLYVAL-only
 archives (which omit `src/tables.s`) do not enumerate tables they do
-not ship (issue #23).
+not ship (issue #23). This gating is exactly SPEC v0.9.0 §6.4's
+per-variant manifest rule, both halves — see §9.5.
 
 All five are classified algorithm-specific (`PRECALC_SHARED_NO`) — no
 current adopter shares POLYVAL's GF(2^128) tables or AES's S-box

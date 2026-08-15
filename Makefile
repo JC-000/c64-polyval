@@ -38,6 +38,12 @@
 #                                recursively with the right POLYVAL_PROFILE
 #                                so the per-profile archives are always
 #                                assembled against the matching equate.
+#
+#   CONTRACT_DEFINES=...         consumer-supplied global ca65 -D flags
+#   CONTRACT_ZP_DEFINES=...      consumer-supplied §2 ZP slot overrides
+#                                (c64-lib-contract SPEC §6.2 — see the
+#                                block below CA65FLAGS; values must be
+#                                $-free: 0x hex or decimal).
 # ---------------------------------------------------------------------------
 
 CA65   = ca65
@@ -94,6 +100,40 @@ POLYVAL_NO_AES ?=
 ifneq ($(POLYVAL_NO_AES),)
   CA65FLAGS += -D LIB_POLYVAL_NO_AES=1
 endif
+
+# --- Consumer defines (c64-lib-contract SPEC §6.2) ------------------------
+# Two contract-normative variables, both defaulting empty, so a consumer
+# can inject ca65 -D flags without editing this Makefile or clobbering
+# CA65FLAGS wholesale (which would silently drop -I src and the profile
+# define):
+#
+#   CONTRACT_DEFINES     global defines — LIB_NO_BARE_EXPORTS, variant/
+#                        profile selectors, future deferral switches.
+#   CONTRACT_ZP_DEFINES  §2 ZP slot overrides, e.g.
+#                        make lib CONTRACT_ZP_DEFINES='-D polyval_acc=0x40'
+#
+# Values MUST be $-free (0x hex or decimal): make's own $-expansion mangles
+# every $-hex escape ladder with no diagnostic (SPEC §2, v0.8.6).
+#
+# Scoped delivery, polyval-specific reading: the SPEC scopes
+# CONTRACT_ZP_DEFINES to "only the ZP-defining TU(s)" because a
+# globally-delivered slot override collides with `.importzp` sites in other
+# TUs. This library has ZERO `.importzp` sites for its own slots — every
+# library TU defines the ZP equates itself via constants_lib.inc ->
+# zp_config.s `.ifndef` guards, baking the address into each .o at assemble
+# time. So here EVERY member TU is a ZP-defining TU: appending
+# CONTRACT_ZP_DEFINES to CA65FLAGS (all recipes) IS the conformant scoped
+# delivery, and the only correct one — a zp_config.o-only delivery would
+# export the overridden address while every other member had baked the
+# default, a silent mismatch. The nist#104 explicit-pattern-rule caveat
+# (ZP TU built by a generic pattern rule missing the scoped variable) is
+# therefore inapplicable: the pattern rule delivering to everything is the
+# point. The lib-polyval-{long,short} recursive $(MAKE) invocations inherit
+# both variables automatically (command-line-origin variables propagate to
+# sub-makes; measured — see API.md §9.5).
+CONTRACT_DEFINES    ?=
+CONTRACT_ZP_DEFINES ?=
+CA65FLAGS += $(CONTRACT_DEFINES) $(CONTRACT_ZP_DEFINES)
 
 # --- Module ordering ------------------------------------------------------
 # Order matters for ld65 segment layout. Recovered from the old

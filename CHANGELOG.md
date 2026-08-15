@@ -39,6 +39,15 @@ downstream projects (see `API.md` §8 for the integration contract).
   spelling. Snippets now show `-D polyval_acc=0x40` (measured: the
   slot exports at `$40`) with the quoting rule and make-recipe `0x`
   preference stated.
+- Contract-currency refresh to SPEC v0.9.0 (API.md §9, README,
+  CLAUDE.md): v0.8.4 (`ZEROPAGE` exempt from §4 — matches existing
+  usage) and v0.8.6 ($-hex snippet rule — already adopted via the
+  snippet fixes below) are doc-only; v0.8.5's §8.1/§8.2 export
+  discipline is N/A (no shared-primitive equates emitted); v0.9.0's
+  §2 ZP prefix registry registers `polyval_` and `pv_` to this
+  library (noted in API.md §9.2), and its §6 chapter is adopted in
+  the Added entry below. `src/zp_config.s`'s host-override comment
+  now leads with the §6.2 make-level route.
 - Contract-currency refresh to SPEC v0.8.3: v0.8.2 is the upstream
   spec-tagging policy (issue #71), v0.8.3 corrects §4's measured risk
   table per adopter reports (contract
@@ -52,6 +61,32 @@ downstream projects (see `API.md` §8 for the integration contract).
 
 ### Added
 
+- c64-lib-contract v0.9.0 §6.2 consumer-defines forwarding (contract
+  [#76](https://github.com/JC-000/c64-lib-contract/issues/76) phase 1):
+  the Makefile now accepts the two contract-normative variables
+  `CONTRACT_DEFINES` (global ca65 `-D` flags) and `CONTRACT_ZP_DEFINES`
+  (§2 ZP slot overrides, e.g.
+  `make lib CONTRACT_ZP_DEFINES='-D polyval_acc=0x40'`), both `?=`
+  empty and appended to `CA65FLAGS`, so consumer defines reach every
+  §6.1 target — including the recursive `lib-polyval-{long,short}`
+  builds — without editing the Makefile or clobbering `CA65FLAGS`.
+  Delivering `CONTRACT_ZP_DEFINES` to *every* member recipe is this
+  library's conformant reading of the SPEC's "only the ZP-defining
+  TU(s)" scope: c64-polyval has zero `.importzp` sites for its own
+  slots (each TU bakes the equates via `constants_lib.inc` →
+  `zp_config.s` `.ifndef` guards), so every member TU is a ZP-defining
+  TU and a `zp_config.o`-only delivery would export an overridden
+  address other members never baked. Measured: an overridden
+  `polyval_acc=0x40` lands in `zp_config.o`'s exports in `polyval.a`
+  and (via automatic sub-make propagation) `polyval-short.a`, and
+  `lib-verify` / `consumer-check` link clean under the override.
+  The rest of the v0.9.0 §6 chapter needs no code change, verified and
+  documented in `API.md` §9.5: archive basenames already canonical
+  (`polyval[-<variant>].a`), `lib-app-owned` N/A (no §8.x primitive
+  consumed), §6.4 per-variant manifests already conformant (both
+  halves), `lib-verify` grandfathered in the reserved `lib-*` namespace
+  until next MAJOR, and the §6.5 `polyval_`-prefixed archive member
+  basenames recorded as a next-MAJOR item.
 - c64-lib-contract v0.8.0 §4 segment-placement declarations
   (contract [#63](https://github.com/JC-000/c64-lib-contract/issues/63)):
   load-bearing cfg attributes are now declared as comments on the

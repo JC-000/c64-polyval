@@ -74,7 +74,7 @@ python3 tools/polyval_reference.py        # Python reference self-test (no VICE)
 ## Library contract
 
 c64-polyval implements [c64-lib-contract](https://github.com/JC-000/c64-lib-contract)
-(currently at SPEC v0.8.3) — see the
+(currently at SPEC v0.9.0) — see the
 [SPEC](https://github.com/JC-000/c64-lib-contract/blob/main/SPEC.md)
 and the
 [adopters table](https://github.com/JC-000/c64-lib-contract/blob/main/adopters.md).
@@ -103,7 +103,11 @@ shared 8×8 quarter-square-multiply surface are covered:
   `LIB_POLYVAL_REU_BANKS_USED`) in `src/lib_manifest.s`.
 - §6 — `make lib`, `make lib-polyval-long`, `make lib-polyval-short`,
   and `make lib-polyval-gcmsiv` produce ar65 archive bundles under
-  `build/lib/`.
+  `build/lib/` (canonical `polyval[-<variant>].a` basenames). Consumer
+  defines reach every build per §6.2 via
+  `CONTRACT_DEFINES` / `CONTRACT_ZP_DEFINES`, e.g.
+  `make lib CONTRACT_ZP_DEFINES='-D polyval_acc=0x40'` — see
+  `API.md` §9.5.
 - §8 (shared primitives, §8.1–§8.3) — N/A; GF(2^128) carry-less
   multiplication shares no shape with the 8×8 quarter-square-multiply
   primitive the elliptic-curve / ChaCha20 libraries converged on.
