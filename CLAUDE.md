@@ -20,7 +20,7 @@ Companion docs (read alongside this file):
 
 ## c64-lib-contract adoption (current as of v0.6.1)
 This library implements the [c64-lib-contract](https://github.com/JC-000/c64-lib-contract),
-currently at SPEC v0.10.4 (normative surface: v0.7.0's prefixed exports,
+currently at SPEC v0.10.5 (normative surface: v0.7.0's prefixed exports,
 v0.7.4's `: abs` pin on the macro's `_REGION`/`_SHARED` exports, v0.8.0's
 §4 segment-placement declarations, v0.9.0's §6 build-and-consume
 chapter — `CONTRACT_DEFINES` / `CONTRACT_ZP_DEFINES` forwarding — plus
@@ -34,8 +34,14 @@ archived object, so it is member-set-shaped and takes §6.1 targets
 rather than §6.2 defines, which is why SHORT+AEAD gained
 `lib-polyval-gcmsiv-short` (issue #40; the gap predated v0.10.4 —
 §6.3 ¶1's existing MUST already covered it, v0.10.4 only removed the
-¶2 ambiguity). v0.7.1–v0.7.3, v0.7.5, v0.8.1–v0.8.4, v0.8.6 and v0.9.2 are
-doc-only, v0.8.5's §8 export discipline is N/A here). §1–§6 (v0.1.0
+¶2 ambiguity); and v0.10.5's §6.3 looks-reachable rule — a knob naming
+an axis MUST select it (member selection *and* assembly configuration)
+or reject loudly, satisfied by the `PIN_` table's parse-time assert on
+every archive goal (polyval#40 is the SPEC's shape-2 motivating case).
+v0.7.1–v0.7.3, v0.7.5, v0.8.1–v0.8.4, v0.8.6 and v0.9.2 are
+doc-only, v0.8.5's §8 export discipline is N/A here; v0.10.6 (pending,
+contract PR #119) enumerates the §8.3 provider surface and is N/A —
+c64-polyval neither provides nor defers any §8.1–§8.3 primitive). §1–§6 (v0.1.0
 baseline) shipped in v0.3.0; §8.0 (precalc-table
 catch-loop, applies to every adopter regardless of §8.1–§8.3 applicability)
 shipped in v0.4.0; the v0.7.0 prefixed-export surface (§1 `LIB_POLYVAL_VERSION_*`,

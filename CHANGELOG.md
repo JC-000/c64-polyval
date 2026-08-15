@@ -11,6 +11,22 @@ downstream projects (see `API.md` §8 for the integration contract).
 
 ## Unreleased
 
+### Documentation
+
+- SPEC currency **v0.10.4 → v0.10.5** (tagged upstream 2026-08-15). The
+  new §6.3 *looks-reachable* rule — a build knob naming a variant/profile
+  axis MUST, on every §6.1 target accepting it, select that axis in both
+  member selection and assembly configuration or reject the invocation
+  loudly — is satisfied by the `PIN_` table's parse-time assert; no code
+  change was required. c64-polyval#40 is the clause's shape-2 motivating
+  case, and the `OPT_DATETIME` finding from its verification became the
+  clause's checkability note upstream. `README.md`'s contract line was
+  additionally two versions stale (v0.10.3) — it tracked neither this
+  bump nor the v0.10.4 one. New `API.md` §9.5 entry for §6.3; `CLAUDE.md`
+  records the rule and its `PIN_`-table discharge. Contract v0.10.6
+  (pending, contract PR #119: §8.3 provider surface) is N/A here —
+  c64-polyval neither provides nor defers any §8.1–§8.3 primitive.
+
 ### Added
 
 - **`make lib-polyval-gcmsiv-short`** — new SPEC §6.1 archive target
