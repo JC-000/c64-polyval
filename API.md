@@ -640,8 +640,8 @@ v0.7.0:
 | Symbol (prefixed, permanent) | Deprecated bare alias | Value | Meaning |
 |---|---|---:|---|
 | `LIB_POLYVAL_VERSION_MAJOR` | `LIB_VERSION_MAJOR` | `0` | Semver major. |
-| `LIB_POLYVAL_VERSION_MINOR` | `LIB_VERSION_MINOR` | `6` | Semver minor. |
-| `LIB_POLYVAL_VERSION_PATCH` | `LIB_VERSION_PATCH` | `1` | Semver patch. |
+| `LIB_POLYVAL_VERSION_MINOR` | `LIB_VERSION_MINOR` | `7` | Semver minor. |
+| `LIB_POLYVAL_VERSION_PATCH` | `LIB_VERSION_PATCH` | `0` | Semver patch. |
 | `LIB_POLYVAL_ABI_VERSION`   | `LIB_ABI_VERSION`   | `1` | ABI compatibility level. Coarser than MINOR. |
 
 The bare names are identical across every contract adopter, so a
