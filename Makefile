@@ -179,6 +179,40 @@ LIB_AEAD_OBJS = $(LIB_CORE_OBJS) $(BUILD_DIR)/data.o \
                 $(BUILD_DIR)/gcm_siv.o \
                 $(BUILD_DIR)/polyval_long.o
 
+# --- AEAD archive profile guard (issue #40) -------------------------------
+# LIB_AEAD_OBJS pins polyval_long.o rather than $(POLYVAL_PROFILE_OBJ), so an
+# AEAD archive is only coherent under POLYVAL_PROFILE=long. Under `short`,
+# POLYVAL_PROFILE still reaches CA65FLAGS, so data.o and lib_manifest.o get
+# assembled SHORT while the archived multiply routine stays LONG. The result
+# is an archive that is simultaneously:
+#   - unlinkable — polyval_long.o imports polyval_htable8_s* / polyval_reduce8_s*,
+#     which SHORT data.o does not export (src/data.s gates them on
+#     .if POLYVAL_PROFILE = POLYVAL_PROFILE_LONG); and
+#   - SPEC §6.4-violating — lib_manifest.o claims the SHORT footprints
+#     (RESIDENT 16128 / COLD 3072) over LONG code.
+# ar65 cannot notice either, so the build previously exited 0 and shipped it.
+#
+# The guard is deliberately parse-time rather than a recipe line: failing
+# before any object is built avoids leaving a half-built SHORT tree in
+# build/, which the pattern rules would then happily mix into a subsequent
+# LONG archive (the profile-switch gotcha in CLAUDE.md).
+#
+# STOPGAP, NOT THE FIX. SHORT+AEAD remains unreachable, so SPEC §6.3 ¶1
+# ("each documented variant/profile axis MUST be reachable through §6.1
+# targets plus §6.2 defines") is still unsatisfied — this only closes the
+# silent-corruption hole. The conformant resolution is a §6.1 target for
+# SHORT+AEAD, which commits a permanently §6.5-frozen name; see issue #40.
+AEAD_ARCHIVE_GOALS = lib lib-polyval-gcmsiv \
+                     $(LIB_DIR)/polyval.a $(LIB_DIR)/polyval-gcmsiv.a
+ifneq ($(POLYVAL_PROFILE),long)
+  ifneq ($(filter $(AEAD_ARCHIVE_GOALS),$(MAKECMDGOALS)),)
+    $(error AEAD archives require POLYVAL_PROFILE=long (got '$(POLYVAL_PROFILE)'). \
+      SHORT+AEAD has no archive target yet — see issue #40. \
+      For the SHORT POLYVAL-only archive use `make lib-polyval-short`; \
+      for a SHORT full-AEAD *PRG* use `make POLYVAL_PROFILE=short`)
+  endif
+endif
+
 .PHONY: all lib lib-verify lib-polyval-long lib-polyval-short \
         lib-polyval-gcmsiv consumer-check run clean dist
 .DEFAULT_GOAL := all
