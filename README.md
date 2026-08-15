@@ -37,7 +37,8 @@ high-throughput LONG build for session-stable H (TLS 1.3, WireGuard).
 make                              # build build/polyval.prg (LONG profile, default)
 make POLYVAL_PROFILE=short        # SHORT profile (low-memory, per-message H)
 make POLYVAL_PROFILE=long         # LONG profile (high-throughput, stable H)
-make lib                          # build/lib/polyval.a (full ar65 archive)
+make lib                          # build/lib/polyval.a (full ar65 archive, LONG)
+make lib-polyval-gcmsiv-short     # build/lib/polyval-gcmsiv-short.a (full AEAD, SHORT)
 make lib-verify                   # library-only verification link (pre-v0.3.0 `make lib`)
 make consumer-check               # assemble + link test/consumer_stub.s
 make run                          # build then launch in VICE
@@ -165,6 +166,14 @@ practical crossover where LONG starts winning consistently is around
 a full message faster despite its slower per-block inner loop; above
 that, LONG pulls ahead. See `API.md` §3 for the full discussion and
 the math.
+
+The profile is fixed when the archive is built — it selects which
+multiply object is archived, so it cannot be changed by a consumer
+`-D` define. Each profile has its own archive target: `make lib` and
+`make lib-polyval-gcmsiv` produce the LONG AEAD bundle,
+`make lib-polyval-gcmsiv-short` the SHORT one, and
+`make lib-polyval-{long,short}` the POLYVAL-only pair. Pick the
+target that matches the profile you want; see `API.md` §9.5.
 
 ## Turbo / accelerated hosts
 

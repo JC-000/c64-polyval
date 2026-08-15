@@ -17,6 +17,11 @@
 #                        Currently identical to `make lib`; the named
 #                        variant exists so consumers can pin to "the
 #                        GCM-SIV bundle" semantically.
+#   lib-polyval-gcmsiv-short
+#                        build $(BUILD_DIR)/lib/polyval-gcmsiv-short.a —
+#                        full AEAD bundle on the SHORT profile (POLYVAL
+#                        SHORT + AES + GCM-SIV). The RFC 8452 per-message-H
+#                        configuration; see "Profile choice" in CLAUDE.md.
 #   lib-verify           build $(BUILD_DIR)/lib_main.prg using lib_only.cfg
 #                        — library-only verification link at $4000. Fails
 #                        if any lib .o references an app-layer symbol. Not
@@ -170,51 +175,69 @@ LIB_POLYVAL_LONG_OBJS  = $(LIB_CORE_OBJS) $(BUILD_DIR)/data.o \
 LIB_POLYVAL_SHORT_OBJS = $(LIB_CORE_OBJS) $(BUILD_DIR)/data.o \
                          $(BUILD_DIR)/polyval_short.o
 
-# Full AEAD bundle: POLYVAL LONG + AES (encrypt/decrypt + sbox tables) +
-# GCM-SIV glue. This is what `make lib` ships and what `lib-polyval-gcmsiv`
-# names explicitly.
+# Full AEAD bundle: the profile-selected POLYVAL primitive + AES
+# (encrypt/decrypt + sbox tables) + GCM-SIV glue. This is what `make lib`
+# and `lib-polyval-gcmsiv` ship (LONG), and what `lib-polyval-gcmsiv-short`
+# ships (SHORT).
+#
+# $(POLYVAL_PROFILE_OBJ) rather than a pinned polyval_long.o (issue #40):
+# hardcoding the LONG object while POLYVAL_PROFILE still reached CA65FLAGS
+# made SHORT+AEAD unbuildable-but-silent — see the guard below.
 LIB_AEAD_OBJS = $(LIB_CORE_OBJS) $(BUILD_DIR)/data.o \
                 $(BUILD_DIR)/tables.o \
                 $(BUILD_DIR)/aes_encrypt.o $(BUILD_DIR)/aes_decrypt.o \
                 $(BUILD_DIR)/gcm_siv.o \
-                $(BUILD_DIR)/polyval_long.o
+                $(BUILD_DIR)/$(POLYVAL_PROFILE_OBJ).o
 
-# --- AEAD archive profile guard (issue #40) -------------------------------
-# LIB_AEAD_OBJS pins polyval_long.o rather than $(POLYVAL_PROFILE_OBJ), so an
-# AEAD archive is only coherent under POLYVAL_PROFILE=long. Under `short`,
-# POLYVAL_PROFILE still reaches CA65FLAGS, so data.o and lib_manifest.o get
-# assembled SHORT while the archived multiply routine stays LONG. The result
-# is an archive that is simultaneously:
-#   - unlinkable — polyval_long.o imports polyval_htable8_s* / polyval_reduce8_s*,
-#     which SHORT data.o does not export (src/data.s gates them on
-#     .if POLYVAL_PROFILE = POLYVAL_PROFILE_LONG); and
-#   - SPEC §6.4-violating — lib_manifest.o claims the SHORT footprints
-#     (RESIDENT 16128 / COLD 3072) over LONG code.
-# ar65 cannot notice either, so the build previously exited 0 and shipped it.
+# --- Archive goal configuration guard (issue #40) -------------------------
+# Every archive is defined by a (POLYVAL_PROFILE x LIB_POLYVAL_NO_AES) pair.
+# The lib-polyval-* phony targets set both behind a `make clean`, but make
+# cannot infer the pair from a goal, so any invocation that names an archive
+# without the matching pair silently produces a wrong artifact — exit 0, no
+# diagnostic, and ar65 cannot notice. All three shapes are measured:
 #
-# The guard is deliberately parse-time rather than a recipe line: failing
-# before any object is built avoids leaving a half-built SHORT tree in
-# build/, which the pattern rules would then happily mix into a subsequent
-# LONG archive (the profile-switch gotcha in CLAUDE.md).
+#   make lib POLYVAL_PROFILE=short
+#     `lib` does not clean, so the pattern rules reuse the stale LONG data.o
+#     and lib_manifest.o (POLYVAL_PROFILE is not a prerequisite — the
+#     profile-switch gotcha in CLAUDE.md) -> manifest describes the wrong
+#     profile.
+#   make build/lib/polyval-gcmsiv-short.a          (default profile)
+#     -> the LONG multiply archived under the -short name: coherent,
+#        correctly manifested, and not the artifact requested.
+#   make build/lib/polyval-short.a                 (default profile)
+#     -> polyval_short.o with a manifest exporting the LONG AEAD footprint
+#        (RESIDENT 6656 rather than 13824): incoherent, SPEC §6.4-violating,
+#        wrong on both axes at once.
 #
-# STOPGAP, NOT THE FIX. SHORT+AEAD remains unreachable, so SPEC §6.3 ¶1
-# ("each documented variant/profile axis MUST be reachable through §6.1
-# targets plus §6.2 defines") is still unsatisfied — this only closes the
-# silent-corruption hole. The conformant resolution is a §6.1 target for
-# SHORT+AEAD, which commits a permanently §6.5-frozen name; see issue #40.
-AEAD_ARCHIVE_GOALS = lib lib-polyval-gcmsiv \
-                     $(LIB_DIR)/polyval.a $(LIB_DIR)/polyval-gcmsiv.a
-ifneq ($(POLYVAL_PROFILE),long)
-  ifneq ($(filter $(AEAD_ARCHIVE_GOALS),$(MAKECMDGOALS)),)
-    $(error AEAD archives require POLYVAL_PROFILE=long (got '$(POLYVAL_PROFILE)'). \
-      SHORT+AEAD has no archive target yet — see issue #40. \
-      For the SHORT POLYVAL-only archive use `make lib-polyval-short`; \
-      for a SHORT full-AEAD *PRG* use `make POLYVAL_PROFILE=short`)
-  endif
-endif
+# So each archive goal declares its required pair and asserts it. Guarding
+# at parse time rather than in a recipe means nothing is built before the
+# rejection — a half-built tree is itself the input to the staleness shape.
+#
+# The lib-polyval-{long,short,gcmsiv-short} wrappers are deliberately absent
+# from the table: they establish the pin themselves via a recursive $(MAKE),
+# and their inner invocation names the archive path, which is what gets
+# checked here.
+POLYVAL_PIN = $(POLYVAL_PROFILE)$(if $(POLYVAL_NO_AES),-noaes)
+
+PIN_lib                               = long
+PIN_lib-polyval-gcmsiv                = long
+PIN_$(LIB_DIR)/polyval.a              = long
+PIN_$(LIB_DIR)/polyval-gcmsiv.a       = long
+PIN_$(LIB_DIR)/polyval-gcmsiv-short.a = short
+PIN_$(LIB_DIR)/polyval-long.a         = long-noaes
+PIN_$(LIB_DIR)/polyval-short.a        = short-noaes
+
+$(foreach g,$(MAKECMDGOALS),$(if $(PIN_$(g)),$(if $(filter $(PIN_$(g)),$(POLYVAL_PIN)),,\
+  $(error goal `$(g)` builds the '$(PIN_$(g))' configuration, but this invocation \
+    is '$(POLYVAL_PIN)' (POLYVAL_PROFILE=$(POLYVAL_PROFILE)$(if $(POLYVAL_NO_AES), \
+    POLYVAL_NO_AES=$(POLYVAL_NO_AES))). Use the phony target, which cleans and pins \
+    for you: `make lib` / `lib-polyval-gcmsiv` (LONG AEAD), \
+    `lib-polyval-gcmsiv-short` (SHORT AEAD), `lib-polyval-long` / \
+    `lib-polyval-short` (POLYVAL-only). For a SHORT full-AEAD *PRG*, \
+    `make POLYVAL_PROFILE=short`))))
 
 .PHONY: all lib lib-verify lib-polyval-long lib-polyval-short \
-        lib-polyval-gcmsiv consumer-check run clean dist
+        lib-polyval-gcmsiv lib-polyval-gcmsiv-short consumer-check run clean dist
 .DEFAULT_GOAL := all
 
 all: $(PRG) $(LABELS)
@@ -303,6 +326,19 @@ lib-polyval-short:
 	$(MAKE) clean
 	$(MAKE) POLYVAL_PROFILE=short POLYVAL_NO_AES=1 $(LIB_DIR)/polyval-short.a
 
+# SHORT full-AEAD archive (SPEC §6.1 target for the SHORT+AEAD member-set
+# axis — issue #40, contract v0.10.4 §6.3). Same recursive clean-and-pin
+# shape as the POLYVAL-only variants above: POLYVAL_PROFILE selects
+# polyval_short.o into LIB_AEAD_OBJS, and data.o / lib_manifest.o are
+# assembled under the same pin, so the shipped §5 manifest describes this
+# archive (SHORT AEAD: RESIDENT 16128 / COLD 3072) per §6.4.
+#
+# POLYVAL_NO_AES is deliberately NOT set here — this variant ships AES and
+# the GCM-SIV glue, so the manifest must enumerate aes_sbox / aes_inv_sbox.
+lib-polyval-gcmsiv-short:
+	$(MAKE) clean
+	$(MAKE) POLYVAL_PROFILE=short $(LIB_DIR)/polyval-gcmsiv-short.a
+
 $(LIB_DIR)/polyval-long.a: $(LIB_POLYVAL_LONG_OBJS) | $(LIB_DIR)
 	rm -f $@
 	$(AR65) a $@ $(LIB_POLYVAL_LONG_OBJS)
@@ -310,6 +346,10 @@ $(LIB_DIR)/polyval-long.a: $(LIB_POLYVAL_LONG_OBJS) | $(LIB_DIR)
 $(LIB_DIR)/polyval-short.a: $(LIB_POLYVAL_SHORT_OBJS) | $(LIB_DIR)
 	rm -f $@
 	$(AR65) a $@ $(LIB_POLYVAL_SHORT_OBJS)
+
+$(LIB_DIR)/polyval-gcmsiv-short.a: $(LIB_AEAD_OBJS) | $(LIB_DIR)
+	rm -f $@
+	$(AR65) a $@ $(LIB_AEAD_OBJS)
 
 # --- Consumer-stub smoke check --------------------------------------------
 # Assembles test/consumer_stub.s against the public .inc surface only and

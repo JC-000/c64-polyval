@@ -20,7 +20,7 @@ Companion docs (read alongside this file):
 
 ## c64-lib-contract adoption (current as of v0.6.1)
 This library implements the [c64-lib-contract](https://github.com/JC-000/c64-lib-contract),
-currently at SPEC v0.10.3 (normative surface: v0.7.0's prefixed exports,
+currently at SPEC v0.10.4 (normative surface: v0.7.0's prefixed exports,
 v0.7.4's `: abs` pin on the macro's `_REGION`/`_SHARED` exports, v0.8.0's
 §4 segment-placement declarations, v0.9.0's §6 build-and-consume
 chapter — `CONTRACT_DEFINES` / `CONTRACT_ZP_DEFINES` forwarding — plus
@@ -28,8 +28,13 @@ the §2 ZP prefix registry, where `polyval_` and `pv_` are registered to
 this library, and v0.10.0's §6.6 consumer footprint asserts — per-archive
 safe-direction `RESIDENT`/`COLD` values, rounded UP to the next 256-byte
 boundary, gated on `POLYVAL_PROFILE` × `LIB_POLYVAL_NO_AES`; v0.10.0's
-§6.7 is N/A — all buffers segment-resident, no placement equates.
-v0.7.1–v0.7.3, v0.7.5, v0.8.1–v0.8.4, v0.8.6 and v0.9.2 are
+§6.7 is N/A — all buffers segment-resident, no placement equates;
+and v0.10.4's §6.3 member-set scoping — `POLYVAL_PROFILE` swaps an
+archived object, so it is member-set-shaped and takes §6.1 targets
+rather than §6.2 defines, which is why SHORT+AEAD gained
+`lib-polyval-gcmsiv-short` (issue #40; the gap predated v0.10.4 —
+§6.3 ¶1's existing MUST already covered it, v0.10.4 only removed the
+¶2 ambiguity). v0.7.1–v0.7.3, v0.7.5, v0.8.1–v0.8.4, v0.8.6 and v0.9.2 are
 doc-only, v0.8.5's §8 export discipline is N/A here). §1–§6 (v0.1.0
 baseline) shipped in v0.3.0; §8.0 (precalc-table
 catch-loop, applies to every adopter regardless of §8.1–§8.3 applicability)
@@ -99,10 +104,11 @@ release commit doesn't update `src/lib_version.s` automatically.
 ```
 make                                  # build/polyval.prg (LONG profile, default)
 make POLYVAL_PROFILE=short            # SHORT profile
-make lib                              # build/lib/polyval.a (full ar65 archive — SPEC §6)
+make lib                              # build/lib/polyval.a (full ar65 archive — SPEC §6; LONG)
 make lib-polyval-long                 # build/lib/polyval-long.a (LONG only, no AES/GCM-SIV)
 make lib-polyval-short                # build/lib/polyval-short.a (SHORT only)
-make lib-polyval-gcmsiv               # build/lib/polyval-gcmsiv.a (full AEAD bundle)
+make lib-polyval-gcmsiv               # build/lib/polyval-gcmsiv.a (full AEAD bundle, LONG)
+make lib-polyval-gcmsiv-short         # build/lib/polyval-gcmsiv-short.a (full AEAD, SHORT)
 make lib CONTRACT_ZP_DEFINES='-D polyval_acc=0x40'   # §6.2 ZP slot override ($-free values only)
 make lib CONTRACT_DEFINES='-D LIB_NO_BARE_EXPORTS=1' # §6.2 global defines (composing consumers)
 make lib-verify                       # library-only verification PRG at $4000 (pre-v0.3.0 `make lib`)
@@ -112,6 +118,14 @@ make dist VERSION=v0.6.1              # reproducible source-tarball release
 Assembler: ca65/ld65/ar65 (cc65 toolchain). Single canonical toolchain as of
 v0.2.0 — ACME support was retired. `src/` is flat (no `lib/` subdir); ld65
 configs live at `src/c64.cfg` (full app) and `src/lib_only.cfg` (library-only).
+
+**Profile is a member-set axis (SPEC v0.10.4 §6.3, issue #40).** `POLYVAL_PROFILE`
+selects which multiply object is *archived*, so no `CONTRACT_DEFINES` `-D` can
+reach it — every documented profile × variant pair needs its own §6.1 target.
+`lib` / `lib-polyval-gcmsiv` name the LONG AEAD archive and do not clean first,
+so they **reject** `POLYVAL_PROFILE=short` at parse time rather than reusing
+objects assembled under the other profile; use `lib-polyval-gcmsiv-short`, which
+cleans and pins like `lib-polyval-{long,short}`.
 
 **Profile-switch gotcha:** `data.o` and `lib_manifest.o` contents are conditional
 on `POLYVAL_PROFILE` (and `lib_manifest.o` additionally on `POLYVAL_NO_AES`,
