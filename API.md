@@ -870,6 +870,25 @@ variant-mangled `LIB_POLYVAL_<VARIANT>_*` names — only the canonical
 §5 four plus the `LIB_POLYVAL_PRECALC_*` families — so §6.4's
 deprecation of mangled names requires nothing here.
 
+**§6.3 — Reachability and the looks-reachable rule (SPEC v0.10.4 /
+v0.10.5).** Adopted. `POLYVAL_PROFILE` is member-set-shaped — it
+selects which multiply object is archived — so per v0.10.4 each
+documented profile × variant pair takes a §6.1 target rather than a
+§6.2 define; `lib-polyval-gcmsiv-short` closed the last unreached
+pair (issue [#40](https://github.com/JC-000/c64-polyval/issues/40)).
+v0.10.5 adds the archive-level rule that a knob naming an axis MUST
+select it in **both** member selection and assembly configuration, or
+reject the invocation loudly; c64-polyval#40 is that clause's shape-2
+motivating case. Satisfied by the `PIN_` table in the `Makefile`:
+every archive goal declares its required `(POLYVAL_PROFILE ×
+LIB_POLYVAL_NO_AES)` pair and asserts it at parse time, so a
+mismatched invocation is rejected before any object is assembled.
+Measured: the `lib-polyval-*` wrappers select correctly even when
+passed a conflicting knob on the command line (the wrapper's explicit
+recursive `$(MAKE)` assignment wins), and the one pair a wrapper
+cannot re-pin — `LIB_POLYVAL_NO_AES=1` on an AEAD target — is
+rejected rather than built.
+
 **§6.5 — Name surface.** Known future-MAJOR item, recorded, not
 actioned: archive **member** basenames (`lib_version.o`,
 `zp_config.o`, `lib_manifest.o`, …) must take the `polyval_` prefix

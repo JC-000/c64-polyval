@@ -82,7 +82,7 @@ python3 tools/polyval_reference.py        # Python reference self-test (no VICE)
 ## Library contract
 
 c64-polyval implements [c64-lib-contract](https://github.com/JC-000/c64-lib-contract)
-(currently at SPEC v0.10.3) — see the
+(currently at SPEC v0.10.6) — see the
 [SPEC](https://github.com/JC-000/c64-lib-contract/blob/main/SPEC.md)
 and the
 [adopters table](https://github.com/JC-000/c64-lib-contract/blob/main/adopters.md).
@@ -118,8 +118,12 @@ shared 8×8 quarter-square-multiply surface are covered:
   segment-resident, no placement equate reserves address space
   invisible to ld65 — see `API.md` §9.5.
 - §6 — `make lib`, `make lib-polyval-long`, `make lib-polyval-short`,
-  and `make lib-polyval-gcmsiv` produce ar65 archive bundles under
-  `build/lib/` (canonical `polyval[-<variant>].a` basenames). Consumer
+  `make lib-polyval-gcmsiv` and `make lib-polyval-gcmsiv-short` produce
+  ar65 archive bundles under
+  `build/lib/` (canonical `polyval[-<variant>].a` basenames). Every
+  documented profile × variant pair has its own target, per SPEC §6.3
+  as clarified in v0.10.4/v0.10.5 — the profile selects an archived
+  object, so it cannot ride a §6.2 define. Consumer
   defines reach every build per §6.2 via
   `CONTRACT_DEFINES` / `CONTRACT_ZP_DEFINES`, e.g.
   `make lib CONTRACT_ZP_DEFINES='-D polyval_acc=0x40'` — see

@@ -11,6 +11,28 @@ downstream projects (see `API.md` §8 for the integration contract).
 
 ## Unreleased
 
+### Documentation
+
+- SPEC currency **v0.10.4 → v0.10.6** (both tagged upstream 2026-08-15). The
+  new §6.3 *looks-reachable* rule — a build knob naming a variant/profile
+  axis MUST, on every §6.1 target accepting it, select that axis in both
+  member selection and assembly configuration or reject the invocation
+  loudly — is satisfied by the `PIN_` table's parse-time assert; no code
+  change was required. c64-polyval#40 is the clause's shape-2 motivating
+  case, and the `OPT_DATETIME` finding from its verification became the
+  clause's checkability note upstream. `README.md`'s contract line was
+  additionally two versions stale (v0.10.3) — it tracked neither this
+  bump nor the v0.10.4 one. New `API.md` §9.5 entry for §6.3; `CLAUDE.md`
+  records the rule and its `PIN_`-table discharge. **v0.10.6** enumerates
+  the §8.3 provider surface (`ct_mul_8x8`, the SMC operand pair,
+  `poly_prod_lo`/`_hi`) and requires a deferral gate to leave `.import`s
+  behind for every name it un-defines — N/A here, verified by grep rather
+  than assumed: the only §8.1–§8.3 names anywhere in this tree are the
+  existing N/A declarations plus a doc-comment example in
+  `precalc_table.inc`, and the library has no deferral switch. Also
+  corrects two §6 target enumerations left at four entries when
+  `lib-polyval-gcmsiv-short` was added.
+
 ### Added
 
 - **`make lib-polyval-gcmsiv-short`** — new SPEC §6.1 archive target
