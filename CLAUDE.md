@@ -240,13 +240,21 @@ as historical reference and must not be edited. The active ABI is now
    unnoticed for a full release cycle — see `API.md` §9.1). Also check the
    value column of the §9.1 table in `API.md` — the v0.4.1 release bumped
    the file but left the table at PATCH 0.
-2. Write `docs/RELEASE_NOTES_vX.Y.Z.md` (use the v0.3.0 file as a template).
-   Release notes MUST state `RESIDENT`/`COLD` footprint deltas **per
-   (profile × variant)** — all four configurations, LONG/SHORT ×
-   AEAD/NO_AES, even when a delta is zero — per c64-lib-contract §6.6
-   obligation 2: one tag carries four footprint pairs, so a single
-   per-version delta is meaningless.
+2. Write `docs/RELEASE_NOTES_vX.Y.Z.md` (use the v0.7.0 file as a template).
+   Release notes MUST state `RESIDENT`/`COLD` footprint values **per
+   shipped archive** — as of v0.7.0 that is **five** rows, not four:
+   `polyval.a`/`polyval-gcmsiv.a` (LONG AEAD), `polyval-gcmsiv-short.a`
+   (SHORT AEAD), `polyval-long.a`, `polyval-short.a` — even when a value
+   is unchanged, per c64-lib-contract §6.6 obligation 2: one tag carries
+   a footprint pair per archive, so a single per-version delta is
+   meaningless. Count the rows against the `lib-polyval-*` target list
+   rather than against the previous release's table.
 3. `make clean && make dist VERSION=vX.Y.Z` — produces the tarball + stamps
-   size/SHA256 into the release notes (two-pass).
+   size/SHA256 into the release notes (two-pass). **The stamper is
+   fail-closed** (`tools/build_release.sh`): it aborts unless exactly one
+   `SHA256`/`SIZE` placeholder remains after the reset. If it refuses, the
+   notes contain a second hash or a literal placeholder token in prose —
+   fix the notes, don't loosen the guard. Before v0.7.0 it silently
+   stamped the tarball hash over the byte-identity receipt's PRG hashes.
 4. Verify reproducibility: re-run `make dist`, SHA256 must be identical.
 5. Tag `vX.Y.Z` on the commit that includes the tarball + stamped notes.
