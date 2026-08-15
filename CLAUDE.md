@@ -73,7 +73,8 @@ plus per-archive manifest accuracy (`POLYVAL_NO_AES`) shipped in v0.5.0
   are conditional on `POLYVAL_PROFILE` × `LIB_POLYVAL_NO_AES` and
   safe-direction per §6.6 (measured per archive, rounded UP to the next
   256-byte boundary — see API.md §9.4 for the four-configuration table)
-- §6 ar65 archive build targets — `make lib` / `lib-polyval-{long,short,gcmsiv}`
+- §6 ar65 archive build targets — `make lib` /
+  `lib-polyval-{long,short,gcmsiv,gcmsiv-short}`
 - §6.2 consumer-defines forwarding (v0.9.0) — `CONTRACT_DEFINES` (global)
   and `CONTRACT_ZP_DEFINES` (ZP slot overrides), both `?=` empty, appended
   to `CA65FLAGS`. Polyval-specific reading: the library has zero `.importzp`
