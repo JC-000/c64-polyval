@@ -30,6 +30,15 @@ downstream projects (see `API.md` §8 for the integration contract).
 
 ### Documentation
 
+- Consumer ZP-override snippets fixed for two copied-snippet defect
+  classes the contract catalogued (SPEC v0.7.1 and v0.8.6, which asked
+  adopters to re-check): `src/zp_config.s`'s host-override comment
+  said `--asm-define` (ca65 rejects it — cl65's spelling) with an
+  unquoted `$40` (the shell expands `$4` + `0`, silently placing the
+  slot at `$00`); `src/lib_manifest.s`'s override note had the same
+  spelling. Snippets now show `-D polyval_acc=0x40` (measured: the
+  slot exports at `$40`) with the quoting rule and make-recipe `0x`
+  preference stated.
 - Contract-currency refresh to SPEC v0.8.3: v0.8.2 is the upstream
   spec-tagging policy (issue #71), v0.8.3 corrects §4's measured risk
   table per adopter reports (contract

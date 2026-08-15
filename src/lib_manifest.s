@@ -34,7 +34,8 @@
 ; (see c64-lib-contract SPEC §5 worked example).
 ;
 ; Each equate is `.ifndef`-guarded so a consumer can override via
-; `ca65 --asm-define <symbol>=<value>`. Exports are wrapped in a
+; `ca65 -D <symbol>=<value>` (ca65 rejects `--asm-define`; that
+; spelling is cl65's — SPEC v0.7.1). Exports are wrapped in a
 ; `.if !.defined(LIB_MANIFEST_NO_EXPORTS)` block so a translation unit
 ; that transitively `.include`s this file (e.g. via a future
 ; constants_lib.inc roll-up) can suppress the directives and avoid
