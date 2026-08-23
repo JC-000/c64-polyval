@@ -11,6 +11,16 @@ downstream projects (see `API.md` §8 for the integration contract).
 
 ## Unreleased
 
+## v0.7.1 — 2026-08-23
+
+Consumer-unblocking **PATCH**. The POLYVAL-only archives
+(`polyval-long.a` / `polyval-short.a`) exported the AES + GCM-SIV BSS
+block and so could not be linked by any consumer that owns its own AES
+— which is exactly what those two archives exist for. No exported
+surface was removed or renamed, no manifest value moved, and the linked
+PRG is byte-identical to v0.7.0 on both profiles, so
+`LIB_POLYVAL_ABI_VERSION` stays 1.
+
 ### Fixed
 
 - **`polyval-long.a` / `polyval-short.a` exported the AES + GCM-SIV BSS
