@@ -22,6 +22,12 @@
 #                        full AEAD bundle on the SHORT profile (POLYVAL
 #                        SHORT + AES + GCM-SIV). The RFC 8452 per-message-H
 #                        configuration; see "Profile choice" in CLAUDE.md.
+#   lib-polyval-compact  build $(BUILD_DIR)/lib/polyval-compact.a — POLYVAL
+#                        COMPACT primitive only, no AES, no GCM-SIV. The
+#                        memory-bound configuration (issue #51).
+#   lib-polyval-gcmsiv-compact
+#                        build $(BUILD_DIR)/lib/polyval-gcmsiv-compact.a —
+#                        full AEAD bundle on the COMPACT profile.
 #   lib-verify           build $(BUILD_DIR)/lib_main.prg using lib_only.cfg
 #                        — library-only verification link at $4000. Fails
 #                        if any lib .o references an app-layer symbol. Not
@@ -30,24 +36,27 @@
 #                        library to prove the public ABI is callable from a
 #                        clean consumer. Output build/consumer_stub.prg.
 #   consumer-check-noaes link test/consumer_stub_noaes.s -- a consumer that
-#                        owns its own AES/GCM-SIV -- against polyval-long.a
-#                        and polyval-short.a. Guards issue #47: the
-#                        POLYVAL-only archives must not export the AES /
-#                        GCM-SIV BSS block out of the shared data.o.
+#                        owns its own AES/GCM-SIV -- against polyval-long.a,
+#                        polyval-short.a and polyval-compact.a. Guards issue
+#                        #47: the POLYVAL-only archives must not export the
+#                        AES / GCM-SIV BSS block out of the shared data.o.
 #   run                  `make all` then launch VICE x64sc with -moncommands.
 #   clean                rm -rf build/.
 #   dist                 reproducible release tarball.
 #
 # Variables:
-#   POLYVAL_PROFILE=long|short   maps to -D POLYVAL_PROFILE=2|1 for ca65.
+#   POLYVAL_PROFILE=long|short|compact
+#                                maps to -D POLYVAL_PROFILE=2|1|3 for ca65.
 #                                Default: long. Selects polyval_long.s vs
-#                                polyval_short.s at link time (ca65 has no
-#                                ACME-style !source dispatcher).
+#                                polyval_short.s vs polyval_compact.s at
+#                                link time (ca65 has no ACME-style !source
+#                                dispatcher).
 #
-#                                lib-polyval-{long,short} re-invoke `make`
-#                                recursively with the right POLYVAL_PROFILE
-#                                so the per-profile archives are always
-#                                assembled against the matching equate.
+#                                lib-polyval-{long,short,compact} re-invoke
+#                                `make` recursively with the right
+#                                POLYVAL_PROFILE so the per-profile archives
+#                                are always assembled against the matching
+#                                equate.
 #
 #   CONTRACT_DEFINES=...         consumer-supplied global ca65 -D flags
 #   CONTRACT_ZP_DEFINES=...      consumer-supplied §2 ZP slot overrides
@@ -80,8 +89,9 @@ CONSUMER_PRG   = $(BUILD_DIR)/consumer_stub.prg
 CONSUMER_LBL   = $(BUILD_DIR)/consumer_stub.lbl
 
 # --- POLYVAL profile ------------------------------------------------------
-# `long`  -> -D POLYVAL_PROFILE=2, links polyval_long.o  (table-based, fast)
-# `short` -> -D POLYVAL_PROFILE=1, links polyval_short.o (bit-serial, small)
+# `long`    -> -D POLYVAL_PROFILE=2, links polyval_long.o    (8-bit Shoup, fast)
+# `short`   -> -D POLYVAL_PROFILE=1, links polyval_short.o   (4-bit Shoup, unrolled)
+# `compact` -> -D POLYVAL_PROFILE=3, links polyval_compact.o (4-bit Shoup, rolled)
 POLYVAL_PROFILE ?= long
 ifeq ($(POLYVAL_PROFILE),long)
   PROFILE_VAL        = 2
@@ -89,8 +99,11 @@ ifeq ($(POLYVAL_PROFILE),long)
 else ifeq ($(POLYVAL_PROFILE),short)
   PROFILE_VAL        = 1
   POLYVAL_PROFILE_OBJ = polyval_short
+else ifeq ($(POLYVAL_PROFILE),compact)
+  PROFILE_VAL        = 3
+  POLYVAL_PROFILE_OBJ = polyval_compact
 else
-  $(error POLYVAL_PROFILE must be 'long' or 'short', got '$(POLYVAL_PROFILE)')
+  $(error POLYVAL_PROFILE must be 'long', 'short' or 'compact', got '$(POLYVAL_PROFILE)')
 endif
 
 # `-I src` resolves `.include "constants_lib.inc"`, `.include "polyval_api.inc"`,
@@ -102,7 +115,8 @@ CA65FLAGS = -I $(SRC_DIR) -D POLYVAL_PROFILE=$(PROFILE_VAL) -g
 # not enumerate the AES S-box tables (§8.0 catch-loop accuracy). This is a
 # different axis from POLYVAL_PROFILE — polyval-long.a and polyval-gcmsiv.a
 # are both PROFILE=long; only archive membership differs — so it gets its
-# own define. Set by the lib-polyval-{long,short} recursive invocations.
+# own define. Set by the lib-polyval-{long,short,compact} recursive
+# invocations.
 # Like the profile define, lib_manifest.o content depends on it without a
 # tracked dependency: `make clean` between differently-gated targets (the
 # recursive targets already do).
@@ -179,6 +193,8 @@ LIB_POLYVAL_LONG_OBJS  = $(LIB_CORE_OBJS) $(BUILD_DIR)/data.o \
                          $(BUILD_DIR)/polyval_long.o
 LIB_POLYVAL_SHORT_OBJS = $(LIB_CORE_OBJS) $(BUILD_DIR)/data.o \
                          $(BUILD_DIR)/polyval_short.o
+LIB_POLYVAL_COMPACT_OBJS = $(LIB_CORE_OBJS) $(BUILD_DIR)/data.o \
+                         $(BUILD_DIR)/polyval_compact.o
 
 # Full AEAD bundle: the profile-selected POLYVAL primitive + AES
 # (encrypt/decrypt + sbox tables) + GCM-SIV glue. This is what `make lib`
@@ -229,17 +245,21 @@ PIN_lib-polyval-gcmsiv                = long
 PIN_$(LIB_DIR)/polyval.a              = long
 PIN_$(LIB_DIR)/polyval-gcmsiv.a       = long
 PIN_$(LIB_DIR)/polyval-gcmsiv-short.a = short
+PIN_$(LIB_DIR)/polyval-gcmsiv-compact.a = compact
 PIN_$(LIB_DIR)/polyval-long.a         = long-noaes
 PIN_$(LIB_DIR)/polyval-short.a        = short-noaes
+PIN_$(LIB_DIR)/polyval-compact.a      = compact-noaes
 
 $(foreach g,$(MAKECMDGOALS),$(if $(PIN_$(g)),$(if $(filter $(PIN_$(g)),$(POLYVAL_PIN)),,\
   $(error goal `$(g)` builds the '$(PIN_$(g))' configuration, but this invocation \
     is '$(POLYVAL_PIN)' (POLYVAL_PROFILE=$(POLYVAL_PROFILE)$(if $(POLYVAL_NO_AES), \
     POLYVAL_NO_AES=$(POLYVAL_NO_AES))). Use the phony target, which cleans and pins \
     for you: `make lib` / `lib-polyval-gcmsiv` (LONG AEAD), \
-    `lib-polyval-gcmsiv-short` (SHORT AEAD), `lib-polyval-long` / \
-    `lib-polyval-short` (POLYVAL-only). For a SHORT full-AEAD *PRG*, \
-    `make POLYVAL_PROFILE=short`))))
+    `lib-polyval-gcmsiv-short` (SHORT AEAD), \
+    `lib-polyval-gcmsiv-compact` (COMPACT AEAD), `lib-polyval-long` / \
+    `lib-polyval-short` / `lib-polyval-compact` (POLYVAL-only). For a \
+    SHORT or COMPACT full-AEAD *PRG*, `make POLYVAL_PROFILE=short` / \
+    `make POLYVAL_PROFILE=compact`))))
 
 # --- §6.2 defines-route guard for the member-set axes (issue #55) ---------
 # The PIN table above guards the *make variable* route. SPEC §6.2's consumer
@@ -288,15 +308,18 @@ ifneq ($(CONTRACT_AXIS_HITS),)
     them through the defines forwarding yields a wrong artifact, silently \
     on a warm tree. Use the make variable and the phony target that pins \
     it: `make lib` / `lib-polyval-gcmsiv` (LONG AEAD), \
-    `lib-polyval-gcmsiv-short` (SHORT AEAD), `lib-polyval-long` / \
-    `lib-polyval-short` (POLYVAL-only), or `make POLYVAL_PROFILE=short` \
-    for a SHORT full-AEAD PRG. CONTRACT_DEFINES remains correct for \
+    `lib-polyval-gcmsiv-short` (SHORT AEAD), \
+    `lib-polyval-gcmsiv-compact` (COMPACT AEAD), `lib-polyval-long` / \
+    `lib-polyval-short` / `lib-polyval-compact` (POLYVAL-only), or \
+    `make POLYVAL_PROFILE=short` for a SHORT full-AEAD PRG. \
+    CONTRACT_DEFINES remains correct for \
     non-member-set defines such as LIB_NO_BARE_EXPORTS and \
     ZP_CONFIG_NO_EXPORTS)
 endif
 
 .PHONY: all lib lib-verify lib-polyval-long lib-polyval-short \
-        lib-polyval-gcmsiv lib-polyval-gcmsiv-short consumer-check \
+        lib-polyval-compact lib-polyval-gcmsiv lib-polyval-gcmsiv-short \
+        lib-polyval-gcmsiv-compact consumer-check \
         consumer-check-noaes run clean dist
 .DEFAULT_GOAL := all
 
@@ -469,6 +492,13 @@ lib-polyval-short:
 	$(MAKE) clean
 	$(MAKE) POLYVAL_PROFILE=short POLYVAL_NO_AES=1 $(LIB_DIR)/polyval-short.a
 
+# The memory-bound configuration (issue #51). Same clean-and-pin shape; the
+# archive ships the rolled 4-bit Shoup multiply and the same 256-byte
+# polyval_htable as SHORT.
+lib-polyval-compact:
+	$(MAKE) clean
+	$(MAKE) POLYVAL_PROFILE=compact POLYVAL_NO_AES=1 $(LIB_DIR)/polyval-compact.a
+
 # SHORT full-AEAD archive (SPEC §6.1 target for the SHORT+AEAD member-set
 # axis — issue #40, contract v0.10.4 §6.3). Same recursive clean-and-pin
 # shape as the POLYVAL-only variants above: POLYVAL_PROFILE selects
@@ -482,6 +512,10 @@ lib-polyval-gcmsiv-short:
 	$(MAKE) clean
 	$(MAKE) POLYVAL_PROFILE=short $(LIB_DIR)/polyval-gcmsiv-short.a
 
+lib-polyval-gcmsiv-compact:
+	$(MAKE) clean
+	$(MAKE) POLYVAL_PROFILE=compact $(LIB_DIR)/polyval-gcmsiv-compact.a
+
 $(LIB_DIR)/polyval-long.a: $(LIB_POLYVAL_LONG_OBJS) | $(LIB_DIR)
 	rm -f $@
 	$(AR65) a $@ $(LIB_POLYVAL_LONG_OBJS)
@@ -490,7 +524,15 @@ $(LIB_DIR)/polyval-short.a: $(LIB_POLYVAL_SHORT_OBJS) | $(LIB_DIR)
 	rm -f $@
 	$(AR65) a $@ $(LIB_POLYVAL_SHORT_OBJS)
 
+$(LIB_DIR)/polyval-compact.a: $(LIB_POLYVAL_COMPACT_OBJS) | $(LIB_DIR)
+	rm -f $@
+	$(AR65) a $@ $(LIB_POLYVAL_COMPACT_OBJS)
+
 $(LIB_DIR)/polyval-gcmsiv-short.a: $(LIB_AEAD_OBJS) | $(LIB_DIR)
+	rm -f $@
+	$(AR65) a $@ $(LIB_AEAD_OBJS)
+
+$(LIB_DIR)/polyval-gcmsiv-compact.a: $(LIB_AEAD_OBJS) | $(LIB_DIR)
 	rm -f $@
 	$(AR65) a $@ $(LIB_AEAD_OBJS)
 
@@ -510,8 +552,8 @@ $(CONSUMER_PRG): $(BUILD_DIR)/consumer_stub.o $(LIB_OBJECTS) $(LIB_CFG) | $(BUIL
 # If the NO_AES archives ever again export the AES / GCM-SIV BSS block, ld65
 # fails here with "Duplicate external identifier".
 #
-# Runs against BOTH POLYVAL-only archives because data.o is archived into
-# each of them; a leak can regress on either profile independently.
+# Runs against EVERY POLYVAL-only archive because data.o is archived into
+# each of them; a leak can regress on any profile independently.
 consumer-check-noaes:
 	$(MAKE) clean
 	$(MAKE) POLYVAL_PROFILE=long POLYVAL_NO_AES=1 $(LIB_DIR)/polyval-long.a
@@ -525,7 +567,13 @@ consumer-check-noaes:
 	    -o $(BUILD_DIR)/consumer_stub_noaes.o $(TEST_DIR)/consumer_stub_noaes.s
 	$(LD65) -C $(LIB_CFG) -o $(BUILD_DIR)/consumer_stub_noaes_short.prg \
 	    $(BUILD_DIR)/consumer_stub_noaes.o $(LIB_DIR)/polyval-short.a
-	@echo "consumer-check-noaes: polyval-long.a + polyval-short.a link clean"
+	$(MAKE) clean
+	$(MAKE) POLYVAL_PROFILE=compact POLYVAL_NO_AES=1 $(LIB_DIR)/polyval-compact.a
+	$(CA65) -I $(SRC_DIR) -D POLYVAL_PROFILE=3 -D LIB_POLYVAL_NO_AES=1 \
+	    -o $(BUILD_DIR)/consumer_stub_noaes.o $(TEST_DIR)/consumer_stub_noaes.s
+	$(LD65) -C $(LIB_CFG) -o $(BUILD_DIR)/consumer_stub_noaes_compact.prg \
+	    $(BUILD_DIR)/consumer_stub_noaes.o $(LIB_DIR)/polyval-compact.a
+	@echo "consumer-check-noaes: polyval-long.a + polyval-short.a + polyval-compact.a link clean"
 
 # --- VICE quick check -----------------------------------------------------
 run: all

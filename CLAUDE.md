@@ -15,10 +15,10 @@ Companion docs (read alongside this file):
 - `API.md` — library API reference; §3 (profile selection), §4 (ZP layout),
   §7–§8 (consumer integration), §9 (c64-lib-contract surface) are load-bearing.
 - `CHANGELOG.md` — release history.
-- `docs/RELEASE_NOTES_v0.7.1.md` — current release attestation (size + SHA256).
+- `docs/RELEASE_NOTES_v0.8.0.md` — current release attestation (size + SHA256).
 - `docs/precalc-tables.md` — c64-lib-contract §8.0 precalc-table enumeration.
 
-## c64-lib-contract adoption (current as of v0.7.1)
+## c64-lib-contract adoption (current as of v0.8.0)
 This library implements the [c64-lib-contract](https://github.com/JC-000/c64-lib-contract),
 currently at SPEC v0.11.1 (normative surface: v0.7.0's prefixed exports,
 v0.7.4's `: abs` pin on the macro's `_REGION`/`_SHARED` exports, v0.8.0's
@@ -143,14 +143,17 @@ make lib-polyval-long                 # build/lib/polyval-long.a (LONG only, no 
 make lib-polyval-short                # build/lib/polyval-short.a (SHORT only)
 make lib-polyval-gcmsiv               # build/lib/polyval-gcmsiv.a (full AEAD bundle, LONG)
 make lib-polyval-gcmsiv-short         # build/lib/polyval-gcmsiv-short.a (full AEAD, SHORT)
+make lib-polyval-compact              # build/lib/polyval-compact.a (COMPACT only)
+make lib-polyval-gcmsiv-compact       # build/lib/polyval-gcmsiv-compact.a (full AEAD, COMPACT)
 make lib CONTRACT_ZP_DEFINES='-D polyval_acc=0x40'   # §6.2 ZP slot override ($-free values only)
 make lib CONTRACT_DEFINES='-D LIB_NO_BARE_EXPORTS=1' # §6.2 global defines (composing consumers)
 make lib-verify                       # library-only verification PRG at $4000 (pre-v0.3.0 `make lib`)
 make consumer-check                   # link test/consumer_stub.s against the library
 make consumer-check-noaes             # link test/consumer_stub_noaes.s (owns its own
-                                      #   aes_state/gcmsiv_tag) against polyval-long.a
-                                      #   AND polyval-short.a — issue #47 regression guard
-make dist VERSION=v0.7.1              # reproducible source-tarball release
+                                      #   aes_state/gcmsiv_tag) against polyval-long.a,
+                                      #   polyval-short.a AND polyval-compact.a —
+                                      #   issue #47 regression guard
+make dist VERSION=v0.8.0              # reproducible source-tarball release
 ```
 Assembler: ca65/ld65/ar65 (cc65 toolchain). Single canonical toolchain as of
 v0.2.0 — ACME support was retired. `src/` is flat (no `lib/` subdir); ld65
@@ -160,9 +163,12 @@ configs live at `src/c64.cfg` (full app) and `src/lib_only.cfg` (library-only).
 selects which multiply object is *archived*, so no `CONTRACT_DEFINES` `-D` can
 reach it — every documented profile × variant pair needs its own §6.1 target.
 `lib` / `lib-polyval-gcmsiv` name the LONG AEAD archive and do not clean first,
-so they **reject** `POLYVAL_PROFILE=short` at parse time rather than reusing
-objects assembled under the other profile; use `lib-polyval-gcmsiv-short`, which
-cleans and pins like `lib-polyval-{long,short}`.
+so they **reject** `POLYVAL_PROFILE=short` / `=compact` at parse time rather than
+reusing objects assembled under another profile; use
+`lib-polyval-gcmsiv-{short,compact}`, which clean and pin like
+`lib-polyval-{long,short,compact}`. Adding a profile is therefore a §6.1 change:
+two targets, two `PIN_` rows, two `(profile × NO_AES)` manifest branches, two
+footprint rows — the v0.7.0 shape, done again for COMPACT in v0.8.0 (issue #51).
 
 **Flag-set staleness — handled since issue #58; the manual `make clean` between
 profile switches is no longer required.** `data.o` and `lib_manifest.o` contents
@@ -195,10 +201,22 @@ and `ca65/`. (`docs/precalc-tables.md` is staged by an explicit `cp` in
 automatically.)
 
 ## Profile choice
-LONG: ~3.9k cy multiply, ~255k cy precompute, larger BSS. Best for
-long-message / stable-H workloads.
-SHORT: ~18.8k cy multiply, ~29k cy precompute, smaller BSS. Best for
-RFC 8452 GCM-SIV's per-message H. Crossover ≈ 68 blocks / ~1 KB.
+LONG: 3,917 cy multiply, 255,268 cy precompute, 4,160 B code + 8,448 B
+tables. Best for long-message / stable-H workloads.
+SHORT: 18,776 cy multiply, 4,656 cy precompute, 13,614 B code + 256 B
+tables. Best for RFC 8452 GCM-SIV's per-message H. Crossover ≈ 68
+blocks / ~1 KB.
+COMPACT: 49,657 cy multiply, 10,970 cy precompute, 325 B code + 256 B
+tables. Same 4-bit Shoup mathematics as SHORT, rolled. Strictly slower
+than SHORT at every N — it is a footprint choice, not a speed/memory
+trade-off, and exists because 13.6 KB of multiply can push a stock-C64
+consumer's image into the $A000-$BFFF ROM window (issue #51).
+
+All cycle figures above are `tools/benchmark_polyval.py` measurements.
+**SHORT's precompute was documented as ~29,385 cy from v0.1.0 through
+v0.7.3** — a stale figure predating the switch from a 128-iteration
+mulX_POLYVAL loop to the 7-shift RFC 8452 identity, corrected to 4,656
+in v0.8.0. Re-measure before quoting cycle counts in release notes.
 
 ## Test
 ```
@@ -239,7 +257,7 @@ chasing bugs that don't exist in their code or in VICE.
 
 This rule applies to all Claude sessions in this multi-project workspace.
 
-## Layout (v0.7.1)
+## Layout (v0.8.0)
 ```
 src/
   lib_version.s          # §1: LIB_VERSION_*/LIB_ABI_VERSION
@@ -247,7 +265,7 @@ src/
   lib_manifest.s         # §5: LIB_POLYVAL_*_BYTES + REU_BANKS_USED; §8.0 LIB_PRECALC_TABLE invocations
   precalc_table.inc      # §8.0: canonical LIB_PRECALC_TABLE macro (copied verbatim)
   constants_lib.inc      # AES sizes, profile selectors, .include "zp_config.s"
-  polyval_long.s / polyval_short.s
+  polyval_long.s / polyval_short.s / polyval_compact.s
   aes_encrypt.s / aes_decrypt.s / tables.s
   gcm_siv.s
   data.s                 # all BSS + page-aligned tables (segment-partitioned)
@@ -286,9 +304,10 @@ as historical reference and must not be edited. The active ABI is now
    the file but left the table at PATCH 0.
 2. Write `docs/RELEASE_NOTES_vX.Y.Z.md` (use the v0.7.3 file as a template).
    Release notes MUST state `RESIDENT`/`COLD` footprint values **per
-   shipped archive**, **one row each** — as of v0.7.0 that is **five
+   shipped archive**, **one row each** — as of v0.8.0 that is **seven
    rows**: `polyval.a`, `polyval-gcmsiv.a`, `polyval-gcmsiv-short.a`,
-   `polyval-long.a`, `polyval-short.a` — even when a value is unchanged,
+   `polyval-gcmsiv-compact.a`, `polyval-long.a`, `polyval-short.a`,
+   `polyval-compact.a` — even when a value is unchanged,
    per c64-lib-contract §6.6 obligation 2: one tag carries a footprint
    pair per archive, so a single per-version delta is meaningless. Count
    the rows against the `lib-polyval-*` target list rather than against

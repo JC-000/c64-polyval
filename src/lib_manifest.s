@@ -19,9 +19,10 @@
 ;                                  RAM at runtime to serve a
 ;                                  polyval_update / gcm_siv_encrypt
 ;                                  call). Conditional on BOTH axes: the
-;                                  POLYVAL_PROFILE selector (LONG and
-;                                  SHORT differ substantively in the
-;                                  size of polyval_multiply and
+;                                  POLYVAL_PROFILE selector (LONG,
+;                                  SHORT and COMPACT differ
+;                                  substantively in the size of
+;                                  polyval_multiply and
 ;                                  polyval_precompute_table) AND
 ;                                  LIB_POLYVAL_NO_AES (the POLYVAL-only
 ;                                  archives ship no AES / GCM-SIV code
@@ -60,14 +61,17 @@
 ; set of the archive under measurement; the load span from $4000 up to
 ; the first BSS-area segment start is the code+rodata footprint.
 ; Cold-path subset measured from the address delta between the
-; entry-point label and the next top-level label in the -Ln label file.
+; entry-point label and the next top-level label in the -Ln label file
+; (for COMPACT, whose cold code is placed last in its segment on
+; purpose, the delta runs to the segment end from the -m map instead).
 ; =============================================================================
 
 .ifndef LIB_MANIFEST_S_INCLUDED
 LIB_MANIFEST_S_INCLUDED = 1
 
-; constants_lib.inc defines POLYVAL_PROFILE_SHORT (=1) and
-; POLYVAL_PROFILE_LONG (=2), plus the POLYVAL_PROFILE selector itself.
+; constants_lib.inc defines POLYVAL_PROFILE_SHORT (=1),
+; POLYVAL_PROFILE_LONG (=2) and POLYVAL_PROFILE_COMPACT (=3), plus the
+; POLYVAL_PROFILE selector itself.
 ; We need them to gate the profile-conditional RESIDENT_BYTES / COLD_BYTES
 ; values below.
 .include "constants_lib.inc"
@@ -175,14 +179,23 @@ LIB_MANIFEST_S_INCLUDED = 1
 ;     profile trades RAM-resident code size for smaller BSS (no 4 KB
 ;     polyval_htable8 and no 4 KB polyval_reduce8).
 ;
+;   COMPACT (POLYVAL_PROFILE = POLYVAL_PROFILE_COMPACT = 3):
+;     $4000 .. $4AAC = $AAC = 2732 measured (archive members alone
+;     2618: same AES + GCM-SIV surface, polyval_compact $145 = 325).
+;     Both round UP to the same boundary: declared 2816 ($B00).
+;     Same 256-byte polyval_htable and same mathematics as SHORT with
+;     the unrolling rolled back into loops — the axis this profile
+;     moves on is code size, not table RAM (issue #51).
+;
 ; POLYVAL-only builds (-D LIB_POLYVAL_NO_AES=1; polyval-long.a /
 ; polyval-short.a member set: lib_version, zp_config, lib_manifest,
 ; data, polyval_<profile> — no tables.o, no aes_*.o, no gcm_siv.o, so
 ; the resident span is the profile's code segment alone; measured with
 ; a 2-byte scratch LOADADDR stub that emits no MAIN bytes):
 ;
-;   LONG:  $4000 .. $5040 = $1040 =  4160 measured; declared  4352 ($1100).
-;   SHORT: $4000 .. $752E = $352E = 13614 measured; declared 13824 ($3600).
+;   LONG:    $4000 .. $5040 = $1040 =  4160 measured; declared  4352 ($1100).
+;   SHORT:   $4000 .. $752E = $352E = 13614 measured; declared 13824 ($3600).
+;   COMPACT: $4000 .. $4145 =  $145 =   325 measured; declared   512  ($200).
 ;
 ; Pre-§6.6 the values were gated on POLYVAL_PROFILE only, so
 ; polyval-long.a / polyval-short.a shipped manifests claiming
@@ -197,11 +210,17 @@ LIB_MANIFEST_S_INCLUDED = 1
     .else
       LIB_POLYVAL_RESIDENT_BYTES = 6656   ; measured 6567  (polyval.a / polyval-gcmsiv.a)
     .endif
-  .else
+  .elseif POLYVAL_PROFILE = POLYVAL_PROFILE_SHORT
     .ifdef LIB_POLYVAL_NO_AES
       LIB_POLYVAL_RESIDENT_BYTES = 13824  ; measured 13614 (polyval-short.a)
     .else
       LIB_POLYVAL_RESIDENT_BYTES = 16128  ; measured 16021 (polyval-gcmsiv-short.a)
+    .endif
+  .else
+    .ifdef LIB_POLYVAL_NO_AES
+      LIB_POLYVAL_RESIDENT_BYTES = 512    ; measured 325   (polyval-compact.a)
+    .else
+      LIB_POLYVAL_RESIDENT_BYTES = 2816   ; measured 2732  (polyval-gcmsiv-compact.a)
     .endif
   .endif
 .endif
@@ -258,6 +277,18 @@ LIB_MANIFEST_S_INCLUDED = 1
 ;                                                          measured 3059
 ;   Declared 3072 ($C00).
 ;
+; COMPACT AEAD (POLYVAL_PROFILE=3):
+;   aes_key_expansion        $4134 -> aes_decrypt_block    $41F4   192
+;   polyval_precompute_table $479D -> segment end          $4830   147
+;                                                                -----
+;                                                          measured  339
+;   Declared 512 ($200).
+;   COMPACT is the one profile whose cold span is measured to the END of
+;   its code segment rather than to the next top-level label: the file
+;   places polyval_precompute_table and its only private helper last, so
+;   the overlayable region is contiguous. pv_xor_temp_acc is deliberately
+;   NOT in it — polyval_update calls it on every block.
+;
 ; LONG NO_AES (polyval-long.a — no aes_key_expansion in the archive):
 ;   polyval_precompute_table $4129 -> polyval_multiply     $4540  1047
 ;   Declared 1280 ($500).
@@ -266,11 +297,15 @@ LIB_MANIFEST_S_INCLUDED = 1
 ;   polyval_precompute_table $4129 -> polyval_multiply     $4C5C  2867
 ;   Declared 3072 ($C00).
 ;
-; (The NO_AES declared values coincide with the AEAD ones because
-; dropping the 192-byte aes_key_expansion does not cross a 256-byte
-; boundary — the gating is still load-bearing: it keeps the value tied
-; to what the archive actually ships, so a future span change on
-; either axis lands on the right row.)
+; COMPACT NO_AES (polyval-compact.a):
+;   polyval_precompute_table $40B2 -> segment end          $4145   147
+;   Declared 256 ($100).
+;
+; (For LONG and SHORT the NO_AES declared values coincide with the AEAD
+; ones because dropping the 192-byte aes_key_expansion does not cross a
+; 256-byte boundary. COMPACT is the case that shows why the gating is
+; load-bearing rather than decorative: its cold span is 147 B, so the
+; same 192-byte drop moves the declared value 512 -> 256.)
 ;
 ; polyval_init (zero polyval_h) is NOT counted: it is a 12-byte
 ; per-message reset in GCM-SIV's RFC 8452 H-rederivation, not a one-
@@ -286,11 +321,17 @@ LIB_MANIFEST_S_INCLUDED = 1
     .else
       LIB_POLYVAL_COLD_BYTES = 1280   ; measured 1239 (polyval.a / polyval-gcmsiv.a)
     .endif
-  .else
+  .elseif POLYVAL_PROFILE = POLYVAL_PROFILE_SHORT
     .ifdef LIB_POLYVAL_NO_AES
       LIB_POLYVAL_COLD_BYTES = 3072   ; measured 2867 (polyval-short.a)
     .else
       LIB_POLYVAL_COLD_BYTES = 3072   ; measured 3059 (polyval-gcmsiv-short.a)
+    .endif
+  .else
+    .ifdef LIB_POLYVAL_NO_AES
+      LIB_POLYVAL_COLD_BYTES = 256    ; measured 147  (polyval-compact.a)
+    .else
+      LIB_POLYVAL_COLD_BYTES = 512    ; measured 339  (polyval-gcmsiv-compact.a)
     .endif
   .endif
 .endif
@@ -316,9 +357,9 @@ LIB_MANIFEST_S_INCLUDED = 1
 ; prefix names the declaring library, never the table -- table names
 ; stay unprefixed per SPEC §8.1.
 ;
-; polyval_htable is built by both profiles; polyval_htable8 and
-; polyval_reduce8 exist only under the LONG profile (SHORT computes the
-; 4-bit Shoup window on the fly instead of precomputing all 16 nibble
+; polyval_htable is built by all three profiles; polyval_htable8 and
+; polyval_reduce8 exist only under the LONG profile (SHORT and COMPACT
+; use the 4-bit Shoup window alone instead of precomputing all 16 nibble
 ; positions x 16 possible values).
 ; -----------------------------------------------------------------------------
 LIB_PRECALC_TABLE "polyval_htable", 256, PRECALC_REGION_RAM, PRECALC_SHARED_NO, "POLYVAL"
