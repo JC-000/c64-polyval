@@ -241,6 +241,60 @@ $(foreach g,$(MAKECMDGOALS),$(if $(PIN_$(g)),$(if $(filter $(PIN_$(g)),$(POLYVAL
     `lib-polyval-short` (POLYVAL-only). For a SHORT full-AEAD *PRG*, \
     `make POLYVAL_PROFILE=short`))))
 
+# --- §6.2 defines-route guard for the member-set axes (issue #55) ---------
+# The PIN table above guards the *make variable* route. SPEC §6.2's consumer
+# mechanism is CONTRACT_DEFINES, which this Makefile appends to CA65FLAGS --
+# and a member-set axis routed that way cannot work, because no ca65 -D can
+# reach member selection. Both axes were measured walking past the PIN guard:
+#
+#   make lib CONTRACT_DEFINES="-D POLYVAL_PROFILE=1"
+#     clean tree -> ca65: 'POLYVAL_PROFILE' is already defined      (exit 2)
+#     warm tree  -> "Nothing to be done for `lib'"                  (exit 0)
+#                   ...and polyval.a still holds polyval_long.o. The consumer
+#                   asked for SHORT, got LONG, got exit 0. Five TUs branch on
+#                   POLYVAL_PROFILE; the stale lib_manifest.o reports the
+#                   other profile's §5 footprint and §8.0 rows, which no
+#                   downstream assert catches.
+#
+#   make lib CONTRACT_DEFINES="-D LIB_POLYVAL_NO_AES=1"
+#     clean tree -> exit 0, no diagnostic at all. Worse than the above: every
+#                   TU assembles NO_AES while `lib` archives the full AEAD
+#                   member list, so data.o drops the AES/GCM-SIV BSS that the
+#                   archived aes_encrypt.o still references. Measured: the
+#                   archive is unlinkable ("Unresolved external
+#                   'aes_expanded_key'") AND its manifest exports the NO_AES
+#                   RESIDENT (4352) for an AEAD member set -- §6.4-incoherent
+#                   and wrong on both axes at once.
+#
+# The state-dependence is the sharpest edge: a diagnostic that fires from
+# clean and stays silent from a warm tree is worse than one that never fires,
+# because a consumer probing interactively concludes the define was accepted.
+#
+# SPEC §6.3's looks-reachable rule -- a knob naming an axis MUST select it or
+# reject loudly. These cannot select it, so they reject. Parse time, before
+# anything is built: a half-built tree is itself the input to the stale shape.
+#
+# Two probe strings cover every spelling: LIB_POLYVAL_NO_AES contains
+# POLYVAL_NO_AES, and POLYVAL_PROFILE_{SHORT,LONG} contain POLYVAL_PROFILE.
+MEMBER_SET_AXES = POLYVAL_PROFILE POLYVAL_NO_AES
+CONTRACT_AXIS_HITS = $(strip $(foreach a,$(MEMBER_SET_AXES),\
+  $(if $(findstring $(a),$(CONTRACT_DEFINES) $(CONTRACT_ZP_DEFINES)),$(a))))
+
+ifneq ($(CONTRACT_AXIS_HITS),)
+  $(error member-set axis [$(CONTRACT_AXIS_HITS)] cannot be set through \
+    CONTRACT_DEFINES / CONTRACT_ZP_DEFINES. POLYVAL_PROFILE and \
+    LIB_POLYVAL_NO_AES select which objects are *archived* (SPEC §6.3 \
+    member-set axis), and no ca65 -D reaches member selection -- routing \
+    them through the defines forwarding yields a wrong artifact, silently \
+    on a warm tree. Use the make variable and the phony target that pins \
+    it: `make lib` / `lib-polyval-gcmsiv` (LONG AEAD), \
+    `lib-polyval-gcmsiv-short` (SHORT AEAD), `lib-polyval-long` / \
+    `lib-polyval-short` (POLYVAL-only), or `make POLYVAL_PROFILE=short` \
+    for a SHORT full-AEAD PRG. CONTRACT_DEFINES remains correct for \
+    non-member-set defines such as LIB_NO_BARE_EXPORTS and \
+    ZP_CONFIG_NO_EXPORTS)
+endif
+
 .PHONY: all lib lib-verify lib-polyval-long lib-polyval-short \
         lib-polyval-gcmsiv lib-polyval-gcmsiv-short consumer-check \
         consumer-check-noaes run clean dist
