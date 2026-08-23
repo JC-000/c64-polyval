@@ -13,6 +13,25 @@ downstream projects (see `API.md` §8 for the integration contract).
 
 ### Documentation
 
+- **`API.md` §3 gains Code / Tables / Total RAM columns** ([issue
+  #51](https://github.com/JC-000/c64-polyval/issues/51)). The table
+  presented the profile axis as a speed-vs-memory trade with a single
+  "Memory (tables)" column — `~256 B` for SHORT — which is true and
+  materially misleading: SHORT's multiply is a fully unrolled Shoup-4
+  and its *code* is 13,614 B. A consumer choosing on "which profile is
+  smaller" was reading the one column that hides the answer.
+
+  Measured, not estimated (segment sizes from a `lib_only.cfg` link of
+  each POLYVAL-only archive): SHORT 13,614 B code + 256 B tables ≈ 13.5
+  KB total; LONG 4,160 B code + 8,448 B tables ≈ 12.3 KB total. **LONG
+  is the smaller profile overall** — the names describe precompute cost,
+  not size. The old `~8.5 KB` figure for LONG's tables is corrected to
+  the measured 8,448 B.
+
+  §3 now also states plainly that *neither* profile serves a
+  memory-bound consumer, since both trade only table memory and assume
+  code is cheap, and points at #51 for the compact back-end.
+
 - **Contract currency v0.10.6 → v0.11.0.** v0.10.7 registers `c64-mlkem`
   and states "no existing adopter is affected" — N/A. v0.11.0 adds two
   **zero-consumer carve-outs**, both N/A here: §1 (a library onboarding
