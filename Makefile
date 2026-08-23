@@ -29,6 +29,11 @@
 #   consumer-check       assemble + link test/consumer_stub.s against the
 #                        library to prove the public ABI is callable from a
 #                        clean consumer. Output build/consumer_stub.prg.
+#   consumer-check-noaes link test/consumer_stub_noaes.s -- a consumer that
+#                        owns its own AES/GCM-SIV -- against polyval-long.a
+#                        and polyval-short.a. Guards issue #47: the
+#                        POLYVAL-only archives must not export the AES /
+#                        GCM-SIV BSS block out of the shared data.o.
 #   run                  `make all` then launch VICE x64sc with -moncommands.
 #   clean                rm -rf build/.
 #   dist                 reproducible release tarball.
@@ -237,7 +242,8 @@ $(foreach g,$(MAKECMDGOALS),$(if $(PIN_$(g)),$(if $(filter $(PIN_$(g)),$(POLYVAL
     `make POLYVAL_PROFILE=short`))))
 
 .PHONY: all lib lib-verify lib-polyval-long lib-polyval-short \
-        lib-polyval-gcmsiv lib-polyval-gcmsiv-short consumer-check run clean dist
+        lib-polyval-gcmsiv lib-polyval-gcmsiv-short consumer-check \
+        consumer-check-noaes run clean dist
 .DEFAULT_GOAL := all
 
 all: $(PRG) $(LABELS)
@@ -360,6 +366,29 @@ consumer-check: $(CONSUMER_PRG)
 $(CONSUMER_PRG): $(BUILD_DIR)/consumer_stub.o $(LIB_OBJECTS) $(LIB_CFG) | $(BUILD_DIR)
 	$(LD65) -C $(LIB_CFG) -Ln $(CONSUMER_LBL) -o $(CONSUMER_PRG) \
 	    $(BUILD_DIR)/consumer_stub.o $(LIB_OBJECTS)
+
+# --- POLYVAL-only consumer check (issue #47 regression guard) --------------
+# Links test/consumer_stub_noaes.s -- which defines its OWN aes_state and
+# gcmsiv_tag -- against the real polyval-long.a / polyval-short.a archives.
+# If the NO_AES archives ever again export the AES / GCM-SIV BSS block, ld65
+# fails here with "Duplicate external identifier".
+#
+# Runs against BOTH POLYVAL-only archives because data.o is archived into
+# each of them; a leak can regress on either profile independently.
+consumer-check-noaes:
+	$(MAKE) clean
+	$(MAKE) POLYVAL_PROFILE=long POLYVAL_NO_AES=1 $(LIB_DIR)/polyval-long.a
+	$(CA65) -I $(SRC_DIR) -D POLYVAL_PROFILE=2 -D LIB_POLYVAL_NO_AES=1 \
+	    -o $(BUILD_DIR)/consumer_stub_noaes.o $(TEST_DIR)/consumer_stub_noaes.s
+	$(LD65) -C $(LIB_CFG) -o $(BUILD_DIR)/consumer_stub_noaes_long.prg \
+	    $(BUILD_DIR)/consumer_stub_noaes.o $(LIB_DIR)/polyval-long.a
+	$(MAKE) clean
+	$(MAKE) POLYVAL_PROFILE=short POLYVAL_NO_AES=1 $(LIB_DIR)/polyval-short.a
+	$(CA65) -I $(SRC_DIR) -D POLYVAL_PROFILE=1 -D LIB_POLYVAL_NO_AES=1 \
+	    -o $(BUILD_DIR)/consumer_stub_noaes.o $(TEST_DIR)/consumer_stub_noaes.s
+	$(LD65) -C $(LIB_CFG) -o $(BUILD_DIR)/consumer_stub_noaes_short.prg \
+	    $(BUILD_DIR)/consumer_stub_noaes.o $(LIB_DIR)/polyval-short.a
+	@echo "consumer-check-noaes: polyval-long.a + polyval-short.a link clean"
 
 # --- VICE quick check -----------------------------------------------------
 run: all

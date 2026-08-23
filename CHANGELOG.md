@@ -11,6 +11,47 @@ downstream projects (see `API.md` §8 for the integration contract).
 
 ## Unreleased
 
+### Fixed
+
+- **`polyval-long.a` / `polyval-short.a` exported the AES + GCM-SIV BSS
+  block, making the POLYVAL-only archives unlinkable by the very
+  consumers they exist for** ([issue
+  #47](https://github.com/JC-000/c64-polyval/issues/47)). `src/data.s` is
+  a single monolithic BSS TU and `data.o` is archived whole into every
+  variant, so `LIB_POLYVAL_NO_AES` gated the §5 manifest rows (issue #23)
+  but never the storage those rows enumerate. The two POLYVAL-only
+  archives therefore shipped 21 AES/GCM-SIV BSS exports — `aes_state`,
+  `aes_current_key`, `aes_expanded_key`, `aes_mc_a0..b3` and the full
+  `gcmsiv_*` set — and any consumer defining its own AES or GCM-SIV hit
+  `ld65: Error: Duplicate external identifier`. This is issue #23's
+  defect class one layer down: #23 fixed the enumeration, not the thing
+  enumerated. The AES and GCM-SIV BSS blocks are now gated on
+  `.ifndef LIB_POLYVAL_NO_AES`; POLYVAL references none of them.
+
+  Found while `c64-aes256-ecdsa` — which ships its own AES-256 and its
+  own GCM-SIV — was adopting the contract and consuming this library;
+  all 21 symbols collided with symbols it defines.
+
+  **No manifest change.** `LIB_POLYVAL_RESIDENT_BYTES` is code+rodata
+  only (BSS excluded per SPEC §5) and `LIB_POLYVAL_COLD_BYTES` is
+  code-span only, so both NO_AES rows are unaffected. Re-measured after
+  the fix with the scratch-LOADADDR method `src/lib_manifest.s` records:
+  LONG `$4000..$503F` = 4160 and SHORT `$4000..$752D` = 13614, both
+  matching the 2026-08-15 values exactly. `build/polyval.prg` is
+  byte-identical to master on both profiles, and the suite is unchanged
+  at 376/376 passed, 6 skipped.
+
+### Added
+
+- **`make consumer-check-noaes`** — regression guard for the above.
+  Links `test/consumer_stub_noaes.s`, which deliberately *defines* its
+  own `aes_state` and `gcmsiv_tag`, against the real `polyval-long.a`
+  and `polyval-short.a` archives; a re-leak fails the link. Verified to
+  fail on the pre-fix tree and pass after, on both profiles. Uses
+  `.forceimport` so ld65 actually extracts the archive members — a plain
+  `.import` of an unreferenced symbol is dropped by ca65 and would leave
+  the guard toothless.
+
 ### Documentation
 
 - **Release-flow corrections learned by running it** ([PR
