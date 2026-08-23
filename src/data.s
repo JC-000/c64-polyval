@@ -34,7 +34,7 @@ polyval_h:      .res 16         ; 128-bit hash key H
 polyval_temp:   .res 16         ; scratch space for current block
 
 ; ---------------------------------------------------------------------------
-; Page-aligned 4-bit Shoup H-table (both profiles). Its own segment so
+; Page-aligned 4-bit Shoup H-table (all three profiles). Its own segment so
 ; ld65 aligns it to $100.
 ; ---------------------------------------------------------------------------
 .export polyval_htable
@@ -51,8 +51,9 @@ polyval_htable: .res 256        ; 16 entries * 16 bytes
 ;   polyval_htable8_slice_j + i = byte j of (H' * i)       for i in 0..255
 ;   polyval_reduce8_slice_j  + i = byte j of (i * x^128)    (reduction result)
 ;
-; Both tables are built at polyval_precompute_table time. SHORT profile
-; omits these (~8 KB RAM saved).
+; Both tables are built at polyval_precompute_table time. The SHORT and
+; COMPACT profiles omit them (~8 KB RAM saved) and use the 4-bit
+; polyval_htable window alone.
 ;
 ; IMPORTANT: each slice is its own 256-byte block inside the POLYVAL_HTABLE8
 ; / POLYVAL_REDUCE8 segment. The segment is aligned to $100 in c64.cfg;

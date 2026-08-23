@@ -81,7 +81,7 @@ plus per-archive manifest accuracy (`POLYVAL_NO_AES`) shipped in v0.5.0
 - §2 `.exportzp` ZP slot inventory — `src/zp_config.s`
 - §3 REU — n/a (c64-polyval makes no REU claims). Zero-REU /
   turbo-clean scaling is documented as an explicit contract feature
-  (issue #19): no I/O on any path, both profiles scale with CPU clock,
+  (issue #19): no I/O on any path, all three profiles scale with CPU clock,
   and any future REU-resident variant must be an optional profile,
   never the default — see API.md §9.3 and README "Turbo / accelerated
   hosts"
@@ -304,7 +304,8 @@ as historical reference and must not be edited. The active ABI is now
    fleet releases needed pre-tag amendments; tags are immutable here, so
    post-hoc fixes can only amend the release page. Release notes MUST
    state the byte-identity method (worktree-rebuild of the baseline tag,
-   both profiles, hash pairs) whenever they claim binary identity, and
+   every profile the baseline shipped, hash pairs) whenever they claim
+   binary identity, and
    MUST use absolute blob URLs (relative links 404 on release pages).
 1. Bump `VERSION`, `CHANGELOG.md`, **and `LIB_POLYVAL_VERSION_MINOR`/`_PATCH`
    in `src/lib_version.s`** (the bare `LIB_VERSION_*` aliases follow

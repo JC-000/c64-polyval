@@ -19,7 +19,13 @@
 ;
 ; Profile gating: symbols marked "LONG only" exist only when the file is
 ; assembled with -D POLYVAL_PROFILE=2 (POLYVAL_PROFILE_LONG). The SHORT
-; profile (profile = 1) omits the 8-bit Shoup window tables.
+; (=1) and COMPACT (=3) profiles omit the 8-bit Shoup window tables and
+; use the 4-bit polyval_htable window alone.
+;
+; Exactly ONE of polyval_long.s / polyval_short.s / polyval_compact.s is
+; linked, selected by POLYVAL_PROFILE. All three export the identical
+; public surface, with identical per-routine register-preservation
+; contracts, so a consumer swaps profiles without source changes.
 ; =============================================================================
 
 ; -----------------------------------------------------------------------------
@@ -30,14 +36,15 @@
 ;               polyval_acc, pv_mul_input, pv_mul_nibble
 ;   AES sizes:  aes_block_size, aes_key_size, aes_rounds, aes_expanded_key_size
 ;   Profile:    POLYVAL_PROFILE_SHORT (=1), POLYVAL_PROFILE_LONG (=2),
-;               POLYVAL_PROFILE (default = LONG)
+;               POLYVAL_PROFILE_COMPACT (=3), POLYVAL_PROFILE (default = LONG)
 ; IMPORTS: (none)
 ; -----------------------------------------------------------------------------
 
 ; -----------------------------------------------------------------------------
 ; polyval_api.inc - Public API prose header (pure .inc, no code, no .export)
 ; EXPORTS (as ca65 equates / documentation):
-;   POLYVAL_PROFILE_SHORT, POLYVAL_PROFILE_LONG (idempotent re-declarations)
+;   POLYVAL_PROFILE_SHORT, POLYVAL_PROFILE_LONG, POLYVAL_PROFILE_COMPACT
+;   (idempotent re-declarations)
 ; IMPORTS: (none)
 ; -----------------------------------------------------------------------------
 
@@ -138,6 +145,26 @@
 ;   data: polyval_h, polyval_temp, polyval_htable
 ;   (ZP: polyval_acc, pv_mul_input, pv_mul_nibble, polyval_zp_ptr, polyval_zp_temp,
 ;    polyval_zp_count from constants_lib.inc equates)
+; -----------------------------------------------------------------------------
+
+; -----------------------------------------------------------------------------
+; polyval_compact.s - POLYVAL (RFC 8452 sec 3), COMPACT profile
+;                     4-bit Shoup table, rolled. Linked only when
+;                     POLYVAL_PROFILE = POLYVAL_PROFILE_COMPACT (=3).
+;                     Same mathematics and same 256-byte table as
+;                     polyval_short.s with the unrolling traded back for
+;                     cycles: 325 B of code against SHORT's 13,614.
+;                     Exports the same public surface as polyval_long.s and
+;                     polyval_short.s so a downstream consumer can swap
+;                     profiles at link time.
+; EXPORTS:
+;   polyval_init, polyval_precompute_table, polyval_update,
+;   polyval_multiply, polyval_double, polyval_right_shift_1,
+;   polyval_shift_left_4, polyval_xor_table_entry, polyval_finalize
+; IMPORTS:
+;   data: polyval_h, polyval_temp, polyval_htable
+;   (ZP: polyval_acc, pv_mul_input, pv_mul_nibble from constants_lib.inc
+;    equates -- no .importzp needed)
 ; -----------------------------------------------------------------------------
 
 ; -----------------------------------------------------------------------------

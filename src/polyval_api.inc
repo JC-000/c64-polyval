@@ -17,7 +17,7 @@
 ;   polyval_multiply          Low-level GF(2^128) multiply: acc = acc * H.
 ;   polyval_double            Low-level GF(2^128) doubling (acc *= x).
 ;   polyval_shift_left_4      Low-level inlined 4-bit left shift with
-;                             reduction (SHORT profile hot path).
+;                             reduction (SHORT / COMPACT hot path).
 ;   polyval_xor_table_entry   XOR the 4-bit H-table entry selected by
 ;                             pv_mul_nibble into the accumulator.
 ;
@@ -42,7 +42,7 @@
 ;   polyval_h           16 B   Input: hash key H
 ;   polyval_temp        16 B   Input: block for polyval_update
 ;   polyval_acc         16 B   ZP: running 128-bit accumulator ($10-$1F)
-;   polyval_htable     256 B   4-bit Shoup table (both profiles)
+;   polyval_htable     256 B   4-bit Shoup table (all three profiles)
 ;   polyval_htable8    4 KB    8-bit Shoup slices (LONG only)
 ;   polyval_reduce8    4 KB    8-bit reduction slices (LONG only)
 ;

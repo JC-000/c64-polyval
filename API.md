@@ -177,14 +177,19 @@ link of the profile's POLYVAL-only archive. "Total RAM" adds the
 `tools/benchmark_polyval.py` measurements (CIA-timer, SEI, on `x64sc`),
 not estimates either.
 
-**Read the Code column before assuming SHORT is the small one.** The
-two profiles are close in *total* footprint — SHORT's advantage is
-entirely in table RAM, and it spends the saving back, with interest, in
-code: its multiply is a fully unrolled Shoup-4 (32 straight-line nibble
-invocations), which is where the 13.6 KB goes. The names describe
-precompute cost, not size. A consumer choosing on "which profile is
-smaller" is choosing between ~13.5 KB and ~12.3 KB, and LONG is the
-smaller of the two.
+**Read the Code column before assuming SHORT is the small one.**
+Between SHORT and LONG the *total* footprints are close — SHORT's
+advantage is entirely in table RAM, and it spends the saving back, with
+interest, in code: its multiply is a fully unrolled Shoup-4 (32
+straight-line nibble invocations), which is where the 13.6 KB goes. The
+names describe precompute cost, not size. A consumer picking between
+those two on "which is smaller" is choosing between ~13.6 KB and
+~12.3 KB, and **LONG is the smaller of the two** — which is the
+opposite of what the names suggest.
+
+Neither is the smallest, though. COMPACT is 613 B total, roughly 20×
+under either, and it is the right answer whenever footprint is what
+decides — see the next paragraph.
 
 **COMPACT is the memory-bound answer, and it is a different axis, not
 a third point on the same one.** SHORT and LONG both assume code is
@@ -247,7 +252,7 @@ multi-block `polyval_update` totals plus the profile's own precompute:
 
 There is exactly one crossover. `total_SHORT(N) − total_LONG(N)` is
 linear in N with a single root, and the measured per-block cost is flat
-to within 0.5% from N=14 through N=256 on both profiles, so LONG's
+to within 0.5% from N=14 through N=256 on both of them, so LONG's
 margin only widens past 17 blocks — 4,806 cy at N=17, 708,242 cy at
 N=64. Reproduce with
 `POLYVAL_BENCH_BLOCKS=14,15,16,17,18 POLYVAL_PROFILE=<p> python3
@@ -271,7 +276,7 @@ measurements above find no second break-even for it to name, and LONG's
 measurement spreads there (1,694 cy). LONG's 255,268 cy and both multiply figures re-measured within
 noise of their documented values.)*
 
-**Turbo / accelerated hosts.** Neither profile touches the REU or any
+**Turbo / accelerated hosts.** No profile touches the REU or any
 other ~1 MHz-anchored I/O — every table lives in CPU RAM and every
 path is pure CPU work — so per-block cost *and* precompute scale
 ~linearly with CPU clock on accelerated hosts (Ultimate 64 / C64
@@ -487,9 +492,15 @@ LIB        = lib/c64-polyval               # vendored as a git submodule
 LIB_SRC    = $(LIB)/src
 LIB_BUILD  = $(BUILD_DIR)/lib/c64-polyval
 
-# Pick POLYVAL profile: 1 = SHORT, 2 = LONG (default).
+# Pick POLYVAL profile: 1 = SHORT, 2 = LONG (default), 3 = COMPACT.
 POLYVAL_PROFILE_VAL ?= 2
-POLYVAL_PROFILE_OBJ := $(if $(filter 1,$(POLYVAL_PROFILE_VAL)),polyval_short,polyval_long)
+POLYVAL_PROFILE_OBJ := $(strip \
+  $(if $(filter 1,$(POLYVAL_PROFILE_VAL)),polyval_short) \
+  $(if $(filter 2,$(POLYVAL_PROFILE_VAL)),polyval_long) \
+  $(if $(filter 3,$(POLYVAL_PROFILE_VAL)),polyval_compact))
+ifeq ($(POLYVAL_PROFILE_OBJ),)
+  $(error POLYVAL_PROFILE_VAL must be 1 (SHORT), 2 (LONG) or 3 (COMPACT))
+endif
 
 # Library .s files to compile and link. IMPORTANT: see §8 for the
 # canonical "include vs omit" list. The DEMO APP files in src/ are
@@ -793,8 +804,8 @@ N/A. c64-polyval is a CPU-RAM-only library; `LIB_POLYVAL_REU_BANKS_USED`
 (§9.4) is therefore `0`.
 
 The zero is a **contract feature, not an accident**: no code path in
-either profile touches the 17xx REU, any `$D000–$DFFF` hardware
-register, or the KERNAL. Consumers comparing sibling libraries
+any of the three profiles touches the 17xx REU, any `$D000–$DFFF`
+hardware register, or the KERNAL. Consumers comparing sibling libraries
 (c64-https, c64-wireguard) can rely on the two properties this
 implies — the library runs unmodified on expansion-less machines, and
 it carries no ~1 MHz-anchored wall-clock floor on turbo hosts (§3,
