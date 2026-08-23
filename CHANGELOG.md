@@ -11,6 +11,46 @@ downstream projects (see `API.md` §8 for the integration contract).
 
 ## Unreleased
 
+### Fixed
+
+- **`CONTRACT_DEFINES` walked past the archive-goal configuration guard**
+  ([issue #55](https://github.com/JC-000/c64-polyval/issues/55)). The
+  issue #40 `PIN_` table guards the *make variable* route, but SPEC
+  §6.2's consumer mechanism is `CONTRACT_DEFINES`, which is appended to
+  `CA65FLAGS` — and a member-set axis routed that way cannot work, since
+  no ca65 `-D` reaches member selection. Both axes were measured
+  bypassing the guard:
+
+  - `make lib CONTRACT_DEFINES="-D POLYVAL_PROFILE=1"` gave **opposite
+    answers decided only by whether `build/` was warm**: a ca65
+    `'POLYVAL_PROFILE' is already defined` (exit 2) from clean, versus
+    `Nothing to be done` (exit 0) from warm — with `polyval.a` still
+    holding `polyval_long.o`. The consumer asked for SHORT, got LONG,
+    got exit 0. Five TUs branch on `POLYVAL_PROFILE`, and the stale
+    `lib_manifest.o` reports the other profile's §5 footprint and §8.0
+    rows, which no downstream assert catches.
+  - `make lib CONTRACT_DEFINES="-D LIB_POLYVAL_NO_AES=1"` was **worse,
+    and was not in the report**: exit 0 with no diagnostic at all, even
+    from a clean tree. Every TU assembles NO_AES while `lib` archives
+    the full AEAD member list, so `data.o` drops the AES/GCM-SIV BSS
+    that the archived `aes_encrypt.o` still references. Measured: the
+    archive is unlinkable (`Unresolved external 'aes_expanded_key'`)
+    *and* its manifest exports the NO_AES `RESIDENT` (4352) for an AEAD
+    member set — §6.4-incoherent and wrong on both axes at once.
+
+  Both now reject at parse time, before anything is built, per SPEC
+  §6.3's looks-reachable rule: a knob naming an axis MUST select it or
+  reject loudly, and these cannot select it. The state-dependence was
+  the sharpest edge — a diagnostic that fires from clean and stays
+  silent from a warm tree is worse than one that never fires, because a
+  consumer probing interactively concludes the define was accepted.
+
+  `CONTRACT_DEFINES` / `CONTRACT_ZP_DEFINES` remain correct for
+  non-member-set defines; `LIB_NO_BARE_EXPORTS`, `ZP_CONFIG_NO_EXPORTS`
+  and ZP slot overrides are regression-tested alongside all five archive
+  targets. `build/polyval.prg` byte-identical to v0.7.2; suite 376/376
+  passed, 6 skipped.
+
 ## v0.7.2 — 2026-08-23
 
 Consumer-reachability **PATCH**. `ZP_CONFIG_NO_EXPORTS` was assigned
