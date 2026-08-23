@@ -73,22 +73,53 @@ rather than a middle point.
 - **`make consumer-check-noaes`** now links the issue-#47 stub against
   `polyval-compact.a` as well as `polyval-long.a` and `polyval-short.a`.
 
-## A stale cycle count, found and fixed
+## Two stale figures, found and fixed
 
 Benchmarking COMPACT against both incumbents turned up a documentation
-defect that had survived since v0.1.0: **`API.md` §3 and `README.md`
-documented SHORT's precompute as ~29,385 cy. It is 4,656 cy** — a ~6×
-overstatement.
+defect that had survived since v0.1.0, and the pre-tag review of
+[PR #63](https://github.com/JC-000/c64-polyval/pull/63) turned up its
+twin one line below.
 
-The figure predates the release that replaced the 128-iteration
-`mulX_POLYVAL` loop with the 7-shift RFC 8452 identity (`x^-128 = 1 +
-x^-1 + x^-2 + x^-7`), and nothing re-measured it afterwards. LONG's
-255,268 cy and both multiply figures re-measured within noise of their
-documented values, so this was the only stale one.
+**SHORT's precompute was documented as ~29,385 cy. It is 4,656 cy** — a
+~6× overstatement. The figure predates the release that replaced the
+128-iteration `mulX_POLYVAL` loop with the 7-shift RFC 8452 identity
+(`x^-128 = 1 + x^-1 + x^-2 + x^-7`), and nothing re-measured it
+afterwards. LONG's 255,268 cy and both multiply figures re-measured
+within noise of their documented values.
 
-Knock-on: the SHORT/LONG crossover the figure feeds moves from ~15 to
-~17 blocks. The ~68-block practical break-even is unaffected. `CLAUDE.md`
-now says to re-measure before quoting cycle counts.
+**The "practical break-even ≈ 68 blocks" is withdrawn.** It entered in
+`959ffd8` with no derivation — immediately after that commit's own
+analytic crossover — and it hangs off the same `precompute + N × update`
+model and the same v0.1.0 measurement pass as the figure above. Its own
+gloss contradicted it: 1 KB of plaintext is 64 blocks, not 68.
+
+**The SHORT/LONG crossover is 17 blocks (272 bytes)**, measured
+end-to-end rather than solved — multi-block `polyval_update` totals plus
+each profile's own precompute:
+
+| N blocks | SHORT total | LONG total | winner |
+|---:|---:|---:|---|
+| 16 | 312,813 cy | 323,122 cy | SHORT by 10,309 |
+| **17** | **332,243 cy** | **327,437 cy** | **LONG by 4,806** |
+| 18 | 351,125 cy | 331,583 cy | LONG by 19,542 |
+
+There is exactly one crossover: `total_SHORT(N) − total_LONG(N)` is
+linear in N with a single root, and measured per-block cost is flat to
+within 0.5% from N=14 through N=256 on both profiles, so LONG's margin
+only widens past 17 blocks (708,242 cy at N=64). No second break-even
+exists for the old figure to name, and LONG's 4,806 cy win at N=17 is
+already ~3x the larger of the two per-run measurement spreads there
+(1,694 cy). `API.md` §3 now
+carries the equation and this table so the number is checkable without a
+rebuild, and `README.md` and `API.md` use one word for one number.
+
+**An earlier draft of these notes certified 68 as "unaffected" by the
+precompute correction.** That had no basis: correcting SHORT's
+precompute *downward* pushes crossovers *later*, so if 68 depended on
+the model at all it moved too. Caught in review before tagging.
+`CLAUDE.md` now says to re-measure before quoting cycle counts — and,
+after this, not to certify a neighbouring figure as unaffected without
+measuring that one too.
 
 ## Profile table
 
@@ -100,6 +131,8 @@ cycles from `tools/benchmark_polyval.py` (CIA timer, SEI, `x64sc`):
 | SHORT (`=1`) | 18,776 cy | 4,656 cy | 13,614 B | 256 B | ~13.6 KB |
 | LONG (`=2`, default) | 3,917 cy | 255,268 cy | 4,160 B | 8,448 B | ~12.3 KB |
 | **COMPACT (`=3`)** | **49,657 cy** | **10,970 cy** | **325 B** | **256 B** | **613 B** |
+
+SHORT/LONG crossover: **17 blocks (272 bytes)** — see below.
 
 **COMPACT is not a third point on the speed/memory axis.** It is
 strictly slower than SHORT at every message length — there is no N at
@@ -163,6 +196,12 @@ COMPACT, nothing about your build changes.
    `polyval-compact.a` gets you 512 / 256.
 5. **If you quoted SHORT's ~29,385 cy precompute figure anywhere,
    correct it to 4,656.**
+6. **If you sized a buffer or picked a profile against the ~68-block
+   break-even, re-check against 17 blocks (272 bytes).** The practical
+   figure is withdrawn, not merely restated: the measured crossover is
+   17, and there is no second one. A consumer who chose SHORT for
+   messages between 17 and 68 blocks on the strength of the old number
+   was choosing the slower profile.
 
 See [`API.md`](https://github.com/JC-000/c64-polyval/blob/v0.8.0/API.md)
 §3 for profile selection and §9 for the full contract surface.
@@ -230,8 +269,8 @@ checkability note.
 | Field      | Value |
 |------------|-------|
 | Filename   | `c64-polyval-v0.8.0.tar.gz` |
-| **Size**   | 111522 bytes |
-| **SHA256** | `a1f987c3190316dc37de858e944e8176657df473822d65c123a60df7333daf0d` |
+| **Size**   | 113665 bytes |
+| **SHA256** | `9de4d5c1b297751c19094130758ab4c218f76cce7d2e09cdd29bce6dc248bc2c` |
 
 Re-running `make dist VERSION=v0.8.0` against this source tree must
 reproduce the recorded SHA256 byte-for-byte: every staged file's mtime
@@ -257,7 +296,9 @@ The tarball does NOT contain `build/`, `tools/`, `test/`, the
 `ca65/release/v0.1.0/` historical tree, or any VCS / editor metadata.
 `src/polyval_compact.s` ships because the staging list globs `src/*.s`;
 the benchmark and test scripts that produced the cycle figures above are
-repo-side and are not vendored.
+repo-side and are not vendored — including
+`tools/benchmark_polyval.py`'s new `POLYVAL_BENCH_BLOCKS` override,
+which is what makes the crossover table reproducible.
 
 ## Issues and coordination
 

@@ -224,22 +224,52 @@ The Makefile maps these to `-D POLYVAL_PROFILE=2` / `=1` / `=3` for
 ca65 and to `polyval_long.o` / `polyval_short.o` /
 `polyval_compact.o` for ld65.
 
-**Crossover.** Total cost of hashing N 16-byte blocks under one H is
-approximately `precompute + N × multiply`. Solving for the SHORT/LONG
-crossover gives roughly 17 blocks on precompute-included workloads;
-the practical break-even where LONG starts winning consistently is
-around 68 blocks (≈1 KB of plaintext per message). Pick SHORT below
-that, LONG above. COMPACT does not enter this calculation: it loses to
-SHORT at every N, and LONG overtakes it at ~5 blocks, so it is chosen
-on footprint alone.
+**Crossover: 17 blocks.** Total cost of hashing N 16-byte blocks under
+one H is `precompute + N × update`. With measured figures (steady-state
+`polyval_update`, 19,218 cy SHORT / 4,241 cy LONG — the per-block cost
+including the block XOR, not the bare multiply):
 
-*(The SHORT precompute figure above was documented as ~29,385 cy from
-v0.1.0 through v0.7.3. That number predates the release that replaced
-the 128-iteration `mulX_POLYVAL` loop with the 7-shift RFC 8452
-identity, and was never re-measured; the figure is 4,656 cy. The
-SHORT/LONG crossover it fed moves from ~15 to ~17 blocks. LONG's
-255,268 cy and both multiply figures re-measured within noise of the
-documented values.)*
+```
+SHORT:   4,656 + 19,218·N
+LONG:  255,268 +  4,241·N
+```
+
+These cross at N ≈ 16.7. Measured end-to-end rather than solved —
+multi-block `polyval_update` totals plus the profile's own precompute:
+
+| N blocks | SHORT total | LONG total | winner |
+|---:|---:|---:|---|
+| 16 | 312,813 cy | 323,122 cy | SHORT by 10,309 |
+| **17** | **332,243 cy** | **327,437 cy** | **LONG by 4,806** |
+| 18 | 351,125 cy | 331,583 cy | LONG by 19,542 |
+
+**Pick SHORT below 17 blocks (272 bytes), LONG at or above it.**
+
+There is exactly one crossover. `total_SHORT(N) − total_LONG(N)` is
+linear in N with a single root, and the measured per-block cost is flat
+to within 0.5% from N=14 through N=256 on both profiles, so LONG's
+margin only widens past 17 blocks — 4,806 cy at N=17, 708,242 cy at
+N=64. Reproduce with
+`POLYVAL_BENCH_BLOCKS=14,15,16,17,18 POLYVAL_PROFILE=<p> python3
+tools/benchmark_polyval.py`.
+
+COMPACT does not enter this calculation: it loses to SHORT at every N,
+and LONG overtakes it at ~5 blocks, so it is chosen on footprint alone.
+
+*(Two figures in this section were stale from v0.1.0 through v0.7.3 and
+are corrected in v0.8.0, both found by re-measuring rather than by
+review of the prose. **SHORT's precompute** was documented as ~29,385
+cy; it is 4,656. The old number predates the release that replaced the
+128-iteration `mulX_POLYVAL` loop with the 7-shift RFC 8452 identity
+and was never re-taken. **The "practical break-even ≈ 68 blocks"** that
+sat beside the analytic crossover is withdrawn: it was introduced with
+no derivation, it hangs off the same `precompute + N × update` model
+and the same v0.1.0 measurement pass as the figure above, and its own
+gloss contradicted it — 1 KB of plaintext is 64 blocks, not 68. The
+measurements above find no second break-even for it to name, and LONG's
+4,806 cy win at N=17 is already ~3x the larger of the two per-run
+measurement spreads there (1,694 cy). LONG's 255,268 cy and both multiply figures re-measured within
+noise of their documented values.)*
 
 **Turbo / accelerated hosts.** Neither profile touches the REU or any
 other ~1 MHz-anchored I/O — every table lives in CPU RAM and every

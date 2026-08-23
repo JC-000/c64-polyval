@@ -56,15 +56,46 @@ link error.
 
 ### Fixed
 
-- **`API.md` §3 and `README.md` documented SHORT's precompute as
-  ~29,385 cy; it is 4,656 cy.** The figure dates to v0.1.0 and
-  predates the release that replaced the 128-iteration `mulX_POLYVAL`
-  loop with the 7-shift RFC 8452 identity — a ~6× overstatement that
-  survived because nothing re-measured it. Found while benchmarking
-  COMPACT against both incumbents. The SHORT/LONG crossover it fed
-  moves from ~15 to ~17 blocks; the ~68-block practical break-even is
-  unaffected. LONG's 255,268 cy and both multiply figures re-measured
-  within noise of their documented values.
+Two stale figures in `API.md` §3 / `README.md`, both dating to v0.1.0,
+both found by re-measuring rather than by reading the prose.
+
+- **SHORT's precompute was documented as ~29,385 cy; it is 4,656 cy.**
+  The figure predates the release that replaced the 128-iteration
+  `mulX_POLYVAL` loop with the 7-shift RFC 8452 identity — a ~6×
+  overstatement that survived because nothing re-measured it. LONG's
+  255,268 cy and both multiply figures re-measured within noise of
+  their documented values.
+- **The "practical break-even ≈ 68 blocks" is withdrawn.** It was
+  introduced in `959ffd8` with no derivation, immediately after that
+  commit's own analytic crossover, and it hangs off the same
+  `precompute + N × update` model and the same v0.1.0 measurement pass
+  as the figure above. Its own gloss contradicted it: 1 KB of plaintext
+  is 64 blocks, not 68.
+
+  **The SHORT/LONG crossover is 17 blocks (272 bytes)**, now measured
+  end-to-end rather than solved — SHORT ahead by 10,309 cy at N=16,
+  LONG ahead by 4,806 at N=17, margin widening monotonically after
+  (708,242 cy at N=64). There is exactly one crossover:
+  `total_SHORT(N) − total_LONG(N)` is linear with a single root, and
+  measured per-block cost is flat to 0.5% from N=14 to N=256 on both
+  profiles, so no second break-even exists for the old figure to name.
+  §3 now carries the equation and the measurement table so the number
+  is checkable without a rebuild, and `README.md` and `API.md` use one
+  word for it.
+
+  *An earlier draft of this release certified the 68-block figure as
+  "unaffected" by the precompute correction. That certification had no
+  basis — correcting SHORT's precompute downward pushes crossovers
+  later, so if 68 depended on the model at all it moved too. Caught in
+  review of [PR #63](https://github.com/JC-000/c64-polyval/pull/63)
+  before tagging.*
+
+### Changed
+
+- `tools/benchmark_polyval.py`'s multi-block sweep is overridable via
+  `POLYVAL_BENCH_BLOCKS` (default unchanged: `1,4,16,64,256`), so the
+  crossover measurement above is reproducible. Repo-side tool, not
+  vendored in the release tarball.
 
 ### Notes
 

@@ -204,19 +204,29 @@ automatically.)
 LONG: 3,917 cy multiply, 255,268 cy precompute, 4,160 B code + 8,448 B
 tables. Best for long-message / stable-H workloads.
 SHORT: 18,776 cy multiply, 4,656 cy precompute, 13,614 B code + 256 B
-tables. Best for RFC 8452 GCM-SIV's per-message H. Crossover ≈ 68
-blocks / ~1 KB.
+tables. Best for RFC 8452 GCM-SIV's per-message H. SHORT/LONG crossover
+= 17 blocks (272 B), measured end-to-end, not the ~68 that stood in the
+docs from v0.1.0 to v0.7.3 with no derivation.
 COMPACT: 49,657 cy multiply, 10,970 cy precompute, 325 B code + 256 B
 tables. Same 4-bit Shoup mathematics as SHORT, rolled. Strictly slower
 than SHORT at every N — it is a footprint choice, not a speed/memory
 trade-off, and exists because 13.6 KB of multiply can push a stock-C64
 consumer's image into the $A000-$BFFF ROM window (issue #51).
 
-All cycle figures above are `tools/benchmark_polyval.py` measurements.
-**SHORT's precompute was documented as ~29,385 cy from v0.1.0 through
-v0.7.3** — a stale figure predating the switch from a 128-iteration
-mulX_POLYVAL loop to the 7-shift RFC 8452 identity, corrected to 4,656
-in v0.8.0. Re-measure before quoting cycle counts in release notes.
+All cycle figures above are `tools/benchmark_polyval.py` measurements
+(`POLYVAL_BENCH_BLOCKS` overrides the multi-block sweep). **Two figures
+here were stale from v0.1.0 through v0.7.3**, both corrected in v0.8.0:
+SHORT's precompute (~29,385 → 4,656 cy, predating the switch from a
+128-iteration mulX_POLYVAL loop to the 7-shift RFC 8452 identity), and
+the "practical break-even ≈ 68 blocks", withdrawn — it had no derivation
+and its own gloss contradicted it (1 KB is 64 blocks, not 68).
+
+**Two rules from that pair.** Re-measure before quoting a cycle count.
+And when correcting one figure, do not certify its neighbours as
+unaffected without measuring them too: the v0.8.0 draft said the
+68-block figure was "unaffected" by the precompute correction, which was
+unfounded — a downward precompute correction pushes crossovers *later*.
+Caught in review of PR #63 before tagging.
 
 ## Test
 ```
