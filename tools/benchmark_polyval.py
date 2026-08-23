@@ -751,13 +751,11 @@ def run_long_benchmarks(transport, labels, long_overhead, num_samples):
     return results
 
 
-def run_multiblock_benchmarks(transport, labels, short_overhead,
-                              long_overhead, num_samples):
-    """Measure polyval_update on N-block messages for N in {1,4,16,64,256}.
+def run_multiblock_benchmarks(transport, labels, long_overhead, num_samples):
+    """Measure polyval_update on N-block messages (default N in {1,4,16,64,256}).
 
-    For small N the short 16-bit wrapper suffices; for larger N we must use
-    the chained 32-bit wrapper. We pick the wrapper per-N based on a safe
-    threshold (any N whose projected cycle cost exceeds ~55000 uses long).
+    Always uses the chained 32-bit Timer A+B wrapper. See the note below on
+    why there is no 16-bit fast path here.
     """
     # Ensure htable is freshly populated (precompute_table clobbers it last).
     precompute_table_once(transport, labels)
@@ -765,9 +763,29 @@ def run_multiblock_benchmarks(transport, labels, short_overhead,
     sizes = [int(x) for x in os.environ.get('POLYVAL_BENCH_BLOCKS', '1,4,16,64,256').split(',')]
     results = {}
 
-    # Projected per-block cost (current Shoup: polyval_update ~7085 cy).
-    # Threshold: if N * 7200 > 55000, use the long wrapper. So N >= 8 → long.
-    short_threshold_cycles = 55000
+    # Wrapper choice: the chained 32-bit wrapper, unconditionally (issue #65).
+    #
+    # This used to project `n * 7200` cy/block and take the 16-bit Timer A
+    # wrapper below ~55000, a constant commented "current Shoup:
+    # polyval_update ~7085 cy" that predates both current 4-bit profiles.
+    # Measured per-block cost is 4241 (LONG), 19218 (SHORT) and ~49950
+    # (COMPACT), so the 16-bit wrapper stayed selected through N=7 while the
+    # real cost passed its 65535 range far earlier: N=4..7 returned wrapped
+    # values on SHORT and N=2..7 on COMPACT. The default sweep contains N=4,
+    # so every SHORT and COMPACT run tabled one fictional row.
+    #
+    # What made that durable is worth keeping in view: the wrap is
+    # DETERMINISTIC, so the bad rows reported `spread = 0` while every honest
+    # row carried a `(!)` marker — the fiction read as the cleanest data on
+    # screen, and only the sign gave it away.
+    #
+    # No re-tuned constant replaces it; the next profile would age that one
+    # out silently too. The 32-bit wrapper is correct for every N a one-byte
+    # count can express (255 blocks x ~50000 cy is ~12.7M, three orders inside
+    # its range), and where the two overlap they agree to ~0.2% (SHORT: 19194
+    # cy/block long-wrapped at N=8 against 19228 short-wrapped at N=3), so the
+    # fast path bought nothing here. The 16-bit wrapper stays in use for the
+    # sub-65k single-routine benchmarks, which have their own overflow check.
 
     for n in sizes:
         # Reset accumulator to zero before the run. The run's cycle count is
@@ -775,24 +793,26 @@ def run_multiblock_benchmarks(transport, labels, short_overhead,
         write_bytes(transport, labels["polyval_acc"], bytes([0] * 16))
         write_bytes(transport, MULTIBLOCK_COUNT_ADDR, bytes([n & 0xFF]))
 
-        # Decide wrapper
-        projected = n * 7200
-        use_long = projected > short_threshold_cycles
-
         samples = []
         for i in range(num_samples):
             # Reset pointer / count each sample (count is consumed by DEX=0).
             write_bytes(transport, MULTIBLOCK_COUNT_ADDR, bytes([n & 0xFF]))
-            if use_long:
-                cycles = measure_cycles_long(transport, MULTIBLOCK_STUB_ADDR,
-                                             long_overhead)
-            else:
-                cycles = measure_cycles(transport, MULTIBLOCK_STUB_ADDR,
-                                        short_overhead)
+            cycles = measure_cycles_long(transport, MULTIBLOCK_STUB_ADDR,
+                                         long_overhead)
+            # Backstop, not the fix: a wrapped counter cannot occur on the
+            # 32-bit wrapper, but a measurement that is non-positive is not
+            # data and must never reach the results table (issue #65 -- the
+            # symptom there was a tabled `-21`).
+            if cycles <= 0:
+                raise RuntimeError(
+                    f"multi-block N={n}: measured {cycles} cycles, which is "
+                    f"not a plausible result. A non-positive count means the "
+                    f"timing wrapper wrapped or the stub did not run; do not "
+                    f"report it as a measurement (see issue #65)."
+                )
             samples.append(cycles)
             if VERBOSE:
-                wrapper = "long" if use_long else "short"
-                print(f"    N={n:3d} sample {i+1} [{wrapper}]: {cycles} cycles")
+                print(f"    N={n:3d} sample {i+1}: {cycles} cycles")
 
         spread = max(samples) - min(samples)
         median = sorted(samples)[len(samples) // 2]
@@ -800,11 +820,25 @@ def run_multiblock_benchmarks(transport, labels, short_overhead,
             "samples": samples,
             "median": median,
             "spread": spread,
-            "wrapper": "long" if use_long else "short",
+            "wrapper": "long",
         }
         print(f"  N={n:3d}: {median} cycles "
               f"({median / n:.1f} cy/block) "
-              f"[{'long' if use_long else 'short'}, spread={spread}]")
+              f"[spread={spread}]")
+
+    # Total cycles must rise with N. Checked only across an ascending sweep,
+    # because POLYVAL_BENCH_BLOCKS may be given in any order. This is the
+    # invariant the old wrapper heuristic violated in a way no per-row check
+    # could see, so it is asserted across rows rather than within one.
+    ascending = sorted(results)
+    if ascending == list(results):
+        for prev, cur in zip(ascending, ascending[1:]):
+            if results[cur]["median"] <= results[prev]["median"]:
+                raise RuntimeError(
+                    f"multi-block sweep is not monotonic: N={cur} measured "
+                    f"{results[cur]['median']} cy, not more than N={prev}'s "
+                    f"{results[prev]['median']} cy (see issue #65)."
+                )
 
     return results
 
@@ -977,7 +1011,7 @@ def main():
         # Multi-block polyval_update sweep
         print("\n=== Multi-block polyval_update ===")
         multiblock_results = run_multiblock_benchmarks(
-            transport, labels, overhead, long_overhead, num_samples)
+            transport, labels, long_overhead, num_samples)
 
     elapsed = time.time() - t0
 

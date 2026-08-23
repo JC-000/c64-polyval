@@ -113,6 +113,20 @@ already ~3x the larger of the two per-run measurement spreads there
 carries the equation and this table so the number is checkable without a
 rebuild, and `README.md` and `API.md` use one word for one number.
 
+A third instance of the same pattern turned up while JC-000 was
+independently reproducing the table above, and was fixed before tagging
+rather than deferred: `tools/benchmark_polyval.py`'s multi-block sweep
+picked its timing wrapper from a stale `n * 7200` cy/block projection,
+so the 16-bit CIA wrapper stayed selected past its 65,535 range and
+**every SHORT and COMPACT benchmark run tabled one fictional row** at
+N=4 (issue [#65](https://github.com/JC-000/c64-polyval/issues/65)). The
+sweep now uses the 32-bit wrapper unconditionally and refuses to table a
+non-positive measurement. No shipped artifact is affected — `tools/` is
+not vendored — and the crossover table above is unchanged, because
+N=14…20 always sat in the good band. It is fixed here rather than after
+the tag because these notes and `API.md` §3 both point at this tool as
+the way to check their numbers.
+
 **An earlier draft of these notes certified 68 as "unaffected" by the
 precompute correction.** That had no basis: correcting SHORT's
 precompute *downward* pushes crossovers *later*, so if 68 depended on
@@ -269,8 +283,8 @@ checkability note.
 | Field      | Value |
 |------------|-------|
 | Filename   | `c64-polyval-v0.8.0.tar.gz` |
-| **Size**   | 113665 bytes |
-| **SHA256** | `9de4d5c1b297751c19094130758ab4c218f76cce7d2e09cdd29bce6dc248bc2c` |
+| **Size**   | 114794 bytes |
+| **SHA256** | `425493875c4195895e180df0562457d963c722e720ecedf6df7d7387cfd812cc` |
 
 Re-running `make dist VERSION=v0.8.0` against this source tree must
 reproduce the recorded SHA256 byte-for-byte: every staged file's mtime
