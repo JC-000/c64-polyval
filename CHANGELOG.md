@@ -96,6 +96,35 @@ both found by re-measuring rather than by reading the prose.
   `POLYVAL_BENCH_BLOCKS` (default unchanged: `1,4,16,64,256`), so the
   crossover measurement above is reproducible. Repo-side tool, not
   vendored in the release tarball.
+- **The same sweep no longer picks its timing wrapper from a stale
+  constant** (issue
+  [#65](https://github.com/JC-000/c64-polyval/issues/65)). It projected
+  `n * 7200` cy/block — commented "current Shoup: `polyval_update`
+  ~7085 cy", a back-end predating both current 4-bit profiles — and so
+  kept the 16-bit CIA Timer A wrapper selected through N=7 while the
+  real cost passed its 65,535 range far earlier. Measured per-block
+  cost is 4,241 (LONG), 19,218 (SHORT), ~49,950 (COMPACT), giving a
+  wrapped-value band of **N=4…7 on SHORT and N=2…7 on COMPACT**; the
+  default sweep contains N=4, so every SHORT and COMPACT run tabled one
+  fictional row (`-21` cycles).
+
+  The sweep now uses the chained 32-bit wrapper unconditionally — no
+  re-tuned constant, which would age out just as silently — plus two
+  backstops: a non-positive measurement raises instead of being tabled,
+  and an ascending sweep is checked for monotonicity in N. Where the
+  two wrappers overlap they agree to ~0.2%, so nothing is lost.
+
+  Third instance of the pattern this release keeps finding: a v0.1.0-era
+  constant nobody re-took, failing in a direction that reads as data.
+  This one had an inverted tell — the wrap is *deterministic*, so the
+  bad rows reported `spread = 0` while every honest row carried the
+  `(!)` noise marker, making the fiction look like the cleanest data on
+  screen. Found by JC-000 while independently reproducing the crossover
+  table in [PR #64](https://github.com/JC-000/c64-polyval/pull/64).
+
+  No shipped artifact is affected — `tools/` is not vendored — and the
+  §3 crossover table is unchanged: N=14…20 always sat in the good band,
+  and the corrected sweep reproduces those margins within spread.
 
 ### Notes
 
