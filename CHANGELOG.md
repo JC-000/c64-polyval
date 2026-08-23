@@ -11,6 +11,35 @@ downstream projects (see `API.md` §8 for the integration contract).
 
 ## Unreleased
 
+### Fixed
+
+- Documentation left describing two profiles after v0.8.0 added a third.
+  Caught in a post-tag sweep; **v0.8.0's tag, tarball and release asset
+  are unaffected and remain the canonical artifact** — these are
+  corrections to `master`, and `make dist VERSION=v0.8.0` from `master`
+  no longer reproduces the tagged tarball's hash by design. The
+  substantive one:
+
+  - `API.md` §3's "Read the Code column" paragraph still concluded that
+    a consumer choosing on size "is choosing between ~13.5 KB and
+    ~12.3 KB, and LONG is the smaller of the two". True of SHORT vs
+    LONG, and actively misleading with COMPACT shipped at 613 B —
+    roughly 20x under either. Now scoped to the SHORT/LONG pair and
+    pointing at COMPACT for the size question. (Also `~13.5` -> `~13.6`
+    KB, matching the table two paragraphs above it.)
+
+  Alongside it: the §7 consumer Makefile fragment mapped
+  `POLYVAL_PROFILE_VAL` to `polyval_short`/`polyval_long` with a binary
+  `$(if)`, silently selecting LONG for `=3`; it now handles all three
+  and rejects anything else (verified against GNU Make 3.81, the macOS
+  system make, for all three values plus the default and an invalid
+  one). `src/exports.inc` gained its `polyval_compact.s` section and a
+  note that exactly one back-end links. REU/turbo prose in `API.md` §3
+  and §9.3 said "neither profile" / "either profile"; `src/data.s` and
+  `src/polyval_api.inc` comments said "both profiles"; `README.md` and
+  `CLAUDE.md` described the byte-identity receipt as covering "both
+  profiles".
+
 ## v0.8.0 — 2026-08-23
 
 Feature **MINOR**: a third `POLYVAL_PROFILE`, **COMPACT** — a rolled

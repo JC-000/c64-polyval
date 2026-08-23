@@ -65,7 +65,7 @@ Each release ships a stamped attestation in
 `docs/RELEASE_NOTES_vX.Y.Z.md` (tarball size + SHA256, double-build
 reproducible) and, when it claims binary identity with a prior tag,
 the worktree-rebuild receipt: the baseline tag rebuilt in a separate
-worktree, both profiles, hash pairs stated. Releases are staged as
+worktree, every profile the baseline shipped, hash pairs stated. Releases are staged as
 PRs and reviewed before tagging (see `CLAUDE.md`, release flow).
 
 ## Test
