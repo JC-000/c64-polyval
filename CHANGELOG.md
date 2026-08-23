@@ -11,6 +11,32 @@ downstream projects (see `API.md` §8 for the integration contract).
 
 ## Unreleased
 
+### Documentation
+
+- **Contract currency v0.10.6 → v0.11.0.** v0.10.7 registers `c64-mlkem`
+  and states "no existing adopter is affected" — N/A. v0.11.0 adds two
+  **zero-consumer carve-outs**, both N/A here: §1 (a library onboarding
+  with no released consumers SHOULD NOT export the bare `LIB_VERSION_*`
+  forms) and §6.5 (such a library SHOULD be "born prefixed" rather than
+  waiting for MAJOR).
+
+  Both are recorded rather than merely dismissed, because §6.5 is the
+  clause that would otherwise have unlocked this library's deferred
+  member-basename rename. It does not: c64-polyval is one of the four
+  incumbents v0.11.0 names as unaffected, and §6.5's scope test — "no
+  tagged release that any consumer pins" — is now definitively failed,
+  `c64-aes256-ecdsa` having become a declared consumer pinning a tag on
+  2026-08-23. The MAJOR deferral stands, and archive members cannot
+  dual-name, so there is no transitional path short of v1.0.0.
+
+  `API.md` §9's heading had drifted further than `CLAUDE.md`'s — it
+  still read v0.10.3 — and is also corrected.
+- **Post-v0.7.1 currency**: the "current release attestation", adoption
+  heading, `make dist` example, layout heading, and release-notes
+  template pointer all still named v0.7.0. `make consumer-check-noaes`
+  is added to the build block and the `test/` layout, noted there as
+  not vendored into the tarball.
+
 ### Fixed
 
 - **`ZP_CONFIG_NO_EXPORTS` was not consumer-reachable** ([issue

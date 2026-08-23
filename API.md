@@ -539,7 +539,7 @@ use v0.2.0's source-tarball + `src/exports.inc` integration path
 instead. The v0.1.0 tree is kept only for reproducibility of the
 prior release.
 
-## 9. Library contract (c64-lib-contract v0.10.3)
+## 9. Library contract (c64-lib-contract v0.11.0)
 
 As of v0.3.0, c64-polyval implements
 [c64-lib-contract](https://github.com/JC-000/c64-lib-contract)
