@@ -11,6 +11,16 @@ downstream projects (see `API.md` §8 for the integration contract).
 
 ## Unreleased
 
+## v0.7.2 — 2026-08-23
+
+Consumer-reachability **PATCH**. `ZP_CONFIG_NO_EXPORTS` was assigned
+unguarded in a header every library TU includes, so the documented
+supplies-own-slots route was a hard assemble error rather than a
+working knob. Also corrects `API.md` §3, whose single "Memory (tables)"
+column hid the fact that SHORT's *code* is 13.6 KB. No exported surface
+changed, no declared footprint moved, PRG byte-identical to v0.7.1, so
+`LIB_POLYVAL_ABI_VERSION` stays 1.
+
 ### Documentation
 
 - **`API.md` §3 gains Code / Tables / Total RAM columns** ([issue
