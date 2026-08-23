@@ -406,7 +406,16 @@ $(LABELS): $(LBL_RAW) $(TOOLS_DIR)/vice_label_shim.py
 #
 # Pre-SPEC-§6 this target was named `make lib`; that name now belongs to
 # the archive output (build/lib/polyval.a) per SPEC §6.
+# The knob-staleness leg pins SPEC §6.3's invalidate branch (issue #58): it
+# asserts the ARTIFACT flips when a configuration knob changes on a warm tree,
+# in both directions, and that an unchanged invocation still recompiles
+# nothing. It runs in its own scratch BUILD_DIR, so it cannot disturb build/,
+# and it runs after the PRG so a verification build is not held up by it.
+# `tools/check_knob_staleness.sh --selftest` proves the pin can fail.
+# A leg on this existing target rather than a new one: §6.5 makes make target
+# names contract surface, and this needs none.
 lib-verify: $(LIB_PRG) $(LIB_LABELS)
+	@$(TOOLS_DIR)/check_knob_staleness.sh
 
 $(LIB_PRG) $(LIB_LBL_RAW): $(LIB_OBJECTS) $(BUILD_DIR)/lib_main.o $(LIB_CFG) | $(BUILD_DIR)
 	$(LD65) -C $(LIB_CFG) -Ln $(LIB_LBL_RAW) -o $(LIB_PRG) \

@@ -11,6 +11,38 @@ downstream projects (see `API.md` §8 for the integration contract).
 
 ## Unreleased
 
+### Added
+
+- **`tools/check_knob_staleness.sh`, run as a leg of `make lib-verify`** —
+  the pin SPEC §6.3 requires for the invalidate branch, raised in review
+  of [PR #59](https://github.com/JC-000/c64-polyval/pull/59). The #58 fix
+  was correct but unprotected: a refactor moving the `CA65FLAGS`
+  composition below the stamp would silently reopen it with nothing
+  failing. The other three fleet adopters each have such a pin; this
+  library had none.
+
+  It asserts the **artifact** flipped, never that "something rebuilt" —
+  §6.3's stated distinction, and the one that matters, since an
+  unconditional rebuild wearing a stamp satisfies "something rebuilt"
+  while destroying incremental builds. Checks: both knobs flip on a warm
+  tree; both flip **back** when the knob is removed (the direction a
+  consumer hits when they finish debugging and drop the flag); all nine
+  objects survive every transition (the failure mode of the rejected
+  delete-from-a-prerequisite mechanism); an unchanged invocation
+  recompiles **0** TUs; and #55's member-set rejection still fires.
+
+  Runs in its own scratch `BUILD_DIR`, so it cannot disturb `build/`.
+
+  `--selftest` proves the pin can fail, by disabling the stamp via
+  `CONTRACT_FLAGS_WAS='$(CONTRACT_FLAGS_NOW)'` — a command-line override
+  that makes the parse-time comparison compare a value to itself, with no
+  hardcoded flag string to drift. Verified end-to-end against the real
+  regression: run against the pre-#59 `Makefile` the pin fails with the
+  exact #58 symptom (`left zp_config.o at 13 exports, expected 0`), and
+  passes against the fixed one. A pin never seen to fail is not a pin —
+  the review noted x25519's first attempt disabled its stamp with an
+  always-true condition, passed, and meant nothing.
+
 ### Fixed
 
 - **Configuration axes via `CONTRACT_DEFINES` were silently dropped on a
