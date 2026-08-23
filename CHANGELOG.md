@@ -28,6 +28,18 @@ downstream projects (see `API.md` §8 for the integration contract).
     pointing at COMPACT for the size question. (Also `~13.5` -> `~13.6`
     KB, matching the table two paragraphs above it.)
 
+  Follow-ups from the review of
+  [PR #67](https://github.com/JC-000/c64-polyval/pull/67): the §7
+  fragment's guard caught only an *empty* selection, but `$(filter)`
+  matches per word, so `POLYVAL_PROFILE_VAL="1 2"` passed it and
+  selected two back-ends at once. Now `$(words …) != 1`, which
+  subsumes the empty case and matches the top-level `Makefile`, whose
+  `ifeq`-chain-on-a-name form already rejected the analogous
+  `POLYVAL_PROFILE="short long"`. Also: `tools/test_polyval_direct.py`
+  and `tools/test_gcmsiv_polyval.py` described the `POLYVAL_PROFILE`
+  read as "dual-path selection" directly above a three-way lookup —
+  the files that made COMPACT's 376/376 checkable with no test change.
+
   Alongside it: the §7 consumer Makefile fragment mapped
   `POLYVAL_PROFILE_VAL` to `polyval_short`/`polyval_long` with a binary
   `$(if)`, silently selecting LONG for `=3`; it now handles all three

@@ -652,7 +652,8 @@ def main():
     print(f"Seed: {seed} (reproduce with --seed {seed})")
     print(f"Iterations: {iterations} random cases per test group")
 
-    # Build. Honour POLYVAL_PROFILE env var for dual-path selection.
+    # Build. Honour POLYVAL_PROFILE env var to pick the back-end
+    # (long / short / compact).
     print("\n=== Building ===")
     profile = os.environ.get("POLYVAL_PROFILE", "long")
     print(f"  Profile: {profile}")
