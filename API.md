@@ -59,22 +59,23 @@ Every routine is entered with `JSR` and returns with `RTS`. None are
 re-entrant or IRQ-safe. Registers `A`, `X`, `Y` are not preserved
 across the call boundary.
 
-### 2.1 POLYVAL primitive (`src/polyval_long.s` / `src/polyval_short.s`)
+### 2.1 POLYVAL primitive (`src/polyval_long.s` / `src/polyval_short.s` / `src/polyval_compact.s`)
 
 The active multiply back-end is picked by `POLYVAL_PROFILE` at assemble
-time (§3). Both back-ends export the same symbol set.
+time (§3). All three back-ends export the same symbol set, with the
+same per-routine register-preservation contracts.
 
 | Symbol | Defined in | Contract |
 |---|---|---|
-| `polyval_init` | polyval_long / polyval_short | Zeroes the 128-bit accumulator `polyval_acc` ($10–$1F). |
-| `polyval_precompute_table` | polyval_long / polyval_short | Reads `polyval_h`, builds the 4-bit and (LONG only) Shoup-8 tables. **DESTROYS `polyval_h`** (overwrites with H' = H · x^-128). Save H first if you need it. |
-| `polyval_update` | polyval_long / polyval_short | Absorbs one 16-byte block from `polyval_temp` into the accumulator: `acc := (acc XOR block) * H`. |
-| `polyval_multiply` | polyval_long / polyval_short | Low-level GF(2^128) multiply: `acc := acc * H` using the precomputed tables. ~3,915 cy (LONG) / ~18,770 cy (SHORT). |
-| `polyval_double` | polyval_long / polyval_short | Low-level 128-bit doubling: `acc := acc * x`. |
-| `polyval_shift_left_4` | polyval_long / polyval_short | Inlined 4-bit left shift with reduction (SHORT profile hot path). |
-| `polyval_xor_table_entry` | polyval_long / polyval_short | XORs `polyval_htable[pv_mul_nibble]` (one 16-byte entry) into the accumulator. |
-| `polyval_right_shift_1` | polyval_long / polyval_short | Right-shift 128 bits with reduction (x^-1 mod f). Used by precompute. |
-| `polyval_finalize` | polyval_long / polyval_short | Currently a stub / placeholder; reserved for future tag-extraction wrappers. |
+| `polyval_init` | any profile | Zeroes the 128-bit accumulator `polyval_acc` ($10–$1F). |
+| `polyval_precompute_table` | any profile | Reads `polyval_h`, builds the 4-bit and (LONG only) Shoup-8 tables. **DESTROYS `polyval_h`** (overwrites with H' = H · x^-128). Save H first if you need it. |
+| `polyval_update` | any profile | Absorbs one 16-byte block from `polyval_temp` into the accumulator: `acc := (acc XOR block) * H`. |
+| `polyval_multiply` | any profile | Low-level GF(2^128) multiply: `acc := acc * H` using the precomputed tables. 3,917 cy (LONG) / 18,776 cy (SHORT) / 49,657 cy (COMPACT). |
+| `polyval_double` | any profile | Low-level 128-bit doubling: `acc := acc * x`. |
+| `polyval_shift_left_4` | any profile | 4-bit left shift with reduction (the SHORT / COMPACT hot path; inlined under SHORT, four `polyval_double` calls under COMPACT). |
+| `polyval_xor_table_entry` | any profile | XORs `polyval_htable[pv_mul_nibble]` (one 16-byte entry) into the accumulator. |
+| `polyval_right_shift_1` | any profile | Right-shift 128 bits with reduction (x^-1 mod f). Used by precompute. |
+| `polyval_finalize` | any profile | Currently a stub / placeholder; reserved for future tag-extraction wrappers. |
 
 ### 2.2 POLYVAL data buffers (`src/data.s`)
 
@@ -82,7 +83,7 @@ time (§3). Both back-ends export the same symbol set.
 |---|---:|---|
 | `polyval_h` | 16 B | Input: 128-bit hash key H. Overwritten by `polyval_precompute_table`. |
 | `polyval_temp` | 16 B | Input: block consumed by `polyval_update`. |
-| `polyval_htable` | 256 B | 4-bit Shoup table (both profiles). Page-aligned. |
+| `polyval_htable` | 256 B | 4-bit Shoup table (all profiles). Page-aligned. |
 | `polyval_htable8` | 4 KB | 8-bit Shoup slices (LONG only). 16 sub-symbols `polyval_htable8_s0..s15`, page-aligned. |
 | `polyval_reduce8` | 4 KB | 8-bit reduction slices (LONG only). 16 sub-symbols `polyval_reduce8_s0..s15`, page-aligned. |
 
@@ -159,19 +160,22 @@ the header (§4).
 
 ## 3. Profile selection
 
-The POLYVAL primitive ships in two flavours selected at assemble time
+The POLYVAL primitive ships in three flavours selected at assemble time
 via the `POLYVAL_PROFILE` symbol:
 
 | Profile | Multiply | Precompute | Code | Tables | Total RAM | Picks when |
 |---|---:|---:|---:|---:|---:|---|
-| SHORT (`POLYVAL_PROFILE=1`) | ~18,770 cy | ~29,385 cy | 13,614 B | 256 B | ~13.5 KB | H rederived per message (RFC 8452 GCM-SIV short messages) |
-| LONG (`POLYVAL_PROFILE=2`) (default) | ~3,915 cy | ~255,263 cy | 4,160 B | 8,448 B | ~12.3 KB | H stable across many blocks (TLS 1.3, WireGuard) |
+| SHORT (`POLYVAL_PROFILE=1`) | 18,776 cy | 4,656 cy | 13,614 B | 256 B | ~13.6 KB | H rederived per message (RFC 8452 GCM-SIV short messages) |
+| LONG (`POLYVAL_PROFILE=2`) (default) | 3,917 cy | 255,268 cy | 4,160 B | 8,448 B | ~12.3 KB | H stable across many blocks (TLS 1.3, WireGuard) |
+| COMPACT (`POLYVAL_PROFILE=3`) | 49,657 cy | 10,970 cy | 325 B | 256 B | 613 B | Footprint decides the memory map — POLYVAL called rarely, no room for ~12 KB |
 
 Code and table figures are measured, not estimated: they are the
 `LIB_POLYVAL_<PROFILE>_CODE` and `LIB_POLYVAL_HTABLE` /
 `_LONG_HTABLE8` / `_LONG_REDUCE8` segment sizes from a `lib_only.cfg`
 link of the profile's POLYVAL-only archive. "Total RAM" adds the
-32-byte `LIB_POLYVAL_BSS` accumulator block.
+32-byte `LIB_POLYVAL_BSS` accumulator block. Cycle figures are
+`tools/benchmark_polyval.py` measurements (CIA-timer, SEI, on `x64sc`),
+not estimates either.
 
 **Read the Code column before assuming SHORT is the small one.** The
 two profiles are close in *total* footprint — SHORT's advantage is
@@ -182,20 +186,30 @@ precompute cost, not size. A consumer choosing on "which profile is
 smaller" is choosing between ~13.5 KB and ~12.3 KB, and LONG is the
 smaller of the two.
 
-**Neither profile suits a memory-bound consumer**, and this is a known
-gap rather than an oversight in the table: both points on the axis
-assume code is cheap and trade only table memory for speed. A caller
-that invokes POLYVAL rarely and cannot spend ~12 KB on it — a keygen or
-signing tool on a stock C64, as opposed to a throughput-bound TLS or
-WireGuard host — has no profile to select. A compact, rolled back-end
-is tracked as
-[issue #51](https://github.com/JC-000/c64-polyval/issues/51); until it
-exists, such a consumer's options are LONG (smaller total, large
-tables) or vendoring its own minimal multiply.
+**COMPACT is the memory-bound answer, and it is a different axis, not
+a third point on the same one.** SHORT and LONG both assume code is
+cheap and trade only *table* memory for speed; COMPACT is the same
+mathematics and the same 256-byte table as SHORT with the unrolling
+rolled back into loops. It is strictly slower than SHORT at every
+message length — there is no N at which COMPACT wins on time — so do
+not read it as a third speed/memory trade-off. Pick it when footprint
+decides the memory map, and only then.
 
-Both profiles export an identical symbol set (§2.1). Callers do not
+On a stock C64 that is a real decision and not a preference: the
+BASIC ROM occupies `$A000-$BFFF`, leaving ~38 KB of contiguous RAM
+below it, and a 13.6 KB multiply can be what pushes a consumer's image
+into that window. The failure mode is not a link error — it is the CPU
+executing BASIC ROM at run time. `c64-aes256-ecdsa` hit exactly this
+(reading `polyval_multiply` on the running machine returned BASIC's
+`ILLEGAL QUANTITY` text; `polyval_precompute_table` wedged at `$A005`)
+and had to bank BASIC out program-wide to ship. See
+[issue #51](https://github.com/JC-000/c64-polyval/issues/51) for the
+integration measurements that motivated this profile.
+
+All three profiles export an identical symbol set (§2.1), with
+identical per-routine register-preservation contracts. Callers do not
 need to know which profile is loaded — `.import polyval_multiply` and
-the rest of the API are stable across the two back-ends.
+the rest of the API are stable across the three back-ends.
 
 Set the profile on the ca65 command line, or via the top-level Makefile:
 
@@ -203,17 +217,29 @@ Set the profile on the ca65 command line, or via the top-level Makefile:
 make                              # LONG (default)
 make POLYVAL_PROFILE=short        # SHORT
 make POLYVAL_PROFILE=long         # LONG (explicit)
+make POLYVAL_PROFILE=compact      # COMPACT
 ```
 
-The Makefile maps these to `-D POLYVAL_PROFILE=2` / `-D POLYVAL_PROFILE=1`
-for ca65 and to `polyval_long.o` / `polyval_short.o` for ld65.
+The Makefile maps these to `-D POLYVAL_PROFILE=2` / `=1` / `=3` for
+ca65 and to `polyval_long.o` / `polyval_short.o` /
+`polyval_compact.o` for ld65.
 
 **Crossover.** Total cost of hashing N 16-byte blocks under one H is
 approximately `precompute + N × multiply`. Solving for the SHORT/LONG
-crossover gives roughly 15 blocks on precompute-included workloads;
+crossover gives roughly 17 blocks on precompute-included workloads;
 the practical break-even where LONG starts winning consistently is
 around 68 blocks (≈1 KB of plaintext per message). Pick SHORT below
-that, LONG above.
+that, LONG above. COMPACT does not enter this calculation: it loses to
+SHORT at every N, and LONG overtakes it at ~5 blocks, so it is chosen
+on footprint alone.
+
+*(The SHORT precompute figure above was documented as ~29,385 cy from
+v0.1.0 through v0.7.3. That number predates the release that replaced
+the 128-iteration `mulX_POLYVAL` loop with the 7-shift RFC 8452
+identity, and was never re-measured; the figure is 4,656 cy. The
+SHORT/LONG crossover it fed moves from ~15 to ~17 blocks. LONG's
+255,268 cy and both multiply figures re-measured within noise of the
+documented values.)*
 
 **Turbo / accelerated hosts.** Neither profile touches the REU or any
 other ~1 MHz-anchored I/O — every table lives in CPU RAM and every
@@ -233,8 +259,9 @@ The Python test and benchmark scripts honour the same selector via an
 environment variable:
 
 ```bash
-POLYVAL_PROFILE=short python3 tools/test_polyval_direct.py
-POLYVAL_PROFILE=long  python3 tools/benchmark_polyval.py
+POLYVAL_PROFILE=short   python3 tools/test_polyval_direct.py
+POLYVAL_PROFILE=long    python3 tools/benchmark_polyval.py
+POLYVAL_PROFILE=compact python3 tools/run_all_tests.py
 ```
 
 ## 4. Zero-page layout
@@ -456,7 +483,9 @@ consumer.prg: $(CONSUMER_OBJECTS) $(LIB_OBJECTS) consumer.cfg
 ```
 
 The consumer's linker config must preserve the page alignment for
-`polyval_htable` and (LONG only) `polyval_htable8` / `polyval_reduce8`.
+`polyval_htable` and (LONG only) `polyval_htable8` / `polyval_reduce8`,
+and must declare the code segment of whichever profile it links
+(`LIB_POLYVAL_LONG_CODE` / `_SHORT_CODE` / `_COMPACT_CODE`).
 The simplest path is to copy `src/c64.cfg` and extend it with
 consumer-specific segments — see that file for the canonical memory
 map (LOADADDR at $07FF, MAIN at $0801–$87FF, page-aligned
@@ -482,7 +511,7 @@ inherit.
 | `src/tables.s` | S-box, inverse S-box, AES round constants |
 | `src/data.s` | All library-owned data buffers and ZP `.res` reservations |
 | `src/lib_main.s` | Verification stub. `make lib` links ONLY this + the LIBRARY files to catch any accidental DEMO APP dependency; a consumer normally does NOT link this either. |
-| `src/polyval_long.s` *OR* `src/polyval_short.s` | Active POLYVAL multiply back-end. Pick one based on `POLYVAL_PROFILE`. Linking both is an error. |
+| `src/polyval_long.s` *OR* `src/polyval_short.s` *OR* `src/polyval_compact.s` | Active POLYVAL multiply back-end. Pick exactly one based on `POLYVAL_PROFILE`. Linking more than one is an error. |
 
 Plus the header files (included, not assembled):
 
@@ -538,7 +567,7 @@ criteria.
 ### 8.4 Version compatibility
 
 The `VERSION` file at the repository root carries the current
-`MAJOR.MINOR.PATCH` (currently `0.2.0`). Releases are tagged as
+`MAJOR.MINOR.PATCH` (currently `0.8.0`). Releases are tagged as
 `vMAJOR.MINOR.PATCH` in git and shipped as `c64-polyval-vX.Y.Z.tar.gz`
 via `make dist VERSION=vX.Y.Z`.
 
@@ -666,8 +695,8 @@ v0.7.0:
 | Symbol (prefixed, permanent) | Deprecated bare alias | Value | Meaning |
 |---|---|---:|---|
 | `LIB_POLYVAL_VERSION_MAJOR` | `LIB_VERSION_MAJOR` | `0` | Semver major. |
-| `LIB_POLYVAL_VERSION_MINOR` | `LIB_VERSION_MINOR` | `7` | Semver minor. |
-| `LIB_POLYVAL_VERSION_PATCH` | `LIB_VERSION_PATCH` | `3` | Semver patch. |
+| `LIB_POLYVAL_VERSION_MINOR` | `LIB_VERSION_MINOR` | `8` | Semver minor. |
+| `LIB_POLYVAL_VERSION_PATCH` | `LIB_VERSION_PATCH` | `0` | Semver patch. |
 | `LIB_POLYVAL_ABI_VERSION`   | `LIB_ABI_VERSION`   | `1` | ABI compatibility level. Coarser than MINOR. |
 
 The bare names are identical across every contract adopter, so a
@@ -773,19 +802,31 @@ configuration axes — `POLYVAL_PROFILE` *and* `LIB_POLYVAL_NO_AES` —
 so each archive's manifest describes that archive (SPEC §6.4/§6.6;
 previously they were profile-gated only, and the POLYVAL-only
 archives over-claimed ~2.3 KB of AES+GCM-SIV code they do not
-contain). Per-archive values (measured 2026-08-15, ca65/ld65 V2.18):
+contain). One row per shipped archive, per §6.6 obligation 2 — a
+value repeated across two archives of the same configuration still
+gets its own row. Values measured 2026-08-15 (LONG / SHORT) and
+2026-08-23 (COMPACT), ca65/ld65 V2.18:
 
 | Archive | Configuration | `RESIDENT_BYTES` (measured) | `COLD_BYTES` (measured) |
 |---|---|---:|---:|
-| `polyval.a` / `polyval-gcmsiv.a` | LONG, full AEAD | 6656 (6567) | 1280 (1239) |
+| `polyval.a` | LONG, full AEAD | 6656 (6567) | 1280 (1239) |
+| `polyval-gcmsiv.a` | LONG, full AEAD | 6656 (6567) | 1280 (1239) |
 | `polyval-gcmsiv-short.a` | SHORT, full AEAD | 16128 (16021) | 3072 (3059) |
+| `polyval-gcmsiv-compact.a` | COMPACT, full AEAD | 2816 (2732) | 512 (339) |
 | `polyval-long.a` | LONG, `LIB_POLYVAL_NO_AES` | 4352 (4160) | 1280 (1047) |
 | `polyval-short.a` | SHORT, `LIB_POLYVAL_NO_AES` | 13824 (13614) | 3072 (2867) |
+| `polyval-compact.a` | COMPACT, `LIB_POLYVAL_NO_AES` | 512 (325) | 256 (147) |
 
 `COLD_BYTES` (boot-only init paths: `aes_key_expansion` where AES
 ships, plus `polyval_precompute_table`) is a subset carve-out of the
 `RESIDENT_BYTES` load image, reclaimable after init — the §6.6 pair
 semantics: budget RESIDENT for the image, get COLD back after init.
+COMPACT places its cold code last in `LIB_POLYVAL_COMPACT_CODE` on
+purpose, so the overlayable region runs to the segment end and is
+contiguous; it is also the configuration where the `LIB_POLYVAL_NO_AES`
+gating changes the answer (147 B of cold POLYVAL code versus 339 B
+with `aes_key_expansion`: 256 versus 512 declared, where LONG and
+SHORT round to the same value on both axes).
 See `src/lib_manifest.s` for the full derivation comments and the
 per-configuration measurement methodology.
 
@@ -795,7 +836,7 @@ SPEC v0.9.0 rewrote §6 from a single archive-targets clause into a
 six-clause chapter whose obligations attach to archives, not "the
 library". c64-polyval's status per clause:
 
-**§6.1 — Targets and artifact names.** Four ar65 archive Make
+**§6.1 — Targets and artifact names.** Seven ar65 archive Make
 targets ship the library as a single `.a` file consumers can link
 directly without rebuilding `.o` files:
 
@@ -804,8 +845,10 @@ directly without rebuilding `.o` files:
 | `make lib` | `build/lib/polyval.a` | Full AEAD bundle: POLYVAL LONG + AES-256 + GCM-SIV. |
 | `make lib-polyval-long` | `build/lib/polyval-long.a` | POLYVAL LONG primitive only (no AES, no GCM-SIV). |
 | `make lib-polyval-short` | `build/lib/polyval-short.a` | POLYVAL SHORT primitive only. |
+| `make lib-polyval-compact` | `build/lib/polyval-compact.a` | POLYVAL COMPACT primitive only — the memory-bound configuration. |
 | `make lib-polyval-gcmsiv` | `build/lib/polyval-gcmsiv.a` | Full AEAD bundle, **LONG** profile (currently byte-identical to `polyval.a`). |
 | `make lib-polyval-gcmsiv-short` | `build/lib/polyval-gcmsiv-short.a` | Full AEAD bundle, **SHORT** profile — the RFC 8452 per-message-`H` configuration. |
+| `make lib-polyval-gcmsiv-compact` | `build/lib/polyval-gcmsiv-compact.a` | Full AEAD bundle, **COMPACT** profile. |
 
 Each archive bundles the SPEC §1 / §2 / §5 core (`lib_version.o`,
 `zp_config.o`, `lib_manifest.o`) plus the variant-specific .o set;
@@ -824,17 +867,25 @@ MAJOR, when it becomes `verify-lib`-shaped.
 defines** (SPEC v0.10.4 §6.3; issue
 [#40](https://github.com/JC-000/c64-polyval/issues/40)).
 `POLYVAL_PROFILE` selects which multiply object is *archived*
-(`polyval_long.o` vs `polyval_short.o`), and no §6.2 `CONTRACT_DEFINES`
-value can swap an archive member — a `-D` reconfigures TUs, it cannot
-change the member set. Each documented profile × variant combination
-therefore has its own §6.1 target, and each carries a `lib_manifest.o`
-assembled under the same pin so the §5 equates describe the archive
-they ship in (§6.4). `lib` and `lib-polyval-gcmsiv` name the **LONG**
-AEAD archive implicitly and do not `make clean` first, so they reject
-`POLYVAL_PROFILE=short` rather than silently reusing objects assembled
-under the other profile; use `make lib-polyval-gcmsiv-short`, which
-pins the profile behind a clean exactly as
-`lib-polyval-{long,short}` do.
+(`polyval_long.o` vs `polyval_short.o` vs `polyval_compact.o`), and no
+§6.2 `CONTRACT_DEFINES` value can swap an archive member — a `-D`
+reconfigures TUs, it cannot change the member set. Each documented
+profile × variant combination therefore has its own §6.1 target, and
+each carries a `lib_manifest.o` assembled under the same pin so the §5
+equates describe the archive they ship in (§6.4). `lib` and
+`lib-polyval-gcmsiv` name the **LONG** AEAD archive implicitly and do
+not `make clean` first, so they reject `POLYVAL_PROFILE=short` or
+`=compact` rather than silently reusing objects assembled under
+another profile; use `make lib-polyval-gcmsiv-short` /
+`make lib-polyval-gcmsiv-compact`, which pin the profile behind a
+clean exactly as `lib-polyval-{long,short,compact}` do.
+
+Adding COMPACT (issue
+[#51](https://github.com/JC-000/c64-polyval/issues/51)) was therefore
+a §6.1 change, not a §6.2 one: it took two new targets
+(`lib-polyval-compact`, `lib-polyval-gcmsiv-compact`), two new `PIN_`
+rows, and two new `(profile × NO_AES)` manifest branches — the same
+shape the SHORT+AEAD gap took in v0.7.0.
 
 The previous (pre-v0.3.0) `make lib` target — a library-only
 verification PRG link at `$4000` — is what `make lib-verify` names
@@ -869,7 +920,7 @@ caveat (a ZP TU built by a generic pattern rule needs an explicit
 rule to receive the scoped variable) is inapplicable for the same
 reason: here the pattern rule delivering to everything is the point.
 
-Recursive propagation: `lib-polyval-{long,short}` re-invoke
+Recursive propagation: `lib-polyval-{long,short,compact}` re-invoke
 `$(MAKE)`; both variables arrive in the sub-make automatically
 because command-line variable assignments are passed down via
 `MAKEFLAGS` (measured: `zp_config.o` extracted from a
@@ -884,7 +935,7 @@ no library edits. `lib-app-owned` N/A as above.
 **§6.4 — The manifest describes the archive it ships in.** Already
 conformant, both halves: (1) `lib_manifest.o` is assembled under the
 same configuration as the archive it ships in — the
-`lib-polyval-{long,short}` targets `make clean` and rebuild
+`lib-polyval-{long,short,compact}` targets `make clean` and rebuild
 recursively with `POLYVAL_PROFILE` and `POLYVAL_NO_AES` pinned, so no
 archive ever receives a manifest object assembled under another
 configuration; (2) every manifest row is gated on the same switches
@@ -901,7 +952,10 @@ v0.10.5).** Adopted. `POLYVAL_PROFILE` is member-set-shaped — it
 selects which multiply object is archived — so per v0.10.4 each
 documented profile × variant pair takes a §6.1 target rather than a
 §6.2 define; `lib-polyval-gcmsiv-short` closed the last unreached
-pair (issue [#40](https://github.com/JC-000/c64-polyval/issues/40)).
+pair (issue [#40](https://github.com/JC-000/c64-polyval/issues/40)),
+and the COMPACT profile shipped with both of its pairs targeted from
+the start (issue
+[#51](https://github.com/JC-000/c64-polyval/issues/51)).
 v0.10.5 adds the archive-level rule that a knob naming an axis MUST
 select it in **both** member selection and assembly configuration, or
 reject the invocation loudly; c64-polyval#40 is that clause's shape-2
@@ -986,7 +1040,7 @@ removed at contract v1.0):
 
 | Table | Size | Region | Ships in |
 |---|---:|---|---|
-| `polyval_htable` | 256 B | RAM | every build (both profiles) |
+| `polyval_htable` | 256 B | RAM | every build (all three profiles) |
 | `polyval_htable8` | 4096 B | RAM | LONG-profile builds only |
 | `polyval_reduce8` | 4096 B | RAM | LONG-profile builds only |
 | `aes_sbox` | 256 B | RODATA | AEAD bundle only (`polyval.a` / `polyval-gcmsiv.a`) |

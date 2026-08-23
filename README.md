@@ -2,19 +2,23 @@
 
 POLYVAL (RFC 8452 §3) and AES-256-GCM-SIV authenticated encryption for the
 Commodore 64. Hand-optimized 6502 assembly built with the ca65/ld65 toolchain,
-shipped with two interchangeable POLYVAL profiles — a low-memory SHORT
-build for short-message workloads (per-message H derivation) and a
-high-throughput LONG build for session-stable H (TLS 1.3, WireGuard).
+shipped with three interchangeable POLYVAL profiles — a SHORT build for
+short-message workloads (per-message H derivation), a high-throughput
+LONG build for session-stable H (TLS 1.3, WireGuard), and a 325-byte
+COMPACT build for consumers whose memory map, not their throughput,
+decides the question.
 
 ## Features
 
 - POLYVAL GF(2^128) universal hash, byte-accurate against RFC 8452 test
-  vectors. Two interchangeable multiply back-ends (SHORT / LONG).
+  vectors. Three interchangeable multiply back-ends (SHORT / LONG /
+  COMPACT).
 - AES-256 ECB encrypt and decrypt, plus key expansion (T-table-free).
 - AES-256-GCM-SIV AEAD (RFC 8452), up to 64 B plaintext per call, empty
   AAD only.
-- Single stable public ABI across both POLYVAL profiles — consumers swap
-  one for the other without source changes.
+- Single stable public ABI across all three POLYVAL profiles — same
+  symbols, same register-preservation contracts, so consumers swap one
+  for another without source changes.
 - Zero-REU / zero-I/O: pure CPU + RAM on every path, so it runs
   unmodified on expansion-less machines and scales with CPU clock on
   turbo hosts (see "Turbo / accelerated hosts" below).
@@ -35,13 +39,16 @@ high-throughput LONG build for session-stable H (TLS 1.3, WireGuard).
 
 ```bash
 make                              # build build/polyval.prg (LONG profile, default)
-make POLYVAL_PROFILE=short        # SHORT profile (low-memory, per-message H)
+make POLYVAL_PROFILE=short        # SHORT profile (small tables, per-message H)
 make POLYVAL_PROFILE=long         # LONG profile (high-throughput, stable H)
+make POLYVAL_PROFILE=compact      # COMPACT profile (325 B of code)
 make lib                          # build/lib/polyval.a (full ar65 archive, LONG AEAD)
 make lib-polyval-gcmsiv           # build/lib/polyval-gcmsiv.a (full AEAD, LONG)
 make lib-polyval-gcmsiv-short     # build/lib/polyval-gcmsiv-short.a (full AEAD, SHORT)
+make lib-polyval-gcmsiv-compact   # build/lib/polyval-gcmsiv-compact.a (full AEAD, COMPACT)
 make lib-polyval-long             # build/lib/polyval-long.a (POLYVAL only, LONG)
 make lib-polyval-short            # build/lib/polyval-short.a (POLYVAL only, SHORT)
+make lib-polyval-compact          # build/lib/polyval-compact.a (POLYVAL only, COMPACT)
 make lib-verify                   # library-only verification link (pre-v0.3.0 `make lib`)
 make consumer-check               # assemble + link test/consumer_stub.s
 make run                          # build then launch in VICE
@@ -49,8 +56,9 @@ make dist VERSION=vX.Y.Z          # reproducible source tarball
 make clean                        # rm -rf build/
 ```
 
-The Makefile maps `POLYVAL_PROFILE=short|long` to ca65's
-`-D POLYVAL_PROFILE=1|2` and to `polyval_short.o` / `polyval_long.o`
+The Makefile maps `POLYVAL_PROFILE=short|long|compact` to ca65's
+`-D POLYVAL_PROFILE=1|2|3` and to `polyval_short.o` / `polyval_long.o`
+/ `polyval_compact.o`
 at link time.
 
 Each release ships a stamped attestation in
@@ -120,8 +128,9 @@ shared 8×8 quarter-square-multiply surface are covered:
   non-segment reservations) is N/A: every buffer is
   segment-resident, no placement equate reserves address space
   invisible to ld65 — see `API.md` §9.5.
-- §6 — `make lib`, `make lib-polyval-long`, `make lib-polyval-short`,
-  `make lib-polyval-gcmsiv` and `make lib-polyval-gcmsiv-short` produce
+- §6 — `make lib`, `make lib-polyval-{long,short,compact}`,
+  `make lib-polyval-gcmsiv` and
+  `make lib-polyval-gcmsiv-{short,compact}` produce
   ar65 archive bundles under
   `build/lib/` (canonical `polyval[-<variant>].a` basenames). Every
   documented profile × variant pair has its own target, per SPEC §6.3
@@ -162,30 +171,44 @@ gate that proves the public surface is stable for external use.
 
 ## Profiles
 
-| Profile | multiply | precompute | tables | picks when |
-|---|---:|---:|---:|---|
-| SHORT | ~18,770 cy | ~29,385 cy | ~256 B | H rederived per message (RFC 8452 GCM-SIV) |
-| LONG  | ~3,915 cy  | ~255,263 cy | ~8.5 KB | H stable across many blocks (TLS 1.3, WireGuard) |
+| Profile | multiply | precompute | code | tables | picks when |
+|---|---:|---:|---:|---:|---|
+| SHORT | 18,776 cy | 4,656 cy | 13,614 B | 256 B | H rederived per message (RFC 8452 GCM-SIV) |
+| LONG  | 3,917 cy  | 255,268 cy | 4,160 B | 8,448 B | H stable across many blocks (TLS 1.3, WireGuard) |
+| COMPACT | 49,657 cy | 10,970 cy | 325 B | 256 B | footprint decides the memory map |
 
-Both profiles export an identical set of public symbols. The
-practical crossover where LONG starts winning consistently is around
-68 blocks (~1 KB of plaintext per message). Below that, SHORT hashes
-a full message faster despite its slower per-block inner loop; above
+All three profiles export an identical set of public symbols with
+identical register-preservation contracts. The practical SHORT/LONG
+crossover, where LONG starts winning consistently, is around 68
+blocks (~1 KB of plaintext per message). Below that, SHORT hashes a
+full message faster despite its slower per-block inner loop; above
 that, LONG pulls ahead. See `API.md` §3 for the full discussion and
 the math.
 
+**Read the code column.** SHORT and LONG both trade *table* memory
+for speed and assume code is cheap; on total footprint they are 13.6
+KB and 12.3 KB respectively, and LONG is the smaller of the two.
+COMPACT is a different axis: same mathematics and same 256-byte table
+as SHORT with the unrolling rolled back into loops, 613 B of total
+RAM, and strictly slower than SHORT at every message length. Pick it
+when a 13 KB multiply would push your image into the `$A000-$BFFF`
+BASIC ROM window — a memory-map decision whose failure mode is the
+CPU executing ROM, not a link error. See issue
+[#51](https://github.com/JC-000/c64-polyval/issues/51).
+
 The profile is fixed when the archive is built — it selects which
 multiply object is archived, so it cannot be changed by a consumer
-`-D` define. Each profile has its own archive target: `make lib` and
+`-D` define. Each profile has its own archive targets: `make lib` and
 `make lib-polyval-gcmsiv` produce the LONG AEAD bundle,
-`make lib-polyval-gcmsiv-short` the SHORT one, and
-`make lib-polyval-{long,short}` the POLYVAL-only pair. Pick the
-target that matches the profile you want; see `API.md` §9.5.
+`make lib-polyval-gcmsiv-short` the SHORT one,
+`make lib-polyval-gcmsiv-compact` the COMPACT one, and
+`make lib-polyval-{long,short,compact}` the POLYVAL-only trio. Pick
+the target that matches the profile you want; see `API.md` §9.5.
 
 ## Turbo / accelerated hosts
 
 c64-polyval never touches the REU, any I/O register, or the KERNAL —
-both profiles are pure CPU + RAM on every path
+every profile is pure CPU + RAM on every path
 (`LIB_POLYVAL_REU_BANKS_USED = 0`). Two guarantees follow:
 
 - Runs unmodified on expansion-less machines.

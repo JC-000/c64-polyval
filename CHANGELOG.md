@@ -11,6 +11,75 @@ downstream projects (see `API.md` §8 for the integration contract).
 
 ## Unreleased
 
+## v0.8.0 — 2026-08-23
+
+Feature **MINOR**: a third `POLYVAL_PROFILE`, **COMPACT** — a rolled
+Shoup-4 back-end whose multiply assembles to **325 bytes**, against
+SHORT's 13,614 and LONG's 4,160. Closes issue
+[#51](https://github.com/JC-000/c64-polyval/issues/51), filed from
+`c64-aes256-ecdsa` after that consumer's v0.7.1 integration.
+
+**The gap it closes is a memory-map decision, not a size preference.**
+SHORT and LONG both trade *table* memory for speed and assume code is
+cheap; on a stock C64 the ~38 KB below the `$A000-$BFFF` BASIC ROM
+window is the real budget, and a 13.6 KB multiply can be what pushes a
+consumer's image into that window. `c64-aes256-ecdsa` measured exactly
+that: reading `polyval_multiply` on the running machine returned
+BASIC's `ILLEGAL QUANTITY` text and `polyval_precompute_table` wedged
+the CPU at `$A005`. The failure mode is the CPU executing ROM, not a
+link error.
+
+### Added
+
+- `src/polyval_compact.s` — `POLYVAL_PROFILE=compact` /
+  `-D POLYVAL_PROFILE=3`, segment `LIB_POLYVAL_COMPACT_CODE`. Same
+  mathematics, same 256-byte `polyval_htable` and the same public
+  symbol set as SHORT, with the 32 straight-line nibble steps and the
+  unrolled table build rolled back into loops. Register-preservation
+  contracts match SHORT and LONG per routine, including where matching
+  costs a stack round-trip — a consumer swapping profiles does not have
+  to re-read the per-routine Exit blocks.
+- Two §6.1 archive targets, `make lib-polyval-compact` and
+  `make lib-polyval-gcmsiv-compact`, with `PIN_` rows so a
+  mismatched invocation is rejected at parse time like every other
+  archive goal. Profile is a member-set axis (SPEC §6.3), so a new
+  profile takes targets, never a `CONTRACT_DEFINES` `-D`.
+- Two §6.6 footprint pairs: `polyval-compact.a` RESIDENT 512 / COLD
+  256 (measured 325 / 147), `polyval-gcmsiv-compact.a` RESIDENT 2816
+  / COLD 512 (measured 2732 / 339). COMPACT places its cold code last
+  in its segment so the overlayable region is contiguous, and is the
+  first configuration where the `LIB_POLYVAL_NO_AES` gating actually
+  moves a COLD value (512 → 256) rather than rounding to the same
+  boundary.
+- `make consumer-check-noaes` now links the issue-#47 stub against
+  `polyval-compact.a` as well.
+
+### Fixed
+
+- **`API.md` §3 and `README.md` documented SHORT's precompute as
+  ~29,385 cy; it is 4,656 cy.** The figure dates to v0.1.0 and
+  predates the release that replaced the 128-iteration `mulX_POLYVAL`
+  loop with the 7-shift RFC 8452 identity — a ~6× overstatement that
+  survived because nothing re-measured it. Found while benchmarking
+  COMPACT against both incumbents. The SHORT/LONG crossover it fed
+  moves from ~15 to ~17 blocks; the ~68-block practical break-even is
+  unaffected. LONG's 255,268 cy and both multiply figures re-measured
+  within noise of their documented values.
+
+### Notes
+
+- No exported symbol was added, removed or renamed, so
+  `LIB_POLYVAL_ABI_VERSION` stays `1`. The LONG and SHORT profiles are
+  untouched: no `.o` under either profile changed, and their footprint
+  equates are unchanged.
+- Correctness: 376/376 tests pass under `POLYVAL_PROFILE=compact`
+  (217 direct POLYVAL + 159 GCM-SIV, 6 RFC 8452 AAD vectors skipped as
+  documented), against the same Python reference and the same vectors
+  as the other two profiles.
+- COMPACT is **strictly slower than SHORT at every message length** —
+  49,657 cy per multiply against 18,776 — and is not a third point on
+  the speed/memory axis. It is chosen on footprint alone.
+
 ## v0.7.3 — 2026-08-23
 
 *(Footprint table presentation corrected before tagging: one row per

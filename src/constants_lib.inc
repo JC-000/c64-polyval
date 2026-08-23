@@ -44,16 +44,26 @@ aes_expanded_key_size = 240         ; (14+1) * 16 = 240 bytes
 ; ---------------------------------------------------------------------------
 ; POLYVAL build profile selector
 ;
-; SHORT: 4-bit Shoup table with Tier 1 unrolling. Best for RFC 8452 GCM-SIV
-;        short messages (H rederived per message).
-; LONG:  Shoup 8-bit fused shift+reduce+htable. Best for long-message /
-;        session-stable-H workloads (TLS 1.3, WireGuard).
+; SHORT:   4-bit Shoup table with Tier 1 unrolling. Best for RFC 8452 GCM-SIV
+;          short messages (H rederived per message).
+; LONG:    Shoup 8-bit fused shift+reduce+htable. Best for long-message /
+;          session-stable-H workloads (TLS 1.3, WireGuard).
+; COMPACT: 4-bit Shoup table, rolled. Same table and same mathematics as
+;          SHORT with the unrolling traded back for cycles. Best for
+;          memory-bound consumers that call POLYVAL rarely and cannot spend
+;          ~12 KB on it — on a stock C64 the choice can decide whether the
+;          image collides with the $A000-$BFFF ROM window (issue #51).
 ;
 ; Define POLYVAL_PROFILE on the ca65 command line via -D POLYVAL_PROFILE=2.
 ; Default: LONG.
+;
+; The value is a member-set axis (c64-lib-contract SPEC §6.3): it selects
+; which multiply object is *archived*, so it must be set as a make variable
+; (`make POLYVAL_PROFILE=compact`), not through CONTRACT_DEFINES.
 ; ---------------------------------------------------------------------------
-POLYVAL_PROFILE_SHORT = 1
-POLYVAL_PROFILE_LONG  = 2
+POLYVAL_PROFILE_SHORT   = 1
+POLYVAL_PROFILE_LONG    = 2
+POLYVAL_PROFILE_COMPACT = 3
 .ifndef POLYVAL_PROFILE
     POLYVAL_PROFILE = POLYVAL_PROFILE_LONG
 .endif
