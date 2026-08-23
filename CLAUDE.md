@@ -15,12 +15,12 @@ Companion docs (read alongside this file):
 - `API.md` — library API reference; §3 (profile selection), §4 (ZP layout),
   §7–§8 (consumer integration), §9 (c64-lib-contract surface) are load-bearing.
 - `CHANGELOG.md` — release history.
-- `docs/RELEASE_NOTES_v0.7.0.md` — current release attestation (size + SHA256).
+- `docs/RELEASE_NOTES_v0.7.1.md` — current release attestation (size + SHA256).
 - `docs/precalc-tables.md` — c64-lib-contract §8.0 precalc-table enumeration.
 
-## c64-lib-contract adoption (current as of v0.7.0)
+## c64-lib-contract adoption (current as of v0.7.1)
 This library implements the [c64-lib-contract](https://github.com/JC-000/c64-lib-contract),
-currently at SPEC v0.10.6 (normative surface: v0.7.0's prefixed exports,
+currently at SPEC v0.11.0 (normative surface: v0.7.0's prefixed exports,
 v0.7.4's `: abs` pin on the macro's `_REGION`/`_SHARED` exports, v0.8.0's
 §4 segment-placement declarations, v0.9.0's §6 build-and-consume
 chapter — `CONTRACT_DEFINES` / `CONTRACT_ZP_DEFINES` forwarding — plus
@@ -43,7 +43,21 @@ doc-only, v0.8.5's §8 export discipline is N/A here; v0.10.6 enumerates
 the §8.3 provider surface (`ct_mul_8x8`, the SMC operand pair,
 `poly_prod_lo`/`_hi`) and requires deferral gates to leave `.import`s
 behind — N/A, verified by grep: c64-polyval neither provides nor defers
-any §8.1–§8.3 primitive, and has no deferral switch). §1–§6 (v0.1.0
+any §8.1–§8.3 primitive, and has no deferral switch; v0.10.7 registers
+`c64-mlkem` and states "no existing adopter is affected" — N/A;
+v0.11.0 adds two **zero-consumer carve-outs**, both N/A here and both
+worth recording because they are the clauses that would otherwise have
+unlocked the deferred member-basename rename: §1 says a library
+onboarding with no released consumers SHOULD NOT export the bare
+`LIB_VERSION_*` forms at all, and §6.5 says such a library SHOULD be
+"born prefixed" rather than waiting for MAJOR. c64-polyval qualifies
+for neither — it is one of the four incumbents the v0.11.0 entry names
+as unaffected, and its §6.5 scope test ("no tagged release that any
+consumer pins") is now definitively failed: `c64-aes256-ecdsa` is a
+declared consumer pinning a tag as of 2026-08-23. The §6.5 MAJOR
+deferral for member basenames therefore stands, and members cannot
+dual-name, so there is no transitional path short of v1.0.0).
+§1–§6 (v0.1.0
 baseline) shipped in v0.3.0; §8.0 (precalc-table
 catch-loop, applies to every adopter regardless of §8.1–§8.3 applicability)
 shipped in v0.4.0; the v0.7.0 prefixed-export surface (§1 `LIB_POLYVAL_VERSION_*`,
@@ -122,7 +136,10 @@ make lib CONTRACT_ZP_DEFINES='-D polyval_acc=0x40'   # §6.2 ZP slot override ($
 make lib CONTRACT_DEFINES='-D LIB_NO_BARE_EXPORTS=1' # §6.2 global defines (composing consumers)
 make lib-verify                       # library-only verification PRG at $4000 (pre-v0.3.0 `make lib`)
 make consumer-check                   # link test/consumer_stub.s against the library
-make dist VERSION=v0.7.0              # reproducible source-tarball release
+make consumer-check-noaes             # link test/consumer_stub_noaes.s (owns its own
+                                      #   aes_state/gcmsiv_tag) against polyval-long.a
+                                      #   AND polyval-short.a — issue #47 regression guard
+make dist VERSION=v0.7.1              # reproducible source-tarball release
 ```
 Assembler: ca65/ld65/ar65 (cc65 toolchain). Single canonical toolchain as of
 v0.2.0 — ACME support was retired. `src/` is flat (no `lib/` subdir); ld65
@@ -197,7 +214,7 @@ chasing bugs that don't exist in their code or in VICE.
 
 This rule applies to all Claude sessions in this multi-project workspace.
 
-## Layout (v0.7.0)
+## Layout (v0.7.1)
 ```
 src/
   lib_version.s          # §1: LIB_VERSION_*/LIB_ABI_VERSION
@@ -212,7 +229,9 @@ src/
   lib_main.s             # make lib-verify entry stub
   c64.cfg / lib_only.cfg # ld65 cfgs with LIB_POLYVAL_* SEGMENTS aliases
   exports.inc            # human-readable cross-module symbol map (NOT an .include)
-test/                    # consumer_stub.s (used by `make consumer-check`)
+test/                    # consumer_stub.s (`make consumer-check`)
+                         # consumer_stub_noaes.s (`make consumer-check-noaes`,
+                         #   issue #47 guard; NOT vendored into the tarball)
 tools/                   # test runner, harness, build_release.sh, vectors/
 docs/                    # RELEASE_NOTES_v*.md, precalc-tables.md
 ca65/release/v0.1.0/     # frozen historical artifact — DO NOT MODIFY
@@ -240,7 +259,7 @@ as historical reference and must not be edited. The active ABI is now
    unnoticed for a full release cycle — see `API.md` §9.1). Also check the
    value column of the §9.1 table in `API.md` — the v0.4.1 release bumped
    the file but left the table at PATCH 0.
-2. Write `docs/RELEASE_NOTES_vX.Y.Z.md` (use the v0.7.0 file as a template).
+2. Write `docs/RELEASE_NOTES_vX.Y.Z.md` (use the v0.7.1 file as a template).
    Release notes MUST state `RESIDENT`/`COLD` footprint values **per
    shipped archive** — as of v0.7.0 that is **five** rows, not four:
    `polyval.a`/`polyval-gcmsiv.a` (LONG AEAD), `polyval-gcmsiv-short.a`
