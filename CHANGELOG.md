@@ -11,6 +11,26 @@ downstream projects (see `API.md` §8 for the integration contract).
 
 ## Unreleased
 
+### Fixed
+
+- **`ZP_CONFIG_NO_EXPORTS` was not consumer-reachable** ([issue
+  #50](https://github.com/JC-000/c64-polyval/issues/50)).
+  `src/constants_lib.inc` assigned it unguarded, and every library TU
+  includes that header, so the documented supplies-own-slots route —
+  `-D ZP_CONFIG_NO_EXPORTS=1` on the ca65 command line — was a hard
+  `Symbol 'ZP_CONFIG_NO_EXPORTS' is already defined` in *every* TU
+  rather than a redundant define. Now `.ifndef`-guarded; the default
+  stays 1. Same defect and same one-line shape as
+  [c64-x25519#99](https://github.com/JC-000/c64-x25519/issues/99),
+  fixed there in v0.11.1. Reported from `c64-aes256-ecdsa`, this
+  library's first declared consumer, during its v0.7.1 integration.
+
+  Verified: the issue's exact repro now assembles clean; `make lib
+  CONTRACT_DEFINES='-D ZP_CONFIG_NO_EXPORTS=1'` builds and its
+  `zp_config.o` exports **0** symbols, while the default build still
+  exports all **13**; `build/polyval.prg` byte-identical to v0.7.1;
+  suite 376/376 passed, 6 skipped.
+
 ## v0.7.1 — 2026-08-23
 
 Consumer-unblocking **PATCH**. The POLYVAL-only archives
