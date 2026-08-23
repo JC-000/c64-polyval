@@ -153,14 +153,28 @@ so they **reject** `POLYVAL_PROFILE=short` at parse time rather than reusing
 objects assembled under the other profile; use `lib-polyval-gcmsiv-short`, which
 cleans and pins like `lib-polyval-{long,short}`.
 
-**Profile-switch gotcha:** `data.o` and `lib_manifest.o` contents are conditional
-on `POLYVAL_PROFILE` (and `lib_manifest.o` additionally on `POLYVAL_NO_AES`,
-which the lib-polyval-{long,short} targets set to suppress the AES manifest
-rows the POLYVAL-only archives don't ship — issue #23). Make's pattern rule
-doesn't track either as a dependency, so always `make clean` between profile
-switches and after any lib-polyval-{long,short} build; those archive targets
-clean before building via recursive make, but leave `-D LIB_POLYVAL_NO_AES=1`
-objects in `build/` afterwards.
+**Flag-set staleness — handled since issue #58; the manual `make clean` between
+profile switches is no longer required.** `data.o` and `lib_manifest.o` contents
+are conditional on `POLYVAL_PROFILE` (and `lib_manifest.o` additionally on
+`POLYVAL_NO_AES`, which the lib-polyval-{long,short} targets set to suppress the
+AES manifest rows the POLYVAL-only archives don't ship — issue #23), and none of
+those reach a make prerequisite. A **parse-time flag stamp** (`build/.ca65flags`)
+now compares the effective `CA65FLAGS` against the previous invocation's and
+deletes the stale objects/archives when they differ, so `make POLYVAL_PROFILE=short`
+straight after `make` produces the SHORT PRG rather than a stale LONG one, and
+`CONTRACT_DEFINES` / `CONTRACT_ZP_DEFINES` changes take effect on a warm tree.
+Unchanged flags delete nothing, so incremental builds still short-circuit.
+
+Two mechanisms were measured *failing* here before the parse-time one, and both
+are worth knowing before anyone "simplifies" this:
+- **Stamp as a rule prerequisite, compared by mtime** — macOS ships GNU Make
+  3.81, which compares at 1-second granularity. The rewritten stamp is newer only
+  in the sub-second digits, so a same-second rebuild is skipped entirely.
+- **Stamp as a rule prerequisite that deletes** — make 3.81 stats a target before
+  running its prerequisites' recipes and caches that result, so the delete is
+  invisible for whichever object make considered first. Measured:
+  `build/lib_version.o` deleted and then *not* rebuilt, silently dropping a member
+  from the archive — worse than the staleness being fixed.
 
 `make dist` produces `c64-polyval-vX.Y.Z.tar.gz` at repo root. The tarball
 ships only `src/`, root docs, `docs/RELEASE_NOTES_*`, and

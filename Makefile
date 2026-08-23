@@ -308,6 +308,80 @@ $(BUILD_DIR):
 $(LIB_DIR): | $(BUILD_DIR)
 	mkdir -p $(LIB_DIR)
 
+# --- Define-set stamp (issue #57) -----------------------------------------
+# CA65FLAGS is not a prerequisite of anything, so make cannot see that a
+# consumer changed it. The *configuration* axes -- the ones #56 correctly
+# still accepts, because unlike the member-set axes they genuinely work --
+# were therefore honoured from a clean tree and silently dropped from a warm
+# one:
+#
+#   $ make clean && make lib                                  # warm the tree
+#   $ make lib CONTRACT_DEFINES="-D ZP_CONFIG_NO_EXPORTS=1"
+#   make: Nothing to be done for `lib'.                       # exit 0
+#   $ od65 --dump-exports build/zp_config.o | grep -c Name:
+#   13                                                        # asked for 0
+#
+# Rejecting would be wrong here (these knobs are honorable), so the fix is to
+# invalidate: stamp the effective flag set and make every object depend on
+# the stamp. The stamp is rewritten only when the flags actually change, so
+# an unchanged invocation still short-circuits -- both properties matter, and
+# a fix that rebuilt unconditionally would trade this bug for a worse one.
+#
+# Stamping all of CA65FLAGS rather than just the two contract variables is
+# deliberate: it covers every -D this Makefile honours, including ones no one
+# has audited yet, and it also retires the profile-switch gotcha -- data.o and
+# lib_manifest.o content depends on POLYVAL_PROFILE / LIB_POLYVAL_NO_AES, and
+# those now invalidate too instead of requiring a manual `make clean`.
+#
+# Invalidation happens at PARSE TIME, by deletion. Both halves are
+# load-bearing, and the two obvious alternatives were measured failing.
+#
+# *Not* by timestamp: macOS ships **GNU Make 3.81**, which compares mtimes at
+# 1-second granularity. A stamp that merely rewrites itself is newer only in
+# the sub-second digits -- measured on the very sequence this bug is about:
+#
+#   1787503455.095994194  build/.ca65flags     (rewritten)
+#   1787503455.036999740  build/zp_config.o    (stale)
+#
+# 3.81 truncates both to 1787503455, calls the object up to date, and skips
+# the rebuild. So a stamp-as-prerequisite silently does nothing whenever two
+# builds land in the same second -- i.e. exactly when a consumer is iterating
+# interactively, which is the case this is reported from.
+#
+# *Not* as a rule prerequisite either, even deleting: make 3.81 stats a
+# target before running its prerequisites' recipes and caches the result, so
+# a delete performed from the stamp rule is invisible for whichever object
+# make happened to consider first. Measured: build/lib_version.o was deleted
+# and then NOT rebuilt -- make still believed the pre-deletion stat -- while
+# every later object rebuilt correctly. That silently drops a member from the
+# archive, which is a worse failure than the staleness being fixed.
+#
+# Doing it at parse time sidesteps both: the stale artifacts are gone before
+# make builds its dependency graph or stats anything, so no clock granularity
+# and no stat cache is involved. Unchanged flags touch nothing, which
+# preserves incremental builds.
+#
+# `$(strip)` normalises whitespace so a differently-spaced but equivalent
+# invocation does not force a rebuild. The `clean` goal is excluded so a
+# `make clean` does not recreate build/ just to drop a stamp in it -- which
+# also covers the recursive `$(MAKE) clean` in the lib-polyval-* targets.
+#
+# Limitation: the stamp round-trips through the shell, so a define containing
+# a single quote would not compare correctly. ca65 -D values are symbols and
+# integers, so this does not arise in practice.
+CONTRACT_STAMP = $(BUILD_DIR)/.ca65flags
+
+ifeq ($(filter clean,$(MAKECMDGOALS)),)
+  CONTRACT_FLAGS_NOW := $(strip $(CA65FLAGS))
+  CONTRACT_FLAGS_WAS := $(strip $(shell cat $(CONTRACT_STAMP) 2>/dev/null))
+  ifneq ($(CONTRACT_FLAGS_NOW),$(CONTRACT_FLAGS_WAS))
+    $(shell rm -f $(BUILD_DIR)/*.o $(BUILD_DIR)/*.prg $(BUILD_DIR)/*.lbl \
+                  $(LIB_DIR)/*.a 2>/dev/null)
+    $(shell mkdir -p $(BUILD_DIR) && \
+            printf '%s\n' '$(CONTRACT_FLAGS_NOW)' > $(CONTRACT_STAMP))
+  endif
+endif
+
 # --- Pattern rules --------------------------------------------------------
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.s | $(BUILD_DIR)
 	$(CA65) $(CA65FLAGS) -o $@ $<
