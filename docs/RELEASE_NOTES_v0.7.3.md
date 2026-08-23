@@ -108,16 +108,26 @@ also records the two rejected mechanisms.
 
 ## Footprint values per (profile × variant)
 
-Declared values (SPEC §6.6 obligation 2). Five archive rows; **no
-declared value moved this cycle**, each re-verified from inside its
-archive:
+Declared values (SPEC §6.6 obligation 2), **one row per shipped
+archive** — five archives, five rows. **No declared value moved this
+cycle**, and each was re-verified from inside its own archive:
 
-| Archive / configuration | RESIDENT | COLD |
-|---|---|---|
-| `polyval.a` / `polyval-gcmsiv.a` (LONG AEAD) | 6656 (unchanged) | 1280 (unchanged) |
-| `polyval-gcmsiv-short.a` (SHORT AEAD) | 16128 (unchanged) | 3072 (unchanged) |
-| `polyval-long.a` (LONG, no AES) | 4352 (unchanged) | 1280 (unchanged) |
-| `polyval-short.a` (SHORT, no AES) | 13824 (unchanged) | 3072 (unchanged) |
+| Archive | Configuration | RESIDENT | COLD |
+|---|---|---|---|
+| `polyval.a` | LONG AEAD | 6656 (unchanged) | 1280 (unchanged) |
+| `polyval-gcmsiv.a` | LONG AEAD | 6656 (unchanged) | 1280 (unchanged) |
+| `polyval-gcmsiv-short.a` | SHORT AEAD | 16128 (unchanged) | 3072 (unchanged) |
+| `polyval-long.a` | LONG, no AES | 4352 (unchanged) | 1280 (unchanged) |
+| `polyval-short.a` | SHORT, no AES | 13824 (unchanged) | 3072 (unchanged) |
+
+v0.7.0–v0.7.2 combined `polyval.a` and `polyval-gcmsiv.a` into one row —
+identical configuration, identical values — while the prose said "five
+rows". Five archives presented as four rows meant the release flow's own
+"count the rows against the `lib-polyval-*` target list" check could not
+be performed as written. Caught in review of
+[PR #61](https://github.com/JC-000/c64-polyval/pull/61); the values were
+correct throughout, and `CLAUDE.md`'s release flow is corrected so future
+notes stay literal.
 
 ## What's NOT shipped
 
@@ -214,8 +224,8 @@ checkability note.
 | Field      | Value |
 |------------|-------|
 | Filename   | `c64-polyval-v0.7.3.tar.gz` |
-| **Size**   | 103154 bytes |
-| **SHA256** | `2528b57cb6e1a25ad4f629b19b3db234b7643fa97f5fe12c39a545b63a4fe623` |
+| **Size**   | 103516 bytes |
+| **SHA256** | `5418ccddc3da88c4e221bb0200dbd270d9b9e7826a4ed4a475bbaca2c6f479de` |
 
 Re-running `make dist VERSION=v0.7.3` against this source tree must
 reproduce the recorded SHA256 byte-for-byte: every staged file's mtime

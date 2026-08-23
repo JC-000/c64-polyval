@@ -13,6 +13,14 @@ downstream projects (see `API.md` §8 for the integration contract).
 
 ## v0.7.3 — 2026-08-23
 
+*(Footprint table presentation corrected before tagging: one row per
+shipped archive, five archives and five rows. v0.7.0–v0.7.2 combined
+`polyval.a` and `polyval-gcmsiv.a` — same configuration, same values —
+into one row while the prose said "five rows", so the release flow's own
+row-count check could not be performed as written. Values were correct
+throughout; `CLAUDE.md` is corrected so future notes stay literal.
+Caught in review of PR #61.)*
+
 Build-correctness **PATCH**, all three parts of one defect class: a
 consumer's `-D` reaching `ca65` but not reaching make's dependency graph.
 SPEC v0.11.1 §6.3 splits the treatment by whether the build *can* honor
