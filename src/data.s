@@ -139,6 +139,21 @@ polyval_reduce8_s15: .res 256
 .endif  ; POLYVAL_PROFILE = POLYVAL_PROFILE_LONG
 
 ; ---------------------------------------------------------------------------
+; AES + GCM-SIV state - in BSS.
+;
+; Gated on LIB_POLYVAL_NO_AES: the POLYVAL-only archives (polyval-long.a /
+; polyval-short.a) ship no AES and no GCM-SIV code, so they must not define
+; this storage either. Without the gate, data.o is archived whole and these
+; exports collide with any consumer that owns its own AES/GCM-SIV -- ld65
+; "Duplicate external identifier" -- which is exactly the consumer these two
+; archives exist for (issue #47; issue #23 gated the manifest rows that
+; enumerate this storage, but not the storage itself).
+;
+; POLYVAL itself references none of these symbols.
+; ---------------------------------------------------------------------------
+.ifndef LIB_POLYVAL_NO_AES
+
+; ---------------------------------------------------------------------------
 ; AES state - in BSS.
 ; ---------------------------------------------------------------------------
 .export aes_current_key
@@ -205,3 +220,5 @@ gcmsiv_verify_tag:  .res 16     ; saved received tag for verification
 gcmsiv_saved_key:   .res 32     ; saved original key during derivation
 gcmsiv_exp_enc_key: .res 256    ; expanded derived encryption key
 gcmsiv_saved_exp:   .res 256    ; saved original expanded key
+
+.endif  ; .ifndef LIB_POLYVAL_NO_AES
