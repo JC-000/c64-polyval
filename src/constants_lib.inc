@@ -20,7 +20,17 @@ CONSTANTS_LIB_INC_ = 1
 ; Zero-page variables: pulled from zp_config.s. The .exportzp directives
 ; only fire when zp_config.s is assembled as its own translation unit.
 ; ---------------------------------------------------------------------------
+; Guarded so a consumer can pass `-D ZP_CONFIG_NO_EXPORTS=1` on the ca65
+; command line -- the documented supplies-own-slots route -- without a hard
+; "Symbol already defined" in every TU that includes this header. Every
+; library TU includes it, so an unguarded assignment made that route
+; unusable rather than merely redundant (issue #50; c64-x25519#99 is the
+; same defect, fixed there in v0.11.1). The default remains 1: these
+; equates are baked per-TU, and the `.exportzp` block fires only when
+; zp_config.s is assembled as its own translation unit.
+.ifndef ZP_CONFIG_NO_EXPORTS
 ZP_CONFIG_NO_EXPORTS = 1
+.endif
 .include "zp_config.s"
 
 ; ---------------------------------------------------------------------------
