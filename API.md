@@ -162,10 +162,36 @@ the header (§4).
 The POLYVAL primitive ships in two flavours selected at assemble time
 via the `POLYVAL_PROFILE` symbol:
 
-| Profile | Multiply | Precompute | Memory (tables) | Picks when |
-|---|---:|---:|---:|---|
-| SHORT (`POLYVAL_PROFILE=1`) | ~18,770 cy | ~29,385 cy | ~256 B | H rederived per message (RFC 8452 GCM-SIV short messages) |
-| LONG (`POLYVAL_PROFILE=2`) (default) | ~3,915 cy | ~255,263 cy | ~8.5 KB | H stable across many blocks (TLS 1.3, WireGuard) |
+| Profile | Multiply | Precompute | Code | Tables | Total RAM | Picks when |
+|---|---:|---:|---:|---:|---:|---|
+| SHORT (`POLYVAL_PROFILE=1`) | ~18,770 cy | ~29,385 cy | 13,614 B | 256 B | ~13.5 KB | H rederived per message (RFC 8452 GCM-SIV short messages) |
+| LONG (`POLYVAL_PROFILE=2`) (default) | ~3,915 cy | ~255,263 cy | 4,160 B | 8,448 B | ~12.3 KB | H stable across many blocks (TLS 1.3, WireGuard) |
+
+Code and table figures are measured, not estimated: they are the
+`LIB_POLYVAL_<PROFILE>_CODE` and `LIB_POLYVAL_HTABLE` /
+`_LONG_HTABLE8` / `_LONG_REDUCE8` segment sizes from a `lib_only.cfg`
+link of the profile's POLYVAL-only archive. "Total RAM" adds the
+32-byte `LIB_POLYVAL_BSS` accumulator block.
+
+**Read the Code column before assuming SHORT is the small one.** The
+two profiles are close in *total* footprint — SHORT's advantage is
+entirely in table RAM, and it spends the saving back, with interest, in
+code: its multiply is a fully unrolled Shoup-4 (32 straight-line nibble
+invocations), which is where the 13.6 KB goes. The names describe
+precompute cost, not size. A consumer choosing on "which profile is
+smaller" is choosing between ~13.5 KB and ~12.3 KB, and LONG is the
+smaller of the two.
+
+**Neither profile suits a memory-bound consumer**, and this is a known
+gap rather than an oversight in the table: both points on the axis
+assume code is cheap and trade only table memory for speed. A caller
+that invokes POLYVAL rarely and cannot spend ~12 KB on it — a keygen or
+signing tool on a stock C64, as opposed to a throughput-bound TLS or
+WireGuard host — has no profile to select. A compact, rolled back-end
+is tracked as
+[issue #51](https://github.com/JC-000/c64-polyval/issues/51); until it
+exists, such a consumer's options are LONG (smaller total, large
+tables) or vendoring its own minimal multiply.
 
 Both profiles export an identical symbol set (§2.1). Callers do not
 need to know which profile is loaded — `.import polyval_multiply` and
@@ -641,7 +667,7 @@ v0.7.0:
 |---|---|---:|---|
 | `LIB_POLYVAL_VERSION_MAJOR` | `LIB_VERSION_MAJOR` | `0` | Semver major. |
 | `LIB_POLYVAL_VERSION_MINOR` | `LIB_VERSION_MINOR` | `7` | Semver minor. |
-| `LIB_POLYVAL_VERSION_PATCH` | `LIB_VERSION_PATCH` | `1` | Semver patch. |
+| `LIB_POLYVAL_VERSION_PATCH` | `LIB_VERSION_PATCH` | `2` | Semver patch. |
 | `LIB_POLYVAL_ABI_VERSION`   | `LIB_ABI_VERSION`   | `1` | ABI compatibility level. Coarser than MINOR. |
 
 The bare names are identical across every contract adopter, so a
