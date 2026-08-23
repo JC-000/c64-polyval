@@ -565,7 +565,7 @@ use v0.2.0's source-tarball + `src/exports.inc` integration path
 instead. The v0.1.0 tree is kept only for reproducibility of the
 prior release.
 
-## 9. Library contract (c64-lib-contract v0.11.0)
+## 9. Library contract (c64-lib-contract v0.11.1)
 
 As of v0.3.0, c64-polyval implements
 [c64-lib-contract](https://github.com/JC-000/c64-lib-contract)
@@ -667,7 +667,7 @@ v0.7.0:
 |---|---|---:|---|
 | `LIB_POLYVAL_VERSION_MAJOR` | `LIB_VERSION_MAJOR` | `0` | Semver major. |
 | `LIB_POLYVAL_VERSION_MINOR` | `LIB_VERSION_MINOR` | `7` | Semver minor. |
-| `LIB_POLYVAL_VERSION_PATCH` | `LIB_VERSION_PATCH` | `2` | Semver patch. |
+| `LIB_POLYVAL_VERSION_PATCH` | `LIB_VERSION_PATCH` | `3` | Semver patch. |
 | `LIB_POLYVAL_ABI_VERSION`   | `LIB_ABI_VERSION`   | `1` | ABI compatibility level. Coarser than MINOR. |
 
 The bare names are identical across every contract adopter, so a
