@@ -178,12 +178,13 @@ gate that proves the public surface is stable for external use.
 | COMPACT | 49,657 cy | 10,970 cy | 325 B | 256 B | footprint decides the memory map |
 
 All three profiles export an identical set of public symbols with
-identical register-preservation contracts. The practical SHORT/LONG
-crossover, where LONG starts winning consistently, is around 68
-blocks (~1 KB of plaintext per message). Below that, SHORT hashes a
-full message faster despite its slower per-block inner loop; above
-that, LONG pulls ahead. See `API.md` §3 for the full discussion and
-the math.
+identical register-preservation contracts. The SHORT/LONG **crossover
+is 17 blocks (272 bytes)** — measured end-to-end, precompute included:
+at N=16 SHORT is ahead by 10,309 cy, at N=17 LONG is ahead by 4,806,
+and LONG's margin only widens after that. Below 17 blocks SHORT hashes
+a full message faster despite its slower per-block inner loop; at or
+above it, LONG pulls ahead. See `API.md` §3 for the figures and the
+derivation.
 
 **Read the code column.** SHORT and LONG both trade *table* memory
 for speed and assume code is cheap; on total footprint they are 13.6
@@ -216,7 +217,7 @@ every profile is pure CPU + RAM on every path
   accelerated hosts (Ultimate 64 / C64 Ultimate turbo, SuperCPU-class).
   There is no ~1 MHz-anchored wall-clock floor of the kind
   REU-DMA-bound hot paths hit, and the SHORT/LONG crossover
-  (~68 blocks) is clock-invariant.
+  (17 blocks) is clock-invariant.
 
 See `API.md` §3 for the scaling discussion and §9.3 for the policy any
 future REU-resident variant must follow (optional profile with a

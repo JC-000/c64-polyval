@@ -762,7 +762,7 @@ def run_multiblock_benchmarks(transport, labels, short_overhead,
     # Ensure htable is freshly populated (precompute_table clobbers it last).
     precompute_table_once(transport, labels)
 
-    sizes = [1, 4, 16, 64, 256]
+    sizes = [int(x) for x in os.environ.get('POLYVAL_BENCH_BLOCKS', '1,4,16,64,256').split(',')]
     results = {}
 
     # Projected per-block cost (current Shoup: polyval_update ~7085 cy).
