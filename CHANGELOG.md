@@ -13,6 +13,60 @@ downstream projects (see `API.md` §8 for the integration contract).
 
 ### Fixed
 
+- **Configuration axes via `CONTRACT_DEFINES` were silently dropped on a
+  warm tree** ([issue
+  #58](https://github.com/JC-000/c64-polyval/issues/58), measurements
+  from [#57](https://github.com/JC-000/c64-polyval/issues/57) which it
+  supersedes). The invalidate half of #55: the defines PR #56 correctly
+  still *accepts* — `LIB_NO_BARE_EXPORTS`, `ZP_CONFIG_NO_EXPORTS`, ZP
+  slot overrides — reach every `ca65` invocation but no make
+  prerequisite, so they were honoured from a clean tree and ignored from
+  a warm one:
+
+  ```
+  $ make clean && make lib
+  $ make lib CONTRACT_DEFINES="-D ZP_CONFIG_NO_EXPORTS=1"
+  make: Nothing to be done for `lib'.        # exit 0
+  $ od65 --dump-exports build/zp_config.o | grep -c Name:
+  13                                         # asked for 0
+  ```
+
+  This made the #50 advice wrong in practice: that fix is real, but a
+  consumer iterating locally — the normal way to work through a ZP
+  overlap — saw the knob apparently do nothing. Per contract SPEC
+  v0.11.1 §6.3's two-branch rule these axes take the *invalidate* branch,
+  not #56's reject branch, since they genuinely work.
+
+  Fixed with a **parse-time flag stamp** (`build/.ca65flags`) that
+  deletes stale objects and archives when the effective `CA65FLAGS`
+  differs from the previous invocation. Unchanged flags delete nothing,
+  so incremental builds still short-circuit.
+
+  **Two simpler mechanisms were measured failing first**, recorded in
+  the Makefile so they aren't reintroduced. macOS ships GNU Make 3.81,
+  which compares mtimes at 1-second granularity: a stamp-as-prerequisite
+  compared by timestamp is newer only in the sub-second digits
+  (`…455.095994194` vs `…455.036999740`) and same-second rebuilds are
+  skipped. Making that stamp *delete* instead fails differently — 3.81
+  stats a target before running its prerequisites' recipes and caches
+  the result, so the delete is invisible for whichever object make
+  considered first; measured, `build/lib_version.o` was deleted and then
+  **not** rebuilt, silently dropping a member from the archive, which is
+  worse than the staleness being fixed.
+
+  Side effect: this **retires the profile-switch gotcha**. `make
+  POLYVAL_PROFILE=short` straight after `make` now produces the SHORT
+  PRG instead of a stale LONG one, so the manual `make clean` between
+  profile switches is no longer required. `CLAUDE.md` is updated.
+
+  Verified: both knobs and a ZP slot override flip correctly on a warm
+  tree in both directions; identical repeat invocations trigger **0**
+  recompiles (including a whitespace-variant invocation, which `$(strip)`
+  normalises); all nine objects present after every transition; #56's
+  member-set rejections still fire; all five archive targets,
+  `consumer-check` and `consumer-check-noaes` build; PRG byte-identical
+  to v0.7.2; suite 376/376 passed, 6 skipped.
+
 - **`CONTRACT_DEFINES` walked past the archive-goal configuration guard**
   ([issue #55](https://github.com/JC-000/c64-polyval/issues/55)). The
   issue #40 `PIN_` table guards the *make variable* route, but SPEC
