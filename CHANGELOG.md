@@ -11,6 +11,26 @@ downstream projects (see `API.md` §8 for the integration contract).
 
 ## Unreleased
 
+## v0.7.3 — 2026-08-23
+
+Build-correctness **PATCH**, all three parts of one defect class: a
+consumer's `-D` reaching `ca65` but not reaching make's dependency graph.
+SPEC v0.11.1 §6.3 splits the treatment by whether the build *can* honor
+the knob — member-set axes **reject** at parse time (#55), configuration
+axes **invalidate** (#58) — and a pin now holds both in place. No
+exported surface changed, no declared footprint moved, PRG
+byte-identical to v0.7.2, so `LIB_POLYVAL_ABI_VERSION` stays 1.
+
+Side effect worth noting: the profile-switch gotcha is retired. `make
+POLYVAL_PROFILE=short` straight after `make` now produces the SHORT PRG
+rather than a stale LONG one.
+
+Contract currency moves **v0.11.0 → v0.11.1**, whose §6.3 split is the
+rule this release implements. The `CONTRACT_DEFINES` member-set
+`$(error)` from #55 is cited **by name** in that clause as the shipped
+exemplar for the reject branch. v0.11.1 is merged on the contract's
+`main` but not yet tagged there (latest tag v0.11.0).
+
 ### Added
 
 - **`tools/check_knob_staleness.sh`, run as a leg of `make lib-verify`** —

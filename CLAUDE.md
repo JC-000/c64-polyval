@@ -20,7 +20,7 @@ Companion docs (read alongside this file):
 
 ## c64-lib-contract adoption (current as of v0.7.1)
 This library implements the [c64-lib-contract](https://github.com/JC-000/c64-lib-contract),
-currently at SPEC v0.11.0 (normative surface: v0.7.0's prefixed exports,
+currently at SPEC v0.11.1 (normative surface: v0.7.0's prefixed exports,
 v0.7.4's `: abs` pin on the macro's `_REGION`/`_SHARED` exports, v0.8.0's
 §4 segment-placement declarations, v0.9.0's §6 build-and-consume
 chapter — `CONTRACT_DEFINES` / `CONTRACT_ZP_DEFINES` forwarding — plus
@@ -56,7 +56,18 @@ as unaffected, and its §6.5 scope test ("no tagged release that any
 consumer pins") is now definitively failed: `c64-aes256-ecdsa` is a
 declared consumer pinning a tag as of 2026-08-23. The §6.5 MAJOR
 deferral for member basenames therefore stands, and members cannot
-dual-name, so there is no transitional path short of v1.0.0).
+dual-name, so there is no transitional path short of v1.0.0;
+v0.11.1 splits §6.3's select-or-reject rule by whether the build **can**
+honor the knob — cannot honor → reject at parse time, can honor →
+invalidate whatever it reconfigures, and whatever pins it MUST assert the
+artifact flipped rather than that something rebuilt. Both branches are
+adopted: the `CONTRACT_DEFINES` member-set `$(error)` (issue #55) is
+cited **by name** in the clause as the shipped exemplar for the reject
+branch, the parse-time flag stamp (issue #58) is the invalidate branch,
+and `tools/check_knob_staleness.sh` on `lib-verify` is the pin. Note
+v0.11.1 is merged on the contract's `main` but **not yet tagged** —
+latest tag is v0.11.0; that repo routinely ships several PATCHes a day,
+so re-check tags rather than trusting this line).
 §1–§6 (v0.1.0
 baseline) shipped in v0.3.0; §8.0 (precalc-table
 catch-loop, applies to every adopter regardless of §8.1–§8.3 applicability)
