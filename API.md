@@ -498,8 +498,10 @@ POLYVAL_PROFILE_OBJ := $(strip \
   $(if $(filter 1,$(POLYVAL_PROFILE_VAL)),polyval_short) \
   $(if $(filter 2,$(POLYVAL_PROFILE_VAL)),polyval_long) \
   $(if $(filter 3,$(POLYVAL_PROFILE_VAL)),polyval_compact))
-ifeq ($(POLYVAL_PROFILE_OBJ),)
-  $(error POLYVAL_PROFILE_VAL must be 1 (SHORT), 2 (LONG) or 3 (COMPACT))
+# $(filter) matches per word, so a multi-word value would pass a
+# non-empty check and select two back-ends. Require exactly one.
+ifneq ($(words $(POLYVAL_PROFILE_OBJ)),1)
+  $(error POLYVAL_PROFILE_VAL must be exactly one of 1 (SHORT), 2 (LONG) or 3 (COMPACT))
 endif
 
 # Library .s files to compile and link. IMPORTANT: see §8 for the
