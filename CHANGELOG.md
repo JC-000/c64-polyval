@@ -67,6 +67,20 @@ downstream projects (see `API.md` §8 for the integration contract).
   are unaffected. PRG sizes: LONG 9474 → 9516 B, SHORT 18928 → 18970 B,
   COMPACT 5639 → 5681 B (not byte-identical to v0.8.0, by design).
 
+- **`polyval_precompute_table` was documented as clobbering
+  `polyval_h`; it preserves it on every profile.** Hazmat audit
+  finding D-1, [#71](https://github.com/JC-000/c64-polyval/issues/71).
+  `API.md` §6 item 1 and the routine headers in `polyval_long.s` /
+  `polyval_short.s` said `polyval_h` "holds H'" after the call and
+  asked hosts to save H first; the audit measured `polyval_h`
+  byte-identical after precompute on LONG, SHORT and COMPACT for every
+  H tried, and no back-end contains a store to it (LONG shifts a copy
+  in `polyval_acc`, SHORT/COMPACT in `polyval_temp`). Text carried
+  since v0.1.0; the save it prescribed was harmless. Same item 7's
+  "~30k cy (SHORT) ... 128 right-shifts" was the pre-identity figure
+  v0.8.0 corrected elsewhere; now 4,656 cy SHORT / 10,970 cy COMPACT
+  / 255,268 cy LONG. Doc-only; no code or PRG change.
+
 - Documentation left describing two profiles after v0.8.0 added a third.
   Caught in a post-tag sweep; **v0.8.0's tag, tarball and release asset
   are unaffected and remain the canonical artifact** — these are

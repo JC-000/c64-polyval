@@ -390,9 +390,16 @@ via `src/data.s` if a host needs them elsewhere.
 Carried over from the v0.1.0 audit. These are pre-existing constraints,
 not introduced by the v0.2.0 repackage.
 
-1. **`polyval_precompute_table` destroys `polyval_h`.** It overwrites
-   `polyval_h` with H' = H · x^-128 mod f. If the host needs the
-   original H after precompute, save it to a scratch buffer first.
+1. **`polyval_precompute_table` preserves `polyval_h`.** From v0.1.0
+   until the 2026-08-28 hazmat audit (finding D-1, issue #71) this
+   item said the routine overwrote `polyval_h` with H' = H · x^-128
+   mod f and asked hosts to save H first. It does not, on any profile:
+   H' is built in `polyval_acc` (LONG) or `polyval_temp` /
+   `polyval_acc` (SHORT, COMPACT) and no back-end stores to
+   `polyval_h` — measured byte-identical before/after for every H
+   tested. The 16-byte save was harmless but never needed. The
+   routine *does* clobber `polyval_acc` and `polyval_temp`, so a
+   running accumulator must not be live across a precompute.
 
 2. **GCM-SIV requires pre-expanded AES round keys.** Neither
    `gcmsiv_encrypt` nor `gcmsiv_decrypt` calls `aes_key_expansion`
@@ -434,12 +441,18 @@ not introduced by the v0.2.0 repackage.
 6. **Not re-entrant.** Library routines share global ZP scratch and
    table state; sequential calls are fine, interleaved calls are not.
 
-7. **Pre-computed H' via 128 right-shifts.** Building H' from H costs
-   ~30k cy (SHORT) or ~255k cy (LONG) per key, on top of the table
-   build. This is a one-time cost per H; amortizes away if H is
-   stable across many blocks (the LONG profile's intended workload),
-   dominates the per-message cost when H is rederived per message
-   (the SHORT profile's intended workload).
+7. **Pre-computed H' costs a precompute per key.** Building H' from H
+   plus the table(s) costs 255,268 cy (LONG: 128 right-shifts plus
+   the 8 KB Shoup slices), 4,656 cy (SHORT) or 10,970 cy (COMPACT);
+   SHORT and COMPACT use the RFC 8452 identity x^-128 = 1 + x^-1 +
+   x^-2 + x^-7, i.e. 7 shifts and 3 XORs, not 128 shifts. (This item
+   quoted "~30k cy (SHORT)" until issue #71 — the pre-identity figure
+   that CLAUDE.md and §3 had already corrected in v0.8.0.) All
+   figures are `tools/benchmark_polyval.py` measurements. This is a
+   one-time cost per H; it amortizes away if H is stable across many
+   blocks (the LONG profile's intended workload) and dominates the
+   per-message cost when H is rederived per message (the SHORT /
+   COMPACT profiles' intended workload).
 
 8. **POLYVAL is not Poly1305.** WireGuard data-channel /
    ChaCha20-Poly1305 ports need Poly1305, which this library does not
