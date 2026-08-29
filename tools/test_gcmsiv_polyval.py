@@ -186,6 +186,29 @@ def c64_gcmsiv_decrypt(transport: BinaryViceTransport, labels: Labels,
     return pt, tag_valid == 1
 
 
+def c64_gcmsiv_decrypt_full(transport: BinaryViceTransport, labels: Labels,
+                            key: bytes, nonce: bytes, ciphertext: bytes,
+                            tag: bytes) -> tuple[bytes, bool, int]:
+    """Like c64_gcmsiv_decrypt, but poisons gcmsiv_dec_buf (0xA5) first and
+    returns (dec_buf[0..63], tag_valid, A) so the failure convention — A=1
+    (Z clear) and a 64-byte zero wipe — is observable, not vacuous."""
+    setup_key_and_expand(transport, labels, key)
+    exp_key = read_bytes(transport, labels["aes_expanded_key"], 240)
+    write_bytes(transport, labels["gcmsiv_saved_exp"], exp_key)
+    write_bytes(transport, labels["gcmsiv_saved_key"], key)
+    write_bytes(transport, labels["gcmsiv_nonce"], nonce)
+    if ciphertext:
+        write_bytes(transport, labels["gcmsiv_ct_buf"], ciphertext)
+    write_bytes(transport, labels["gcmsiv_pt_len"], bytes([len(ciphertext)]))
+    write_bytes(transport, labels["gcmsiv_tag"], tag)
+    write_bytes(transport, labels["gcmsiv_dec_buf"], b"\xa5" * 64)
+    regs = robust_jsr(transport, labels["gcmsiv_decrypt"], timeout=120.0)
+    dec_buf = read_bytes(transport, labels["gcmsiv_dec_buf"], 64)
+    tag_valid = read_bytes(transport, labels["gcmsiv_tag_valid"], 1)[0]
+    write_bytes(transport, labels["aes_expanded_key"], exp_key)
+    return dec_buf, tag_valid == 1, regs.get("A")
+
+
 # ---------------------------------------------------------------------------
 # Test functions
 # ---------------------------------------------------------------------------
@@ -342,22 +365,35 @@ def test_tampered_tag(transport: BinaryViceTransport, labels: Labels) -> bool:
 # P4 - Expanded negative tests
 # ---------------------------------------------------------------------------
 
-def _assert_rejected(transport, labels, key, nonce, ct, bad_tag, desc):
-    """Call decrypt and assert it rejects. Returns bool."""
-    _, valid = c64_gcmsiv_decrypt(transport, labels, key, nonce, ct, bad_tag)
-    if not valid:
-        print(f"    PASS: {desc}")
+def _assert_rejected(transport, labels, key, nonce, ct, bad_tag, desc,
+                     quiet=False):
+    """Call decrypt and assert it rejects with the documented failure
+    convention: gcmsiv_tag_valid=0, A=1 (Z clear, so `bne` is taken), and
+    gcmsiv_dec_buf wiped to 64 zero bytes. Returns bool."""
+    dec_buf, valid, a_reg = c64_gcmsiv_decrypt_full(
+        transport, labels, key, nonce, ct, bad_tag)
+    wiped = dec_buf == b"\x00" * 64
+    if not valid and a_reg == 1 and wiped:
+        if not quiet:
+            print(f"    PASS: {desc}")
         return True
-    print(f"    FAIL: {desc} -- accepted!")
+    why = []
+    if valid:
+        why.append("accepted!")
+    if a_reg != 1:
+        why.append(f"A={a_reg} (expected 1)")
+    if not wiped:
+        why.append("dec_buf not wiped")
+    print(f"    FAIL: {desc} -- {', '.join(why)}")
     return False
 
 
 def test_tampered_tag_bitflips(transport, labels) -> list:
-    """Flip each of the 16 tag bytes (XOR 0x01), plus each of the 8 bits
-    in tag byte 0 individually. 16 + 8 = 24 subtests.
-    Returns list[bool] of per-subtest results.
+    """Flip every one of the 128 tag bits individually on one message and
+    assert each forgery is rejected with A=1 and a wiped dec_buf.
+    128 subtests. Returns list[bool] of per-subtest results.
     """
-    print("\n--- Tag bit-flip coverage (16 bytes + 8 bits in byte 0) ---")
+    print("\n--- Tag bit-flip coverage (all 128 bits) ---")
     key = random_bytes(32)
     nonce = random_bytes(12)
     pt = random_bytes(32)
@@ -368,19 +404,70 @@ def test_tampered_tag_bitflips(transport, labels) -> list:
     assert tag == py_tag and ct == py_ct, "oracle drift"
 
     results = []
-    for i in range(16):
+    for b in range(128):
         bad = bytearray(tag)
-        bad[i] ^= 0x01
+        bad[b // 8] ^= (1 << (b % 8))
         results.append(_assert_rejected(
             transport, labels, key, nonce, ct, bytes(bad),
-            f"byte[{i}] LSB flip"))
+            f"tag bit {b} (byte[{b // 8}] bit{b % 8}) flip", quiet=True))
+    print(f"    {sum(results)}/{len(results)} tag-bit flips rejected (A=1, dec_buf wiped)")
+    return results
 
-    for bit in range(8):
-        bad = bytearray(tag)
-        bad[0] ^= (1 << bit)
+
+def test_tampered_ciphertext_allbits(transport, labels) -> list:
+    """Flip every ciphertext bit of one 17-byte message (one full block plus
+    one partial byte). 136 subtests."""
+    print("\n--- Ciphertext bit-flip coverage (all 136 bits of a 17-byte message) ---")
+    key = random_bytes(32)
+    nonce = random_bytes(12)
+    pt = random_bytes(17)
+    ct, tag = c64_gcmsiv_encrypt(transport, labels, key, nonce, pt)
+    assert (ct, tag) == py_encrypt(key, nonce, pt), "oracle drift"
+    results = []
+    for b in range(17 * 8):
+        bad = bytearray(ct)
+        bad[b // 8] ^= (1 << (b % 8))
         results.append(_assert_rejected(
-            transport, labels, key, nonce, ct, bytes(bad),
-            f"byte[0] bit{bit} flip"))
+            transport, labels, key, nonce, bytes(bad), tag,
+            f"ct bit {b} flip", quiet=True))
+    print(f"    {sum(results)}/{len(results)} ct-bit flips rejected (A=1, dec_buf wiped)")
+    return results
+
+
+def test_tampered_nonce_allbits(transport, labels) -> list:
+    """Flip every one of the 96 nonce bits on one message. 96 subtests."""
+    print("\n--- Nonce bit-flip coverage (all 96 bits) ---")
+    key = random_bytes(32)
+    nonce = random_bytes(12)
+    pt = random_bytes(16)
+    ct, tag = c64_gcmsiv_encrypt(transport, labels, key, nonce, pt)
+    assert (ct, tag) == py_encrypt(key, nonce, pt), "oracle drift"
+    results = []
+    for b in range(96):
+        bad = bytearray(nonce)
+        bad[b // 8] ^= (1 << (b % 8))
+        results.append(_assert_rejected(
+            transport, labels, key, bytes(bad), ct, tag,
+            f"nonce bit {b} flip", quiet=True))
+    print(f"    {sum(results)}/{len(results)} nonce-bit flips rejected (A=1, dec_buf wiped)")
+    return results
+
+
+def test_valid_decrypt_convention(transport, labels) -> list:
+    """A VALID decrypt must return A=0 (Z set, `beq tag_ok` taken) and leave
+    the plaintext in dec_buf — the other half of the return convention."""
+    print("\n--- Valid decrypt return convention (A=0, Z=1) ---")
+    results = []
+    for pt_len in (0, 1, 16, 17, 64):
+        key = random_bytes(32)
+        nonce = random_bytes(12)
+        pt = random_bytes(pt_len) if pt_len else b""
+        ct, tag = c64_gcmsiv_encrypt(transport, labels, key, nonce, pt)
+        dec_buf, valid, a_reg = c64_gcmsiv_decrypt_full(
+            transport, labels, key, nonce, ct, tag)
+        ok = valid and a_reg == 0 and dec_buf[:pt_len] == pt
+        print(f"    {'PASS' if ok else 'FAIL'}: len={pt_len} valid={valid} A={a_reg}")
+        results.append(ok)
     return results
 
 
@@ -822,7 +909,10 @@ def run_tests(transport: BinaryViceTransport, labels: Labels,
     record_many(test_tampered_tag_bitflips(transport, labels))
     record_many(test_wrong_key(transport, labels))
     record_many(test_tampered_ciphertext(transport, labels))
+    record_many(test_tampered_ciphertext_allbits(transport, labels))
     record_many(test_tampered_nonce(transport, labels))
+    record_many(test_tampered_nonce_allbits(transport, labels))
+    record_many(test_valid_decrypt_convention(transport, labels))
     record_many(test_all_zero_tag(transport, labels))
     record_many(test_all_ones_tag(transport, labels))
     record_many(test_tag_equals_pt_block(transport, labels))
@@ -837,25 +927,21 @@ def run_tests(transport: BinaryViceTransport, labels: Labels,
     record_many(test_gcmsiv_ctr_encrypt(transport, labels))
     record_many(test_gcmsiv_ctr_decrypt(transport, labels))
 
-    # 4. Random roundtrip tests
+    # 4. Random roundtrip tests.  The boundary lengths ALWAYS run and the
+    # random-length loop runs exactly `iterations` times.  (Before issue #73
+    # the budget was `iterations - fixed_count`, which at the default 15 left
+    # room for only the 1- and 15-byte round-trips — 16/17/32/48/63/64 and
+    # the random loop were silently starved.)
     print("\n=== Random Roundtrip Tests ===")
-    no_aad_count = sum(1 for v in all_vectors if not v.get("aad", ""))
-    fixed_count = no_aad_count * 2 + 1  # encrypt + decrypt + tamper
-    random_count = max(0, iterations - fixed_count)
-
-    # Boundary cases
     boundary_lengths = [1, 15, 16, 17, 32, 48, 63, 64]
     for pt_len in boundary_lengths:
-        if random_count <= 0:
-            break
         record(test_random_roundtrip(
             transport, labels, pt_len,
             f"Roundtrip: {pt_len} bytes",
         ))
-        random_count -= 1
 
     # Random lengths
-    for i in range(random_count):
+    for i in range(iterations):
         pt_len = random.randint(1, MAX_PT_LEN)
         record(test_random_roundtrip(
             transport, labels, pt_len,
@@ -902,7 +988,8 @@ def main():
     print("\n=== Building ===")
     profile = os.environ.get("POLYVAL_PROFILE", "long")
     print(f"  Profile: {profile}")
-    subprocess.run(["make", "clean"], capture_output=True)
+    # No `make clean`: the parse-time flag stamp (issue #58) evicts objects
+    # assembled under a different POLYVAL_PROFILE.
     result = subprocess.run(
         ["make", f"POLYVAL_PROFILE={profile}"],
         capture_output=True, text=True,
