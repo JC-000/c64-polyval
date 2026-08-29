@@ -219,7 +219,7 @@ gcmsiv_ks_idx:      .res 1      ; keystream index
 gcmsiv_tag_valid:   .res 1      ; tag verification: 0=fail, 1=pass
 gcmsiv_verify_tag:  .res 16     ; saved received tag for verification
 gcmsiv_saved_key:   .res 32     ; saved original key during derivation
-gcmsiv_exp_enc_key: .res 256    ; expanded derived encryption key
-gcmsiv_saved_exp:   .res 256    ; saved original expanded key
+gcmsiv_exp_enc_key: .res aes_expanded_key_size  ; expanded derived encryption key (240 B)
+gcmsiv_saved_exp:   .res aes_expanded_key_size  ; saved original expanded key (240 B)
 
 .endif  ; .ifndef LIB_POLYVAL_NO_AES

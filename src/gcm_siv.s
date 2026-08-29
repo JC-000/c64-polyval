@@ -283,7 +283,8 @@ gcmsiv_derive_keys:
         lda aes_expanded_key,x
         sta gcmsiv_exp_enc_key,x
         inx
-        bne @copy_exp            ; copies 256 bytes
+        cpx #aes_expanded_key_size
+        bne @copy_exp            ; copies exactly the 240-byte schedule
 
         ; Restore original key and re-expand
         ldx #0
@@ -526,6 +527,14 @@ gcmsiv_finalize_tag:
 
 ; =============================================================================
 ; gcmsiv_install_enc_key - install derived enc key into aes_expanded_key
+;
+; Copies exactly aes_expanded_key_size (240) bytes. Before the hazmat
+; audit (I-1) these loops ran `inx / bne` = 256 iterations, so 16 bytes
+; past the end of aes_expanded_key (aes_mc_* and gcmsiv_nonce[0..7] in
+; the shipped layout, whatever the consumer's linker places there in
+; general) were snapshotted at derive time, transiently overwritten with
+; that snapshot during every finalize_tag / ctr_* window, and any write
+; made to them inside the window was silently reverted by the restore.
 ; =============================================================================
 gcmsiv_install_enc_key:
         ldx #0
@@ -533,6 +542,7 @@ gcmsiv_install_enc_key:
         lda aes_expanded_key,x
         sta gcmsiv_saved_exp,x
         inx
+        cpx #aes_expanded_key_size
         bne @save
 
         ldx #0
@@ -540,6 +550,7 @@ gcmsiv_install_enc_key:
         lda gcmsiv_exp_enc_key,x
         sta aes_expanded_key,x
         inx
+        cpx #aes_expanded_key_size
         bne @install
         rts
 
@@ -552,6 +563,7 @@ gcmsiv_restore_orig_key:
         lda gcmsiv_saved_exp,x
         sta aes_expanded_key,x
         inx
+        cpx #aes_expanded_key_size
         bne @restore
         rts
 

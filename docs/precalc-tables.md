@@ -55,7 +55,7 @@ class as [c64-lib-contract#62](https://github.com/JC-000/c64-lib-contract/issues
 |---|---:|---|
 | `aes_rcon` | 10 B | Below the 256 B floor. |
 | `aes_expanded_key`, `aes_current_key`, `aes_state` | 240 B / 32 B / 16 B | Per-call runtime state (the expanded round-key schedule, the installed key, the working cipher state), not a precomputed lookup table — regenerated per key install, not read as a fixed table. |
-| `gcmsiv_exp_enc_key`, `gcmsiv_saved_exp` | 256 B each | Per-message scratch buffers holding a *copy* of the expanded key during GCM-SIV's key-derivation dance (`src/gcm_siv.s`), not precalculated table data. Excluded on the same "runtime state, not a table" grounds as the AES key schedule above, independent of the 256 B floor. |
+| `gcmsiv_exp_enc_key`, `gcmsiv_saved_exp` | 240 B each (256 B before the #69 fix) | Per-message scratch buffers holding a *copy* of the expanded key during GCM-SIV's key-derivation dance (`src/gcm_siv.s`), not precalculated table data. Excluded on the same "runtime state, not a table" grounds as the AES key schedule above, independent of the 256 B floor. |
 | All other `gcmsiv_*` / `aes_mc_*` buffers | ≤ 64 B each | Below the floor. |
 | ZP scratch (`polyval_acc`, `pv_mul_input`, etc.) | ≤ 16 B each | Below the floor by construction (zero page). |
 

@@ -13,6 +13,27 @@ downstream projects (see `API.md` §8 for the integration contract).
 
 ### Fixed
 
+- **`gcmsiv_install_enc_key` / `gcmsiv_restore_orig_key` / the
+  `@copy_exp` loop in `gcmsiv_derive_keys` copied 256 bytes into the
+  240-byte `aes_expanded_key`** (`inx / bne` with no terminator).
+  Found by the 2026-08-28 `cryptography.hazmat` differential audit,
+  finding I-1, [#69](https://github.com/JC-000/c64-polyval/issues/69).
+  The 16 bytes past the schedule (`aes_mc_*` and `gcmsiv_nonce[0..7]`
+  in the shipped layout; whatever a consumer's linker places there in
+  general) were snapshotted at `gcmsiv_derive_keys` time, transiently
+  overwritten with that snapshot during every `gcmsiv_finalize_tag` /
+  `gcmsiv_ctr_encrypt` / `gcmsiv_ctr_decrypt` window, and any write to
+  them inside the window (an IRQ handler, say) was silently reverted by
+  the restore. Not observable through the documented API sequence —
+  the nonce is read before install and never inside the window, so
+  every test vector passed — but a latent memory-safety defect for
+  consumers with a different placement. All three loops now terminate
+  at `aes_expanded_key_size` (240, `src/constants_lib.inc`), and
+  `gcmsiv_exp_enc_key` / `gcmsiv_saved_exp` in `src/data.s` shrink from
+  256 to 240 B each (`LIB_POLYVAL_GCMSIV_BSS` is 32 B smaller; the
+  manifest `RESIDENT_BYTES` / `COLD_BYTES` count code+rodata only and
+  are unchanged — see the re-measured figures under I-2 below).
+
 - Documentation left describing two profiles after v0.8.0 added a third.
   Caught in a post-tag sweep; **v0.8.0's tag, tarball and release asset
   are unaffected and remain the canonical artifact** — these are
