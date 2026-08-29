@@ -1,16 +1,31 @@
 #!/usr/bin/env python3
 """
-run_all_tests.py - Parallel Test Runner
+run_all_tests.py - Parallel, per-profile test runner
 
-Runs both POLYVAL direct tests and GCM-SIV end-to-end tests simultaneously
-on separate VICE instances, cutting wall-clock time nearly in half.
+For every requested POLYVAL profile (default: all three), builds
+`make POLYVAL_PROFILE=<p>` and runs the four suites on three VICE instances:
+
+  instance 1: test_polyval_direct.py  (POLYVAL unit tests, ZP-wrapped jsr)
+              + test_gcmsiv_bounds.py (regression: issues #69, #70)
+  instance 2: test_gcmsiv_polyval.py  (RFC 8452 vectors, negative tests,
+                                       direct API, round-trips)
+  instance 3: test_hazmat_fuzz.py     (differential fuzz vs hazmat_oracle.py)
+
+tools/reference_sanity.cross_validate_reference() runs ONCE before the
+profile loop, so the Python oracle the suites trust is checked against
+cryptography.AESGCMSIV before any 6502 code executes.
+
+No `make clean` between profiles: the parse-time flag stamp (issue #58)
+evicts objects assembled under a different POLYVAL_PROFILE.
 
 Usage:
-    python3 tools/run_all_tests.py [--seed S] [--iterations N] [--verbose]
+    python3.13 tools/run_all_tests.py [--seed S|random] [--iterations N]
+        [--fuzz-iterations N] [--profile long|short|compact|all] [--verbose]
 
 Requires: Python 3.10+, c64_test_harness, VICE x64sc
 """
 
+import argparse
 import io
 import os
 import random
@@ -18,7 +33,7 @@ import subprocess
 import sys
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__))))
 
@@ -29,6 +44,8 @@ from c64_test_harness import (
     wait_for_text,
     dump_screen,
 )
+
+from reference_sanity import cross_validate_reference
 
 # Import test functions from polyval_direct
 from test_polyval_direct import (
@@ -47,8 +64,9 @@ from test_polyval_direct import (
 )
 import test_polyval_direct
 
-# Import GCM-SIV test runner
 from test_gcmsiv_polyval import run_tests as gcmsiv_run_tests
+from test_gcmsiv_bounds import run_tests as bounds_run_tests
+from test_hazmat_fuzz import run_tests as fuzz_run_tests
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -58,50 +76,49 @@ PROJECT_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 PRG_PATH = os.path.join(PROJECT_ROOT, "build", "polyval.prg")
 LABELS_PATH = os.path.join(PROJECT_ROOT, "build", "labels.txt")
 
+PROFILES = ["long", "short", "compact"]
+
 DEFAULT_SEED = 8452
 DEFAULT_ITERATIONS_POLYVAL = 10
 DEFAULT_ITERATIONS_GCMSIV = 15
+DEFAULT_ITERATIONS_FUZZ = 3     # extra random cases per fuzz section (A, C);
+                                # the fixed adversarial set always runs
+
+SUITES = ["POLYVAL Direct", "GCM-SIV", "GCM-SIV bounds", "Hazmat fuzz"]
 
 
 # ---------------------------------------------------------------------------
 # Build
 # ---------------------------------------------------------------------------
 
-def build():
-    """Run make clean && make, verify PRG + labels exist."""
-    print("=== Building ===")
-    subprocess.run(["make", "clean"], capture_output=True, cwd=PROJECT_ROOT)
-    result = subprocess.run(["make"], capture_output=True, text=True,
-                            cwd=PROJECT_ROOT)
+def build(profile):
+    """make POLYVAL_PROFILE=<profile>; verify PRG + labels exist."""
+    print(f"=== Building (POLYVAL_PROFILE={profile}) ===")
+    result = subprocess.run(["make", f"POLYVAL_PROFILE={profile}"],
+                            capture_output=True, text=True, cwd=PROJECT_ROOT)
     if result.returncode != 0:
         print(f"Build failed:\n{result.stderr}")
         sys.exit(1)
     print("  Build OK")
-
-    if not os.path.exists(PRG_PATH):
-        print(f"FATAL: {PRG_PATH} not found")
-        sys.exit(1)
-    if not os.path.exists(LABELS_PATH):
-        print(f"FATAL: {LABELS_PATH} not found")
-        sys.exit(1)
+    for path in (PRG_PATH, LABELS_PATH):
+        if not os.path.exists(path):
+            print(f"FATAL: {path} not found")
+            sys.exit(1)
 
 
 # ---------------------------------------------------------------------------
-# Workers
+# Per-thread stdout capture
 # ---------------------------------------------------------------------------
 
 class _ThreadLocalStdout(io.TextIOBase):
-    """A stdout wrapper that routes writes to per-thread StringIO buffers.
-
-    Threads that have registered a buffer via set_buffer() get their output
-    captured; all other threads write to the original stdout.
-    """
+    """Routes writes to per-thread StringIO buffers (registered via
+    set_buffer()); unregistered threads write to the real stdout."""
 
     def __init__(self, real_stdout):
         self._real = real_stdout
         self._local = threading.local()
 
-    def set_buffer(self, buf: io.StringIO):
+    def set_buffer(self, buf):
         self._local.buf = buf
 
     def clear_buffer(self):
@@ -109,40 +126,32 @@ class _ThreadLocalStdout(io.TextIOBase):
 
     def write(self, s):
         buf = getattr(self._local, "buf", None)
-        if buf is not None:
-            return buf.write(s)
-        return self._real.write(s)
+        return buf.write(s) if buf is not None else self._real.write(s)
 
     def flush(self):
         buf = getattr(self._local, "buf", None)
-        if buf is not None:
-            buf.flush()
-        else:
-            self._real.flush()
+        (buf if buf is not None else self._real).flush()
 
 
-def worker_polyval(transport, labels, seed, iterations, verbose, tls_stdout):
-    """Run all POLYVAL direct test groups. Returns (passed, failed, output)."""
+# ---------------------------------------------------------------------------
+# Workers — each returns a dict {suite_name: (passed, skipped, failed, errors)}
+# plus the captured output
+# ---------------------------------------------------------------------------
+
+def worker_polyval_and_bounds(transport, labels, seed, iterations, verbose, tls_stdout):
     buf = io.StringIO()
     tls_stdout.set_buffer(buf)
+    out = {}
 
-    # Seed this thread's RNG independently
     random.seed(seed)
-
-    # Set the VERBOSE flag for this run
     test_polyval_direct.VERBOSE = verbose
-
-    # Install ZP staging wrapper — polyval_acc lives in ZP ($10-$1F) which
-    # BASIC/KERNAL clobber between jsr() calls, so every test group routes
-    # through the $C040 wrapper. Without this, polyval_acc reads are stale
-    # and every direct group fails by exception. Standalone main() installs
-    # it; the parallel orchestrator must do it explicitly per-instance too.
+    # polyval_acc lives in ZP, which BASIC/KERNAL clobber between jsr()
+    # calls — every direct group routes through the $C040 staging wrapper.
     install_zp_wrapper(transport)
     print("  ZP staging wrapper installed")
 
     results = TestResults()
-
-    test_groups = [
+    for group_name, test_fn in [
         ("polyval_init", test_init),
         ("polyval_double", test_double),
         ("polyval_right_shift_1", test_right_shift),
@@ -153,181 +162,218 @@ def worker_polyval(transport, labels, seed, iterations, verbose, tls_stdout):
         ("polyval_update", test_update),
         ("full pipeline", test_full_pipeline),
         ("multiply vs dot", test_multiply_vs_dot),
-    ]
-
-    for group_name, test_fn in test_groups:
+    ]:
         try:
             test_fn(transport, labels, results, iterations=iterations)
         except Exception as e:
-            results.fail(f"{group_name}: EXCEPTION",
-                         f"    {type(e).__name__}: {e}")
-            print(f"  (continuing with next test group...)")
+            results.fail(f"{group_name}: EXCEPTION", f"    {type(e).__name__}: {e}")
+            print("  (continuing with next test group...)")
+    out["POLYVAL Direct"] = (results.passed, 0, results.failed, list(results.errors))
+
+    print("\n" + "-" * 60)
+    print("GCM-SIV bounds regression tests (issues #69, #70)")
+    print("-" * 60)
+    try:
+        passed, failed, errors = bounds_run_tests(transport, labels, seed)
+    except Exception as e:
+        passed, failed, errors = 0, 1, [f"EXCEPTION: {type(e).__name__}: {e}"]
+        print(errors[0])
+    out["GCM-SIV bounds"] = (passed, 0, failed, errors)
 
     tls_stdout.clear_buffer()
-    return results.passed, results.failed, results.errors, buf.getvalue()
+    return out, buf.getvalue()
 
 
 def worker_gcmsiv(transport, labels, seed, iterations, tls_stdout):
-    """Run GCM-SIV end-to-end tests. Returns (passed, failed, output)."""
     buf = io.StringIO()
     tls_stdout.set_buffer(buf)
-
-    # Seed this thread's RNG independently
     random.seed(seed)
-
     try:
         passed, skipped, failed = gcmsiv_run_tests(transport, labels, iterations)
-        errors = [] if failed == 0 else [f"{failed} GCM-SIV test(s) failed"]
+        errors = [] if failed == 0 else [f"{failed} GCM-SIV test(s) failed (see log above)"]
     except Exception as e:
         passed, skipped, failed = 0, 0, 1
         errors = [f"EXCEPTION: {type(e).__name__}: {e}"]
-        print(f"EXCEPTION: {type(e).__name__}: {e}")
-
+        print(errors[0])
     tls_stdout.clear_buffer()
-    return passed, skipped, failed, errors, buf.getvalue()
+    return {"GCM-SIV": (passed, skipped, failed, errors)}, buf.getvalue()
+
+
+def worker_fuzz(transport, labels, seed, iterations, verbose, tls_stdout):
+    buf = io.StringIO()
+    tls_stdout.set_buffer(buf)
+    try:
+        passed, skipped, failed, errors = fuzz_run_tests(
+            transport, labels, iterations, seed, verbose)
+    except Exception as e:
+        passed, skipped, failed = 0, 0, 1
+        errors = [f"EXCEPTION: {type(e).__name__}: {e}"]
+        print(errors[0])
+    tls_stdout.clear_buffer()
+    return {"Hazmat fuzz": (passed, skipped, failed, errors)}, buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# One profile
+# ---------------------------------------------------------------------------
+
+def run_profile(profile, args, seed):
+    """Build + run every suite for one profile. Returns {suite: (p, s, f, errors)}."""
+    build(profile)
+    labels = Labels.from_file(LABELS_PATH)
+    print(f"  Labels loaded from {LABELS_PATH}")
+
+    print("\n=== Launching VICE instances ===")
+    config = ViceConfig(prg_path=PRG_PATH, warp=True, ntsc=True, sound=False)
+    t0 = time.time()
+    outputs = []
+    results = {}
+
+    with ViceInstanceManager(config) as mgr:
+        insts = [mgr.acquire() for _ in range(3)]
+        for i, inst in enumerate(insts, 1):
+            print(f"  Instance {i}: PID {inst.pid}, port {inst.port}")
+        print("  Waiting for main menus...")
+        for i, inst in enumerate(insts, 1):
+            if wait_for_text(inst.transport, "Q=QUIT", timeout=60.0, verbose=False) is None:
+                print(f"FATAL: Instance {i} main menu did not appear")
+                dump_screen(inst.transport, f"startup_{profile}_{i}")
+                mgr.shutdown()
+                sys.exit(1)
+        print("  All instances ready")
+
+        print(f"\n=== Running test suites in parallel ({profile}) ===\n")
+        tls_stdout = _ThreadLocalStdout(sys.stdout)
+        sys.stdout = tls_stdout
+        try:
+            with ThreadPoolExecutor(max_workers=3) as ex:
+                futs = [
+                    ex.submit(worker_polyval_and_bounds, insts[0].transport, labels,
+                              seed, args.iterations_polyval, args.verbose, tls_stdout),
+                    ex.submit(worker_gcmsiv, insts[1].transport, labels,
+                              seed, args.iterations_gcmsiv, tls_stdout),
+                    ex.submit(worker_fuzz, insts[2].transport, labels,
+                              seed, args.fuzz_iterations, args.verbose, tls_stdout),
+                ]
+                for fut in futs:
+                    res, text = fut.result()
+                    results.update(res)
+                    outputs.append(text)
+        finally:
+            sys.stdout = tls_stdout._real
+        for inst in insts:
+            mgr.release(inst)
+
+    elapsed = time.time() - t0
+    for title, text in zip(["POLYVAL Direct + GCM-SIV bounds", "GCM-SIV", "Hazmat fuzz"], outputs):
+        print("-" * 60)
+        print(f"{title} ({profile})")
+        print("-" * 60)
+        print(text)
+
+    print_summary(f"PROFILE {profile.upper()} — {elapsed:.1f}s wall-clock", results)
+    return results, elapsed
+
+
+def print_summary(title, results):
+    print("=" * 60)
+    print(title)
+    print("=" * 60)
+    tp = ts = tf = 0
+    for suite in SUITES:
+        if suite not in results:
+            continue
+        p, s, f, _ = results[suite]
+        tp, ts, tf = tp + p, ts + s, tf + f
+        skip_str = f", {s} skipped" if s else ""
+        print(f"  {suite:15s}: {p}/{p + f} passed{skip_str}"
+              f"{'  ALL PASSED' if f == 0 else f'  {f} FAILED'}")
+    print(f"  {'─' * 44}")
+    print(f"  {'Total':15s}: {tp}/{tp + tf} passed, {ts} skipped, {tf} failed")
+    if tf:
+        for suite in SUITES:
+            for e in results.get(suite, (0, 0, 0, []))[3]:
+                print(f"    [{suite}] {e}")
+    print("=" * 60)
+    return tp, ts, tf
 
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
+def parse_args():
+    ap = argparse.ArgumentParser(description="c64-polyval parallel per-profile test runner")
+    ap.add_argument("--seed", default=str(DEFAULT_SEED),
+                    help="integer seed, or 'random' (default %(default)s)")
+    ap.add_argument("--iterations", type=int, default=None,
+                    help="random cases per group for the POLYVAL and GCM-SIV suites "
+                         f"(defaults {DEFAULT_ITERATIONS_POLYVAL}/{DEFAULT_ITERATIONS_GCMSIV})")
+    ap.add_argument("--fuzz-iterations", type=int, default=DEFAULT_ITERATIONS_FUZZ,
+                    help="extra random cases per hazmat-fuzz section (default %(default)s)")
+    ap.add_argument("--profile", choices=PROFILES + ["all"], default="all",
+                    help="POLYVAL_PROFILE to build and test (default: all)")
+    ap.add_argument("--verbose", "-v", action="store_true")
+    args = ap.parse_args()
+    args.iterations_polyval = args.iterations if args.iterations is not None else DEFAULT_ITERATIONS_POLYVAL
+    args.iterations_gcmsiv = args.iterations if args.iterations is not None else DEFAULT_ITERATIONS_GCMSIV
+    return args
+
+
 def main():
     os.chdir(PROJECT_ROOT)
-
-    # Parse args
-    seed = DEFAULT_SEED
-    if "--seed" in sys.argv:
-        idx = sys.argv.index("--seed")
-        if idx + 1 < len(sys.argv):
-            seed = int(sys.argv[idx + 1])
-
-    iterations_polyval = DEFAULT_ITERATIONS_POLYVAL
-    iterations_gcmsiv = DEFAULT_ITERATIONS_GCMSIV
-    if "--iterations" in sys.argv:
-        idx = sys.argv.index("--iterations")
-        if idx + 1 < len(sys.argv):
-            n = int(sys.argv[idx + 1])
-            iterations_polyval = n
-            iterations_gcmsiv = n
-
-    verbose = "--verbose" in sys.argv or "-v" in sys.argv
-
-    print("=" * 60)
-    print("Parallel Test Runner — POLYVAL + GCM-SIV")
-    print("=" * 60)
-    print(f"Seed: {seed}")
-    print(f"Iterations: polyval={iterations_polyval}, gcmsiv={iterations_gcmsiv}")
-    print(f"Verbose: {verbose}")
-
-    # Build once
-    build()
-
-    # Load labels once (shared, read-only)
-    labels = Labels.from_file(LABELS_PATH)
-    print(f"  Labels loaded from {LABELS_PATH}")
-
-    # Launch 2 VICE instances
-    print("\n=== Launching VICE instances ===")
-    config = ViceConfig(
-        prg_path=PRG_PATH,
-        warp=True,
-        ntsc=True,
-        sound=False,
-    )
-
-    t0 = time.time()
-
-    with ViceInstanceManager(config) as mgr:
-        inst1 = mgr.acquire()
-        inst2 = mgr.acquire()
-        print(f"  Instance 1: port {inst1.port}")
-        print(f"  Instance 2: port {inst2.port}")
-
-        # Wait for both to reach main menu
-        print("  Waiting for main menus...")
-        for i, inst in enumerate([inst1, inst2], 1):
-            grid = wait_for_text(inst.transport, "Q=QUIT", timeout=60.0,
-                                 verbose=False)
-            if grid is None:
-                print(f"FATAL: Instance {i} main menu did not appear")
-                dump_screen(inst.transport, f"startup_{i}")
-                mgr.shutdown()
-                sys.exit(1)
-        print("  Both instances ready")
-
-        # Run suites in parallel
-        print("\n=== Running test suites in parallel ===\n")
-
-        # Install thread-local stdout to capture per-worker output
-        tls_stdout = _ThreadLocalStdout(sys.stdout)
-        sys.stdout = tls_stdout
-
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            fut_polyval = executor.submit(
-                worker_polyval, inst1.transport, labels,
-                seed, iterations_polyval, verbose, tls_stdout,
-            )
-            fut_gcmsiv = executor.submit(
-                worker_gcmsiv, inst2.transport, labels,
-                seed, iterations_gcmsiv, tls_stdout,
-            )
-
-            # Wait for both
-            polyval_result = fut_polyval.result()
-            gcmsiv_result = fut_gcmsiv.result()
-
-        # Restore real stdout
-        sys.stdout = tls_stdout._real
-
-        # Release instances
-        mgr.release(inst1)
-        mgr.release(inst2)
-
-    elapsed = time.time() - t0
-
-    # Unpack results
-    pv_passed, pv_failed, pv_errors, pv_output = polyval_result
-    gc_passed, gc_skipped, gc_failed, gc_errors, gc_output = gcmsiv_result
-
-    # Print captured output sequentially
-    print("-" * 60)
-    print("POLYVAL Direct Tests")
-    print("-" * 60)
-    print(pv_output)
-
-    print("-" * 60)
-    print("GCM-SIV Tests")
-    print("-" * 60)
-    print(gc_output)
-
-    # Aggregated summary
-    total_passed = pv_passed + gc_passed
-    total_failed = pv_failed + gc_failed
-    total = total_passed + total_failed
-
-    print("=" * 60)
-    print(f"COMBINED RESULTS — {elapsed:.1f}s wall-clock")
-    print("=" * 60)
-    print(f"  POLYVAL Direct : {pv_passed}/{pv_passed + pv_failed} passed"
-          f"{'  ALL PASSED' if pv_failed == 0 else ''}")
-    gc_total = gc_passed + gc_skipped + gc_failed
-    skip_str = f", {gc_skipped} skipped" if gc_skipped else ""
-    print(f"  GCM-SIV        : {gc_passed}/{gc_total} passed{skip_str}"
-          f"{'  ALL PASSED' if gc_failed == 0 else ''}")
-    print(f"  {'─' * 40}")
-    print(f"  Total          : {total_passed}/{total} passed")
-
-    if total_failed == 0:
-        print(f"\n  ALL {total} TESTS PASSED")
+    args = parse_args()
+    if args.seed == "random":
+        seed = random.SystemRandom().randint(0, 2 ** 32 - 1)
     else:
-        print(f"\n  {total_failed} TEST(S) FAILED:")
-        for e in pv_errors:
-            print(f"    [POLYVAL] {e}")
-        for e in gc_errors:
-            print(f"    [GCM-SIV] {e}")
-    print("=" * 60)
+        seed = int(args.seed)
+    profiles = PROFILES if args.profile == "all" else [args.profile]
 
-    sys.exit(0 if total_failed == 0 else 1)
+    print("=" * 60)
+    print("Parallel Test Runner — POLYVAL + GCM-SIV + bounds + hazmat fuzz")
+    print("=" * 60)
+    print(f"Seed: {seed} (reproduce with --seed {seed})")
+    print(f"Iterations: polyval={args.iterations_polyval}, gcmsiv={args.iterations_gcmsiv}, "
+          f"fuzz={args.fuzz_iterations}")
+    print(f"Profiles: {', '.join(profiles)}")
+    print(f"Verbose: {args.verbose}")
+
+    # T-3: check the Python oracle against cryptography.AESGCMSIV once,
+    # before any 6502 code runs (aborts on drift).
+    cross_validate_reference()
+
+    per_profile = {}
+    total_elapsed = 0.0
+    for profile in profiles:
+        print("\n" + "#" * 60)
+        print(f"# PROFILE: {profile}")
+        print("#" * 60)
+        per_profile[profile], el = run_profile(profile, args, seed)
+        total_elapsed += el
+
+    # Final combined table
+    print("\n" + "=" * 60)
+    print(f"COMBINED RESULTS — {total_elapsed:.1f}s VICE wall-clock, seed {seed}")
+    print("=" * 60)
+    print(f"  {'profile':8s} {'passed':>7s} {'skipped':>8s} {'failed':>7s}  status")
+    grand_f = 0
+    for profile in profiles:
+        r = per_profile[profile]
+        p = sum(v[0] for v in r.values())
+        s = sum(v[1] for v in r.values())
+        f = sum(v[2] for v in r.values())
+        grand_f += f
+        print(f"  {profile:8s} {p:7d} {s:8d} {f:7d}  {'OK' if f == 0 else 'FAILED'}")
+    if grand_f:
+        print("\n  FAILING TESTS:")
+        for profile in profiles:
+            for suite in SUITES:
+                for e in per_profile[profile].get(suite, (0, 0, 0, []))[3]:
+                    print(f"    [{profile}/{suite}] {e}")
+    else:
+        print("\n  ALL TESTS PASSED ON ALL PROFILES")
+    print("=" * 60)
+    sys.exit(0 if grand_f == 0 else 1)
 
 
 if __name__ == "__main__":
