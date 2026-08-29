@@ -230,16 +230,42 @@ Caught in review of PR #63 before tagging.
 
 ## Test
 ```
-python3.13 tools/run_all_tests.py --seed 8452
-python3.13 tools/test_polyval_direct.py [--seed N] [--iterations N]
+python3.13 tools/run_all_tests.py --seed 8452                 # all three profiles (~3.5 min)
+python3.13 tools/run_all_tests.py --profile short             # one profile (~70 s)
+python3.13 tools/run_all_tests.py --seed random --fuzz-iterations 20
+python3.13 tools/test_polyval_direct.py [--seed N|random] [--iterations N]
 python3.13 tools/test_gcmsiv_polyval.py [--seed N|random] [--iterations N]
+python3.13 tools/test_gcmsiv_bounds.py  [--seed N|random] [--profile P]   # regression: #69, #70
+python3.13 tools/test_hazmat_fuzz.py    [--seed N|random] [--iterations N] [--profile P]
+python3.13 tools/hazmat_oracle.py                            # oracle self-check, no VICE
 ```
 **Use `python3.13` explicitly** — system `python3` is 3.9 on this machine,
 and `c64-test-harness` requires 3.10+. Tests need `x64sc` (VICE) on PATH and
-the `c64-test-harness` Python package installed.
+the `c64-test-harness` Python package installed. `cryptography` is required
+by the reference cross-check and the GCM-SIV suite; `test_hazmat_fuzz.py`
+alone treats it as optional (its hazmat cross-checks become counted SKIPs).
 
-Expected: 376/376 pass, 6 skip (RFC 8452 vectors with non-empty AAD —
-GCM-SIV intentionally does not support AAD; see API.md §6).
+The runner builds `make POLYVAL_PROFILE=<p>` for each profile (`--profile
+{long,short,compact,all}`, default `all`; the parse-time flag stamp handles
+staleness, no `make clean`), runs `cross_validate_reference()` once before
+the loop, and drives four suites on three VICE instances per profile:
+`test_polyval_direct.py` (217), `test_gcmsiv_polyval.py` (525 + 6 skip),
+`test_gcmsiv_bounds.py` (15) and `test_hazmat_fuzz.py` (496 at the runner's
+default `--fuzz-iterations 3`; 20 extra checks per iteration).
+
+Expected, **per profile** (identical on LONG, SHORT and COMPACT, measured
+2026-08-29 at seed 8452): **1253/1253 pass, 6 skip** once the fix for
+issues #69/#70 has merged. The 6 skips are the RFC 8452 vectors with
+non-empty AAD — GCM-SIV intentionally does not support AAD; see API.md §6.
+
+**Until that fix PR merges, exactly 8 of the 15 `test_gcmsiv_bounds.py`
+checks are RED on every profile by design** (1245 pass, 8 fail):
+`gcmsiv_install_enc_key` / `gcmsiv_restore_orig_key` "leaves
+aes_expanded_key+240..255 untouched" (issue #69, the 256-byte copy into the
+240-byte schedule) and the six `gcmsiv_encrypt`/`gcmsiv_decrypt`
+`pt_len=65` / `pt_len=128` checks (issue #70, no bounds check on
+`gcmsiv_pt_len`). They are regression tests written RED first; do not
+"fix" them by weakening the assertions.
 
 ## VICE process hygiene — read this before touching any test infra
 

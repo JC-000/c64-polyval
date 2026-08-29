@@ -71,23 +71,53 @@ PRs and reviewed before tagging (see `CLAUDE.md`, release flow).
 ## Test
 
 ```bash
-python3 tools/run_all_tests.py [--seed N] [--iterations N] [--verbose]
+python3.13 tools/run_all_tests.py [--seed N|random] [--iterations N] \
+    [--fuzz-iterations N] [--profile long|short|compact|all] [--verbose]
 ```
 
-Runs both the `test_polyval_direct.py` regression suite (217 tests,
-direct `jsr()` against every POLYVAL routine) and the
-`test_gcmsiv_polyval.py` end-to-end suite (165 tests, RFC 8452 C.2
-vectors + tampered-tag detection + random roundtrips; 6 of the C.2
-vectors skip by design — non-empty AAD is unsupported) in parallel
-under two VICE instances. Expected: 376/376 pass, 6 skip.
+For every profile (default: all three, ~3.5 minutes; `--profile short`
+for one), the runner builds `make POLYVAL_PROFILE=<p>` and drives four
+suites in parallel on three VICE instances:
 
-Individual suites can be run directly:
+- `test_polyval_direct.py` — 217 tests, direct `jsr()` against every
+  POLYVAL routine;
+- `test_gcmsiv_polyval.py` — 525 tests: the 11 RFC 8452 C.2 AES-256
+  vectors carried in `tools/vectors/rfc8452_vectors.json` (6 skip by
+  design — non-empty AAD is unsupported), every one of the 128 tag bits,
+  136 ciphertext bits and 96 nonce bits flipped on one message with the
+  `A=1` / wiped-`dec_buf` failure convention asserted, direct API
+  coverage, and boundary + random-length round-trips;
+- `test_gcmsiv_bounds.py` — 15 memory-safety regression tests for
+  issues #69 and #70 (8 of them are RED until the fix merges — see
+  `CLAUDE.md`);
+- `test_hazmat_fuzz.py` — 496 differential checks against
+  `tools/hazmat_oracle.py`, an independent RFC-8452-from-the-text oracle
+  (schoolbook carry-less multiply, pure-Python AES-256) that is NOT
+  derived from `polyval_reference.py`: adversarial H and message shapes
+  up to 1 KiB, `polyval_multiply` edge operands, all-zero/all-FF
+  keys and nonces at every length 0..64, key derivation, CTR counter
+  wrap at every byte boundary, and an exhaustive single-bit forgery
+  sweep. If the `cryptography` package is missing or its `AESGCMSIV`
+  is unsupported, the fuzz suite's hazmat cross-checks are counted and
+  printed as SKIPs and the pure-Python oracle still gates everything
+  else.
+
+Expected per profile: 1253/1253 pass, 6 skip (1245 pass, 8 fail until
+the #69/#70 fix lands). `tools/reference_sanity.py` cross-validates the
+Python reference against `cryptography.AESGCMSIV` once before the
+profile loop.
+
+Individual suites can be run directly (each builds the profile it is
+given; `--seed random` samples and prints a fresh seed):
 
 ```bash
-python3 tools/test_polyval_direct.py      # POLYVAL unit tests
-python3 tools/test_gcmsiv_polyval.py      # AES-256-GCM-SIV end-to-end
-python3 tools/benchmark_polyval.py        # CIA-timer cycle benchmarks
-python3 tools/polyval_reference.py        # Python reference self-test (no VICE)
+python3.13 tools/test_polyval_direct.py   # POLYVAL unit tests
+python3.13 tools/test_gcmsiv_polyval.py   # AES-256-GCM-SIV end-to-end
+python3.13 tools/test_gcmsiv_bounds.py    # #69/#70 regression tests
+python3.13 tools/test_hazmat_fuzz.py      # differential fuzz vs hazmat_oracle.py
+python3.13 tools/hazmat_oracle.py         # oracle self-check (no VICE)
+python3.13 tools/benchmark_polyval.py     # CIA-timer cycle benchmarks
+python3.13 tools/polyval_reference.py     # Python reference self-test (no VICE)
 ```
 
 ## Library contract

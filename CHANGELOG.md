@@ -11,7 +11,69 @@ downstream projects (see `API.md` §8 for the integration contract).
 
 ## Unreleased
 
+### Added
+
+- **Test harness hardening from the 2026-08 hazmat audit** (issues
+  [#72](https://github.com/JC-000/c64-polyval/issues/72),
+  [#73](https://github.com/JC-000/c64-polyval/issues/73),
+  [#74](https://github.com/JC-000/c64-polyval/issues/74),
+  [#75](https://github.com/JC-000/c64-polyval/issues/75)); no library
+  code changes.
+  - `tools/hazmat_oracle.py` — independent, self-verifying POLYVAL /
+    AES-256-GCM-SIV oracle written from the RFC 8452 text (schoolbook
+    carry-less multiply + explicit reduction, x^-128 by exponentiation
+    and checked against the `1 + x^-1 + x^-2 + x^-7` identity,
+    pure-Python FIPS-197 AES-256). Not derived from
+    `polyval_reference.py`. `cryptography` is optional: when present its
+    AES-ECB and `AESGCMSIV` are cross-checked on import, when absent
+    those checks are reported as skipped.
+  - `tools/test_hazmat_fuzz.py` — the audit's 6-section differential
+    driver (adversarial H / message shapes to 1 KiB, multiply edge
+    operands, all-0/all-FF keys and nonces at every length 0..64, key
+    derivation, CTR wrap at every byte boundary, exhaustive 128 + 136 +
+    96 single-bit forgery sweep asserting `A=1` and the `dec_buf` wipe).
+    `--seed N|random`, `--iterations N`, `--profile P`; hazmat
+    cross-checks become counted SKIPs without `cryptography`.
+  - `tools/test_gcmsiv_bounds.py` — regression tests for issues
+    [#69](https://github.com/JC-000/c64-polyval/issues/69) (256-byte
+    copies into the 240-byte `aes_expanded_key`; the 16-byte window is
+    located from the label file, poisoned, and must survive
+    `gcmsiv_install_enc_key` / `gcmsiv_restore_orig_key`) and
+    [#70](https://github.com/JC-000/c64-polyval/issues/70)
+    (`gcmsiv_encrypt` / `gcmsiv_decrypt` with `pt_len` 65 and 128 must
+    return `A=1`, decrypt must wipe `dec_buf`, and neither may touch the
+    surrounding buffers). **8 of its 15 checks are RED on every profile
+    until the fix PR merges**, by design.
+  - `tools/run_all_tests.py` gains `--profile {long,short,compact,all}`
+    (default `all`; SHORT and COMPACT were never exercised by the
+    documented entry point — #72), `--fuzz-iterations`, `--seed random`,
+    a per-profile summary plus a final combined table, three VICE
+    instances per profile, and calls `cross_validate_reference()` once
+    before the profile loop (#74 T-3).
+  - `tools/vectors/rfc8452_vectors.json` carries RFC 8452 C.2 #4 (16-byte
+    PT, empty AAD) and #17 (non-trivial key/nonce, empty PT/AAD),
+    transcribed from the RFC text and verified by the oracle; entries are
+    now named by their RFC ordinal (#74 T-6).
+
 ### Fixed
+
+- `tools/test_gcmsiv_polyval.py` round-trip starvation
+  ([#73](https://github.com/JC-000/c64-polyval/issues/73)): the random
+  round-trip budget was `iterations - (2 x no-AAD vectors + 1)`, which at
+  the default 15 left room for only the 1- and 15-byte cases — the
+  16/17/32/48/63/64 boundaries and the random-length loop never ran. The
+  boundary lengths now always run and the random loop runs exactly
+  `--iterations` times.
+- `tools/test_gcmsiv_polyval.py` negative tests
+  ([#74](https://github.com/JC-000/c64-polyval/issues/74) T-5): tag
+  bit-flip coverage went from 24 to all 128 positions, plus every bit of
+  a 17-byte ciphertext and every bit of the nonce; every rejection now
+  asserts the documented return convention (`A=1`, Z clear) and the
+  64-byte `gcmsiv_dec_buf` wipe (previously only `gcmsiv_tag_valid` was
+  read), and valid decrypts assert `A=0`.
+- `tools/test_polyval_direct.py` accepts `--seed random` (#74 T-7).
+- Per-profile expected counts are now 1253 pass / 6 skip (was 376/6 for
+  LONG only); `README.md` and `CLAUDE.md` updated.
 
 - Documentation left describing two profiles after v0.8.0 added a third.
   Caught in a post-tag sweep; **v0.8.0's tag, tarball and release asset
