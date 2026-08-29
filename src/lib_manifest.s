@@ -150,7 +150,15 @@ LIB_MANIFEST_S_INCLUDED = 1
 ; `declared <= budget` assert pass while the actual footprint
 ; overran). Measurements taken 2026-08-15 against the v0.6.0 tree
 ; (ca65/ld65 V2.18); PRG output byte-identical before/after this
-; manifest change.
+; manifest change. Re-measured 2026-08-29 after the hazmat-audit fixes
+; (issues #69 / #70): gcm_siv.o's LIB_POLYVAL_GCMSIV_CODE grew 805 ->
+; 847 B (three `cpx #aes_expanded_key_size` terminators, two pt_len
+; bounds checks, one reject path), so every AEAD measured figure is
+; +42 B; no declared value moves (all stay under their boundary), the
+; NO_AES archives do not ship gcm_siv.o and are unchanged, and
+; COLD_BYTES is untouched (gcm_siv.o has no cold path). The AEAD span
+; comments below keep the 2026-08-15 addresses; the `.if` block holds
+; the current measured figures.
 ;
 ; AEAD builds (polyval.a / polyval-gcmsiv.a on LONG,
 ; polyval-gcmsiv-short.a on SHORT; member set: lib_version, zp_config,
@@ -208,19 +216,19 @@ LIB_MANIFEST_S_INCLUDED = 1
     .ifdef LIB_POLYVAL_NO_AES
       LIB_POLYVAL_RESIDENT_BYTES = 4352   ; measured 4160  (polyval-long.a)
     .else
-      LIB_POLYVAL_RESIDENT_BYTES = 6656   ; measured 6567  (polyval.a / polyval-gcmsiv.a)
+      LIB_POLYVAL_RESIDENT_BYTES = 6656   ; measured 6609  (polyval.a / polyval-gcmsiv.a)
     .endif
   .elseif POLYVAL_PROFILE = POLYVAL_PROFILE_SHORT
     .ifdef LIB_POLYVAL_NO_AES
       LIB_POLYVAL_RESIDENT_BYTES = 13824  ; measured 13614 (polyval-short.a)
     .else
-      LIB_POLYVAL_RESIDENT_BYTES = 16128  ; measured 16021 (polyval-gcmsiv-short.a)
+      LIB_POLYVAL_RESIDENT_BYTES = 16128  ; measured 16063 (polyval-gcmsiv-short.a)
     .endif
   .else
     .ifdef LIB_POLYVAL_NO_AES
       LIB_POLYVAL_RESIDENT_BYTES = 512    ; measured 325   (polyval-compact.a)
     .else
-      LIB_POLYVAL_RESIDENT_BYTES = 2816   ; measured 2732  (polyval-gcmsiv-compact.a)
+      LIB_POLYVAL_RESIDENT_BYTES = 2816   ; measured 2774  (polyval-gcmsiv-compact.a)
     .endif
   .endif
 .endif

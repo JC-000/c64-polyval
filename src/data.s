@@ -203,10 +203,16 @@ aes_mc_b3:  .res 1
 
 .segment "LIB_POLYVAL_GCMSIV_BSS"
 gcmsiv_nonce:       .res 12     ; 96-bit nonce
-gcmsiv_pt_buf:      .res 64     ; plaintext buffer
-gcmsiv_pt_len:      .res 1      ; plaintext length
-gcmsiv_ct_buf:      .res 64     ; ciphertext buffer
-gcmsiv_dec_buf:     .res 64     ; decrypted plaintext buffer
+gcmsiv_pt_buf:      .res gcmsiv_max_pt_len  ; plaintext buffer (64 B)
+gcmsiv_ct_buf:      .res gcmsiv_max_pt_len  ; ciphertext buffer (64 B)
+gcmsiv_dec_buf:     .res gcmsiv_max_pt_len  ; decrypted plaintext buffer (64 B)
+; gcmsiv_pt_len deliberately does NOT follow gcmsiv_pt_buf: it used to be
+; the byte at gcmsiv_pt_buf[64], so an out-of-range length read the
+; length byte itself as plaintext (hazmat audit I-2, issue #70). The
+; encrypt/decrypt entry points now reject pt_len > gcmsiv_max_pt_len;
+; keeping the length out of the buffers' shadow is defence in depth for
+; callers of the lower-level gcmsiv_* steps.
+gcmsiv_pt_len:      .res 1      ; plaintext length (0..gcmsiv_max_pt_len)
 gcmsiv_tag:         .res 16     ; authentication tag
 gcmsiv_tag_acc:     .res 16     ; tag accumulator
 gcmsiv_auth_key:    .res 16     ; derived auth key

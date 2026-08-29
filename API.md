@@ -131,8 +131,8 @@ the header (§4).
 
 | Symbol | Contract |
 |---|---|
-| `gcmsiv_encrypt` | Full RFC 8452 encrypt-and-authenticate. Inputs: pre-expanded master in `aes_expanded_key`, 96-bit nonce at `gcmsiv_nonce`, plaintext at `gcmsiv_pt_buf` (length in `gcmsiv_pt_len`, 0..64). Outputs: ciphertext at `gcmsiv_ct_buf`, 128-bit tag at `gcmsiv_tag`. |
-| `gcmsiv_decrypt` | Full RFC 8452 decrypt-and-verify. Inputs: ciphertext at `gcmsiv_ct_buf`, received tag at `gcmsiv_tag`, length at `gcmsiv_pt_len`. Returns `Z=1`/`A=0` on tag valid (plaintext in `gcmsiv_dec_buf`), `Z=0`/`A=1` on tag invalid (`gcmsiv_dec_buf` is wiped to zeros, `gcmsiv_tag_valid` is also cleared). |
+| `gcmsiv_encrypt` | Full RFC 8452 encrypt-and-authenticate. Inputs: pre-expanded master in `aes_expanded_key`, 96-bit nonce at `gcmsiv_nonce`, plaintext at `gcmsiv_pt_buf` (length in `gcmsiv_pt_len`, 0..64). Outputs: ciphertext at `gcmsiv_ct_buf`, 128-bit tag at `gcmsiv_tag`. Returns `Z=1`/`A=0` on success; `Z=0`/`A=1` with nothing written if `gcmsiv_pt_len` > 64 (§6 item 4). |
+| `gcmsiv_decrypt` | Full RFC 8452 decrypt-and-verify. Inputs: ciphertext at `gcmsiv_ct_buf`, received tag at `gcmsiv_tag`, length at `gcmsiv_pt_len`. Returns `Z=1`/`A=0` on tag valid (plaintext in `gcmsiv_dec_buf`), `Z=0`/`A=1` on tag invalid (`gcmsiv_dec_buf` is wiped to zeros, `gcmsiv_tag_valid` is also cleared). A `gcmsiv_pt_len` > 64 is rejected with the same `Z=0`/`A=1` / wiped-`dec_buf` / `tag_valid=0` outcome before any key derivation (§6 item 4). |
 | `gcmsiv_derive_keys` | RFC 8452 key derivation: master key + nonce → 16-byte auth key (`gcmsiv_auth_key`) + 32-byte enc key (`gcmsiv_enc_key`). |
 | `gcmsiv_compute_tag_base` | POLYVAL over (PT, length-block) → `gcmsiv_tag_acc`. (AAD is always treated as empty — see §6.) |
 | `gcmsiv_finalize_tag` | Final AES-CTR over the tag accumulator to produce `gcmsiv_tag`. |
@@ -149,7 +149,7 @@ the header (§4).
 |---|---:|---|
 | `gcmsiv_nonce` | 12 B | Input: 96-bit nonce. |
 | `gcmsiv_pt_buf` | 64 B | Input (encrypt) / scratch (decrypt). |
-| `gcmsiv_pt_len` | 1 B | Plaintext / ciphertext byte length (0..64). |
+| `gcmsiv_pt_len` | 1 B | Plaintext / ciphertext byte length (0..64; `gcmsiv_max_pt_len` in `constants_lib.inc`). Values above 64 are rejected by `gcmsiv_encrypt` / `gcmsiv_decrypt`. Not adjacent to `gcmsiv_pt_buf` in `src/data.s` (issue #70). |
 | `gcmsiv_ct_buf` | 64 B | Output (encrypt) / input (decrypt). |
 | `gcmsiv_dec_buf` | 64 B | Output of `gcmsiv_decrypt`. |
 | `gcmsiv_tag` | 16 B | In/out: 128-bit auth tag. |
@@ -409,9 +409,24 @@ not introduced by the v0.2.0 repackage.
 
 4. **GCM-SIV plaintext length is limited to 0..64 bytes per call.**
    The buffers `gcmsiv_pt_buf` / `gcmsiv_ct_buf` / `gcmsiv_dec_buf`
-   are 64 B each. Longer messages need to be chunked at the protocol
-   layer, which RFC 8452's nonce-misuse-resistant construction does
-   not natively support — pick a different mode for bulk encryption.
+   are 64 B each (`gcmsiv_max_pt_len`). Longer messages need to be
+   chunked at the protocol layer, which RFC 8452's nonce-misuse-
+   resistant construction does not natively support — pick a
+   different mode for bulk encryption.
+
+   `gcmsiv_encrypt` and `gcmsiv_decrypt` **reject** `gcmsiv_pt_len` >
+   64 (issue #70, hazmat audit finding I-2): both return `A=1` / `Z=0`
+   — the existing tag-failure convention, so `bne` after either call
+   catches it. Encrypt writes nothing on rejection; decrypt wipes
+   `gcmsiv_dec_buf` and clears `gcmsiv_tag_valid` exactly as a bad tag
+   would, and leaves `gcmsiv_tag` as received. Neither performs key
+   derivation, so `aes_expanded_key` is untouched. Before the check,
+   an out-of-range length read `gcmsiv_pt_len` itself as the 65th
+   plaintext byte, and a length ≥ 128 hashed no data at all while CTR
+   wrote across the buffers following `gcmsiv_ct_buf`. The lower-level
+   steps (`gcmsiv_compute_tag_base`, `gcmsiv_ctr_encrypt`,
+   `gcmsiv_ctr_decrypt`) do **not** check; callers driving them
+   directly own the bound.
 
 5. **Not IRQ-safe.** See §5; callers must mask IRQs around library
    work or serialize on a single thread of control.
@@ -848,14 +863,17 @@ archives over-claimed ~2.3 KB of AES+GCM-SIV code they do not
 contain). One row per shipped archive, per §6.6 obligation 2 — a
 value repeated across two archives of the same configuration still
 gets its own row. Values measured 2026-08-15 (LONG / SHORT) and
-2026-08-23 (COMPACT), ca65/ld65 V2.18:
+2026-08-23 (COMPACT), ca65/ld65 V2.18; AEAD rows re-measured
+2026-08-29 after the issue #69 / #70 fixes added 42 B to
+`LIB_POLYVAL_GCMSIV_CODE` (no declared value moved; the POLYVAL-only
+archives do not ship `gcm_siv.o`):
 
 | Archive | Configuration | `RESIDENT_BYTES` (measured) | `COLD_BYTES` (measured) |
 |---|---|---:|---:|
-| `polyval.a` | LONG, full AEAD | 6656 (6567) | 1280 (1239) |
-| `polyval-gcmsiv.a` | LONG, full AEAD | 6656 (6567) | 1280 (1239) |
-| `polyval-gcmsiv-short.a` | SHORT, full AEAD | 16128 (16021) | 3072 (3059) |
-| `polyval-gcmsiv-compact.a` | COMPACT, full AEAD | 2816 (2732) | 512 (339) |
+| `polyval.a` | LONG, full AEAD | 6656 (6609) | 1280 (1239) |
+| `polyval-gcmsiv.a` | LONG, full AEAD | 6656 (6609) | 1280 (1239) |
+| `polyval-gcmsiv-short.a` | SHORT, full AEAD | 16128 (16063) | 3072 (3059) |
+| `polyval-gcmsiv-compact.a` | COMPACT, full AEAD | 2816 (2774) | 512 (339) |
 | `polyval-long.a` | LONG, `LIB_POLYVAL_NO_AES` | 4352 (4160) | 1280 (1047) |
 | `polyval-short.a` | SHORT, `LIB_POLYVAL_NO_AES` | 13824 (13614) | 3072 (2867) |
 | `polyval-compact.a` | COMPACT, `LIB_POLYVAL_NO_AES` | 512 (325) | 256 (147) |
