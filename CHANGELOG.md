@@ -13,6 +13,74 @@ downstream projects (see `API.md` §8 for the integration contract).
 
 ### Fixed
 
+- **`gcmsiv_install_enc_key` / `gcmsiv_restore_orig_key` / the
+  `@copy_exp` loop in `gcmsiv_derive_keys` copied 256 bytes into the
+  240-byte `aes_expanded_key`** (`inx / bne` with no terminator).
+  Found by the 2026-08-28 `cryptography.hazmat` differential audit,
+  finding I-1, [#69](https://github.com/JC-000/c64-polyval/issues/69).
+  The 16 bytes past the schedule (`aes_mc_*` and `gcmsiv_nonce[0..7]`
+  in the shipped layout; whatever a consumer's linker places there in
+  general) were snapshotted at `gcmsiv_derive_keys` time, transiently
+  overwritten with that snapshot during every `gcmsiv_finalize_tag` /
+  `gcmsiv_ctr_encrypt` / `gcmsiv_ctr_decrypt` window, and any write to
+  them inside the window (an IRQ handler, say) was silently reverted by
+  the restore. Not observable through the documented API sequence —
+  the nonce is read before install and never inside the window, so
+  every test vector passed — but a latent memory-safety defect for
+  consumers with a different placement. All three loops now terminate
+  at `aes_expanded_key_size` (240, `src/constants_lib.inc`), and
+  `gcmsiv_exp_enc_key` / `gcmsiv_saved_exp` in `src/data.s` shrink from
+  256 to 240 B each (`LIB_POLYVAL_GCMSIV_BSS` is 32 B smaller; the
+  manifest `RESIDENT_BYTES` / `COLD_BYTES` count code+rodata only and
+  are unchanged — see the re-measured figures under I-2 below).
+
+- **`gcmsiv_encrypt` / `gcmsiv_decrypt` did not validate
+  `gcmsiv_pt_len`**, and `gcmsiv_pt_len` was the byte immediately after
+  the 64-byte `gcmsiv_pt_buf`. Hazmat audit finding I-2,
+  [#70](https://github.com/JC-000/c64-polyval/issues/70). With
+  `pt_len = 65` the 65th plaintext byte read was the length byte
+  itself and ciphertext byte 64 landed in `gcmsiv_dec_buf[0]`; with
+  `pt_len >= 128` `gcmsiv_compute_tag_base` hashed no data blocks at
+  all (only the length block) while CTR wrote `pt_len` bytes across
+  `gcmsiv_dec_buf`, `gcmsiv_tag`, the derived keys, the live counter
+  and keystream. Out of contract (API.md §6 item 4 documents 0..64),
+  but the routine returned normally with a wrong tag. Both entry
+  points now check `gcmsiv_pt_len` before touching any state and
+  reject `> gcmsiv_max_pt_len` (new equate, 64, `constants_lib.inc`)
+  with `A=1` / `Z=0` — the existing tag-failure convention.
+  `gcmsiv_encrypt` writes nothing on rejection (and now returns
+  `A=0` / `Z=1` on success, where A was previously undefined);
+  `gcmsiv_decrypt` wipes `gcmsiv_dec_buf` and clears
+  `gcmsiv_tag_valid` exactly as a bad tag does, and leaves
+  `gcmsiv_tag` as received. The lower-level `gcmsiv_compute_tag_base`
+  / `gcmsiv_ctr_*` steps still do not check. `src/data.s`
+  additionally moves `gcmsiv_pt_len` after `gcmsiv_dec_buf` as defence
+  in depth — **`LIB_POLYVAL_GCMSIV_BSS` ordering changed** (consumers
+  that hard-coded buffer offsets relative to each other rather than
+  importing the labels must re-link; every buffer keeps its size and
+  segment membership).
+
+  Footprint: `LIB_POLYVAL_GCMSIV_CODE` grows 805 → 847 B across #69
+  and #70, so the measured AEAD `RESIDENT_BYTES` are now 6609 (LONG),
+  16063 (SHORT), 2774 (COMPACT) — every declared value (6656 / 16128 /
+  2816) is unchanged; `COLD_BYTES` and the three POLYVAL-only archives
+  are unaffected. PRG sizes: LONG 9474 → 9516 B, SHORT 18928 → 18970 B,
+  COMPACT 5639 → 5681 B (not byte-identical to v0.8.0, by design).
+
+- **`polyval_precompute_table` was documented as clobbering
+  `polyval_h`; it preserves it on every profile.** Hazmat audit
+  finding D-1, [#71](https://github.com/JC-000/c64-polyval/issues/71).
+  `API.md` §6 item 1 and the routine headers in `polyval_long.s` /
+  `polyval_short.s` said `polyval_h` "holds H'" after the call and
+  asked hosts to save H first; the audit measured `polyval_h`
+  byte-identical after precompute on LONG, SHORT and COMPACT for every
+  H tried, and no back-end contains a store to it (LONG shifts a copy
+  in `polyval_acc`, SHORT/COMPACT in `polyval_temp`). Text carried
+  since v0.1.0; the save it prescribed was harmless. Same item 7's
+  "~30k cy (SHORT) ... 128 right-shifts" was the pre-identity figure
+  v0.8.0 corrected elsewhere; now 4,656 cy SHORT / 10,970 cy COMPACT
+  / 255,268 cy LONG. Doc-only; no code or PRG change.
+
 - Documentation left describing two profiles after v0.8.0 added a third.
   Caught in a post-tag sweep; **v0.8.0's tag, tarball and release asset
   are unaffected and remain the canonical artifact** — these are

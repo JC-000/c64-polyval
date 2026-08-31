@@ -131,8 +131,8 @@ the header (§4).
 
 | Symbol | Contract |
 |---|---|
-| `gcmsiv_encrypt` | Full RFC 8452 encrypt-and-authenticate. Inputs: pre-expanded master in `aes_expanded_key`, 96-bit nonce at `gcmsiv_nonce`, plaintext at `gcmsiv_pt_buf` (length in `gcmsiv_pt_len`, 0..64). Outputs: ciphertext at `gcmsiv_ct_buf`, 128-bit tag at `gcmsiv_tag`. |
-| `gcmsiv_decrypt` | Full RFC 8452 decrypt-and-verify. Inputs: ciphertext at `gcmsiv_ct_buf`, received tag at `gcmsiv_tag`, length at `gcmsiv_pt_len`. Returns `Z=1`/`A=0` on tag valid (plaintext in `gcmsiv_dec_buf`), `Z=0`/`A=1` on tag invalid (`gcmsiv_dec_buf` is wiped to zeros, `gcmsiv_tag_valid` is also cleared). |
+| `gcmsiv_encrypt` | Full RFC 8452 encrypt-and-authenticate. Inputs: pre-expanded master in `aes_expanded_key`, 96-bit nonce at `gcmsiv_nonce`, plaintext at `gcmsiv_pt_buf` (length in `gcmsiv_pt_len`, 0..64). Outputs: ciphertext at `gcmsiv_ct_buf`, 128-bit tag at `gcmsiv_tag`. Returns `Z=1`/`A=0` on success; `Z=0`/`A=1` with nothing written if `gcmsiv_pt_len` > 64 (§6 item 4). |
+| `gcmsiv_decrypt` | Full RFC 8452 decrypt-and-verify. Inputs: ciphertext at `gcmsiv_ct_buf`, received tag at `gcmsiv_tag`, length at `gcmsiv_pt_len`. Returns `Z=1`/`A=0` on tag valid (plaintext in `gcmsiv_dec_buf`), `Z=0`/`A=1` on tag invalid (`gcmsiv_dec_buf` is wiped to zeros, `gcmsiv_tag_valid` is also cleared). A `gcmsiv_pt_len` > 64 is rejected with the same `Z=0`/`A=1` / wiped-`dec_buf` / `tag_valid=0` outcome before any key derivation (§6 item 4). |
 | `gcmsiv_derive_keys` | RFC 8452 key derivation: master key + nonce → 16-byte auth key (`gcmsiv_auth_key`) + 32-byte enc key (`gcmsiv_enc_key`). |
 | `gcmsiv_compute_tag_base` | POLYVAL over (PT, length-block) → `gcmsiv_tag_acc`. (AAD is always treated as empty — see §6.) |
 | `gcmsiv_finalize_tag` | Final AES-CTR over the tag accumulator to produce `gcmsiv_tag`. |
@@ -149,7 +149,7 @@ the header (§4).
 |---|---:|---|
 | `gcmsiv_nonce` | 12 B | Input: 96-bit nonce. |
 | `gcmsiv_pt_buf` | 64 B | Input (encrypt) / scratch (decrypt). |
-| `gcmsiv_pt_len` | 1 B | Plaintext / ciphertext byte length (0..64). |
+| `gcmsiv_pt_len` | 1 B | Plaintext / ciphertext byte length (0..64; `gcmsiv_max_pt_len` in `constants_lib.inc`). Values above 64 are rejected by `gcmsiv_encrypt` / `gcmsiv_decrypt`. Not adjacent to `gcmsiv_pt_buf` in `src/data.s` (issue #70). |
 | `gcmsiv_ct_buf` | 64 B | Output (encrypt) / input (decrypt). |
 | `gcmsiv_dec_buf` | 64 B | Output of `gcmsiv_decrypt`. |
 | `gcmsiv_tag` | 16 B | In/out: 128-bit auth tag. |
@@ -390,9 +390,16 @@ via `src/data.s` if a host needs them elsewhere.
 Carried over from the v0.1.0 audit. These are pre-existing constraints,
 not introduced by the v0.2.0 repackage.
 
-1. **`polyval_precompute_table` destroys `polyval_h`.** It overwrites
-   `polyval_h` with H' = H · x^-128 mod f. If the host needs the
-   original H after precompute, save it to a scratch buffer first.
+1. **`polyval_precompute_table` preserves `polyval_h`.** From v0.1.0
+   until the 2026-08-28 hazmat audit (finding D-1, issue #71) this
+   item said the routine overwrote `polyval_h` with H' = H · x^-128
+   mod f and asked hosts to save H first. It does not, on any profile:
+   H' is built in `polyval_acc` (LONG) or `polyval_temp` /
+   `polyval_acc` (SHORT, COMPACT) and no back-end stores to
+   `polyval_h` — measured byte-identical before/after for every H
+   tested. The 16-byte save was harmless but never needed. The
+   routine *does* clobber `polyval_acc` and `polyval_temp`, so a
+   running accumulator must not be live across a precompute.
 
 2. **GCM-SIV requires pre-expanded AES round keys.** Neither
    `gcmsiv_encrypt` nor `gcmsiv_decrypt` calls `aes_key_expansion`
@@ -409,9 +416,24 @@ not introduced by the v0.2.0 repackage.
 
 4. **GCM-SIV plaintext length is limited to 0..64 bytes per call.**
    The buffers `gcmsiv_pt_buf` / `gcmsiv_ct_buf` / `gcmsiv_dec_buf`
-   are 64 B each. Longer messages need to be chunked at the protocol
-   layer, which RFC 8452's nonce-misuse-resistant construction does
-   not natively support — pick a different mode for bulk encryption.
+   are 64 B each (`gcmsiv_max_pt_len`). Longer messages need to be
+   chunked at the protocol layer, which RFC 8452's nonce-misuse-
+   resistant construction does not natively support — pick a
+   different mode for bulk encryption.
+
+   `gcmsiv_encrypt` and `gcmsiv_decrypt` **reject** `gcmsiv_pt_len` >
+   64 (issue #70, hazmat audit finding I-2): both return `A=1` / `Z=0`
+   — the existing tag-failure convention, so `bne` after either call
+   catches it. Encrypt writes nothing on rejection; decrypt wipes
+   `gcmsiv_dec_buf` and clears `gcmsiv_tag_valid` exactly as a bad tag
+   would, and leaves `gcmsiv_tag` as received. Neither performs key
+   derivation, so `aes_expanded_key` is untouched. Before the check,
+   an out-of-range length read `gcmsiv_pt_len` itself as the 65th
+   plaintext byte, and a length ≥ 128 hashed no data at all while CTR
+   wrote across the buffers following `gcmsiv_ct_buf`. The lower-level
+   steps (`gcmsiv_compute_tag_base`, `gcmsiv_ctr_encrypt`,
+   `gcmsiv_ctr_decrypt`) do **not** check; callers driving them
+   directly own the bound.
 
 5. **Not IRQ-safe.** See §5; callers must mask IRQs around library
    work or serialize on a single thread of control.
@@ -419,12 +441,18 @@ not introduced by the v0.2.0 repackage.
 6. **Not re-entrant.** Library routines share global ZP scratch and
    table state; sequential calls are fine, interleaved calls are not.
 
-7. **Pre-computed H' via 128 right-shifts.** Building H' from H costs
-   ~30k cy (SHORT) or ~255k cy (LONG) per key, on top of the table
-   build. This is a one-time cost per H; amortizes away if H is
-   stable across many blocks (the LONG profile's intended workload),
-   dominates the per-message cost when H is rederived per message
-   (the SHORT profile's intended workload).
+7. **Pre-computed H' costs a precompute per key.** Building H' from H
+   plus the table(s) costs 255,268 cy (LONG: 128 right-shifts plus
+   the 8 KB Shoup slices), 4,656 cy (SHORT) or 10,970 cy (COMPACT);
+   SHORT and COMPACT use the RFC 8452 identity x^-128 = 1 + x^-1 +
+   x^-2 + x^-7, i.e. 7 shifts and 3 XORs, not 128 shifts. (This item
+   quoted "~30k cy (SHORT)" until issue #71 — the pre-identity figure
+   that CLAUDE.md and §3 had already corrected in v0.8.0.) All
+   figures are `tools/benchmark_polyval.py` measurements. This is a
+   one-time cost per H; it amortizes away if H is stable across many
+   blocks (the LONG profile's intended workload) and dominates the
+   per-message cost when H is rederived per message (the SHORT /
+   COMPACT profiles' intended workload).
 
 8. **POLYVAL is not Poly1305.** WireGuard data-channel /
    ChaCha20-Poly1305 ports need Poly1305, which this library does not
@@ -848,14 +876,17 @@ archives over-claimed ~2.3 KB of AES+GCM-SIV code they do not
 contain). One row per shipped archive, per §6.6 obligation 2 — a
 value repeated across two archives of the same configuration still
 gets its own row. Values measured 2026-08-15 (LONG / SHORT) and
-2026-08-23 (COMPACT), ca65/ld65 V2.18:
+2026-08-23 (COMPACT), ca65/ld65 V2.18; AEAD rows re-measured
+2026-08-29 after the issue #69 / #70 fixes added 42 B to
+`LIB_POLYVAL_GCMSIV_CODE` (no declared value moved; the POLYVAL-only
+archives do not ship `gcm_siv.o`):
 
 | Archive | Configuration | `RESIDENT_BYTES` (measured) | `COLD_BYTES` (measured) |
 |---|---|---:|---:|
-| `polyval.a` | LONG, full AEAD | 6656 (6567) | 1280 (1239) |
-| `polyval-gcmsiv.a` | LONG, full AEAD | 6656 (6567) | 1280 (1239) |
-| `polyval-gcmsiv-short.a` | SHORT, full AEAD | 16128 (16021) | 3072 (3059) |
-| `polyval-gcmsiv-compact.a` | COMPACT, full AEAD | 2816 (2732) | 512 (339) |
+| `polyval.a` | LONG, full AEAD | 6656 (6609) | 1280 (1239) |
+| `polyval-gcmsiv.a` | LONG, full AEAD | 6656 (6609) | 1280 (1239) |
+| `polyval-gcmsiv-short.a` | SHORT, full AEAD | 16128 (16063) | 3072 (3059) |
+| `polyval-gcmsiv-compact.a` | COMPACT, full AEAD | 2816 (2774) | 512 (339) |
 | `polyval-long.a` | LONG, `LIB_POLYVAL_NO_AES` | 4352 (4160) | 1280 (1047) |
 | `polyval-short.a` | SHORT, `LIB_POLYVAL_NO_AES` | 13824 (13614) | 3072 (2867) |
 | `polyval-compact.a` | COMPACT, `LIB_POLYVAL_NO_AES` | 512 (325) | 256 (147) |

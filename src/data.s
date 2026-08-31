@@ -203,10 +203,16 @@ aes_mc_b3:  .res 1
 
 .segment "LIB_POLYVAL_GCMSIV_BSS"
 gcmsiv_nonce:       .res 12     ; 96-bit nonce
-gcmsiv_pt_buf:      .res 64     ; plaintext buffer
-gcmsiv_pt_len:      .res 1      ; plaintext length
-gcmsiv_ct_buf:      .res 64     ; ciphertext buffer
-gcmsiv_dec_buf:     .res 64     ; decrypted plaintext buffer
+gcmsiv_pt_buf:      .res gcmsiv_max_pt_len  ; plaintext buffer (64 B)
+gcmsiv_ct_buf:      .res gcmsiv_max_pt_len  ; ciphertext buffer (64 B)
+gcmsiv_dec_buf:     .res gcmsiv_max_pt_len  ; decrypted plaintext buffer (64 B)
+; gcmsiv_pt_len deliberately does NOT follow gcmsiv_pt_buf: it used to be
+; the byte at gcmsiv_pt_buf[64], so an out-of-range length read the
+; length byte itself as plaintext (hazmat audit I-2, issue #70). The
+; encrypt/decrypt entry points now reject pt_len > gcmsiv_max_pt_len;
+; keeping the length out of the buffers' shadow is defence in depth for
+; callers of the lower-level gcmsiv_* steps.
+gcmsiv_pt_len:      .res 1      ; plaintext length (0..gcmsiv_max_pt_len)
 gcmsiv_tag:         .res 16     ; authentication tag
 gcmsiv_tag_acc:     .res 16     ; tag accumulator
 gcmsiv_auth_key:    .res 16     ; derived auth key
@@ -219,7 +225,7 @@ gcmsiv_ks_idx:      .res 1      ; keystream index
 gcmsiv_tag_valid:   .res 1      ; tag verification: 0=fail, 1=pass
 gcmsiv_verify_tag:  .res 16     ; saved received tag for verification
 gcmsiv_saved_key:   .res 32     ; saved original key during derivation
-gcmsiv_exp_enc_key: .res 256    ; expanded derived encryption key
-gcmsiv_saved_exp:   .res 256    ; saved original expanded key
+gcmsiv_exp_enc_key: .res aes_expanded_key_size  ; expanded derived encryption key (240 B)
+gcmsiv_saved_exp:   .res aes_expanded_key_size  ; saved original expanded key (240 B)
 
 .endif  ; .ifndef LIB_POLYVAL_NO_AES
