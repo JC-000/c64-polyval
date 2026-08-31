@@ -67,7 +67,35 @@ branch, the parse-time flag stamp (issue #58) is the invalidate branch,
 and `tools/check_knob_staleness.sh` on `lib-verify` is the pin. Note
 v0.11.1 is merged on the contract's `main` but **not yet tagged** —
 latest tag is v0.11.0; that repo routinely ships several PATCHes a day,
-so re-check tags rather than trusting this line).
+so re-check tags rather than trusting this line. Checked 2026-08-28 (later
+the same day): v0.11.1 through v0.14.1 are now all tagged; v0.14.1 is §8.2 REU
+`reu_mul` read-once wording (no normative change) — N/A here, no REU.
+Checked 2026-08-29: latest tag = v0.15.0 = `main` d895679. v0.14.2 is
+doc-only (§8.1 `LIB_SHARED_SQTAB_BASE` examples shown `$`-free) — N/A, no
+`sqtab`. v0.15.0 adds the §8.4 zero-consumer carve-out (a library with no
+released consumers SHOULD NOT emit the bare `LIB_PRECALC_<name>_*` triple)
+— N/A by the entry's own words ("No existing adopter is affected"): polyval
+has a tag-pinning consumer, keeps emitting the bare triple gated on
+`LIB_NO_BARE_EXPORTS` through v0.x, and the canonical `precalc_table.inc` is
+byte-for-byte unchanged. **Two normative drafts now in flight that DO
+apply** (open PRs on the contract, unmerged, no tag yet — re-check):
+contract PR #161 adds **§14 entry-point termination and documented domain**
+(v0.16.0): MUST terminate on every input of the parameter type or document
+the domain, stated in the terms the implementation tests; §14.2 SHOULD
+publish a bound as an equate in a consumer-includable header. Our PR #76
+already satisfies both — `gcmsiv_max_pt_len = 64` in `constants_lib.inc`
+(a documented consumer include) with entry-point rejection A=1/Z=0 — and
+the PR names c64-polyval as "conformant since #76". Contract PR #162 adds
+**§15 conformance evidence** (v0.17.0): a check offered as evidence SHOULD
+be shown capable of failing, and §15.2 prefers a demonstration that fails
+for the *right reason*; our #77 red/green (1245/6/8 → 1253/6/0) is that
+demonstration. Section/version numbers collide between the two PRs, so
+whichever merges second renumbers — cite by title, not by number, until
+tagged; v0.12.0, v0.12.1, v0.13.0 and
+v0.14.0 are all §13 network-backend ABI (error-code allocation table, MTU
+clamp, CIA TOD timebase, ip65 UDP codes) — N/A here, and a diff of §1–§8
+against the v0.11.1 text shows no change; `precalc_table.inc` byte-identical
+to the canonical root file).
 §1–§6 (v0.1.0
 baseline) shipped in v0.3.0; §8.0 (precalc-table
 catch-loop, applies to every adopter regardless of §8.1–§8.3 applicability)
