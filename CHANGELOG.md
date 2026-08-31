@@ -211,7 +211,8 @@ non-empty-AAD vectors, which GCM-SIV intentionally does not support).
 - **ABI unchanged: `LIB_POLYVAL_ABI_VERSION` stays `1`.** No exported
   symbol was removed or renamed. `gcmsiv_max_pt_len` is a new equate in
   `src/constants_lib.inc`; additions alone do not move the ABI counter.
-- **`LIB_POLYVAL_GCMSIV_BSS` ordering changed.** `gcmsiv_pt_len` now
+- **`LIB_POLYVAL_GCMSIV_BSS` shrank 881 → 849 B and its ordering
+  changed.** `gcmsiv_pt_len` now
   sits after `gcmsiv_dec_buf` instead of immediately after
   `gcmsiv_pt_buf`. Every buffer keeps its size and segment membership,
   and consumers that `.import` the labels are unaffected — but a

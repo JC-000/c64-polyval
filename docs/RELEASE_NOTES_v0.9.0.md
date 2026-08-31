@@ -142,13 +142,49 @@ it ran.
 
 ## Footprint values per archive
 
-FOOTPRINT_TABLE_PLACEHOLDER
+Per c64-lib-contract §6.6, one row per shipped archive — seven rows,
+stated even where a value is unchanged, because a tag carries a
+footprint pair per archive and a single per-version delta would be
+meaningless.
+
+**No declared value moves this cycle**, and `declared >= measured`
+holds on every row in the safe direction:
+
+| Archive | Configuration | RESIDENT (declared / measured) | COLD (declared / measured) |
+|---|---|---|---|
+| `polyval.a` | LONG AEAD | 6656 / 6609 (was 6567) | 1280 / 1239 |
+| `polyval-gcmsiv.a` | LONG AEAD | 6656 / 6609 (was 6567) | 1280 / 1239 |
+| `polyval-gcmsiv-short.a` | SHORT AEAD | 16128 / 16063 (was 16021) | 3072 / 3059 |
+| `polyval-gcmsiv-compact.a` | COMPACT AEAD | 2816 / 2774 (was 2732) | 512 / 339 |
+| `polyval-long.a` | LONG, no AES | 4352 / 4160 (unchanged) | 1280 / 1047 |
+| `polyval-short.a` | SHORT, no AES | 13824 / 13614 (unchanged) | 3072 / 2867 |
+| `polyval-compact.a` | COMPACT, no AES | 512 / 325 (unchanged) | 256 / 147 |
+
+The three AEAD archives grew **42 bytes** —
+`LIB_POLYVAL_GCMSIV_CODE` 805 → 847 B, the bounds checks of #70 and the
+loop terminators of #69. The four POLYVAL-only rows are unchanged in
+both columns. Declared values are read from each archive's own
+`lib_manifest.o`; measured values are the link span, cross-checked
+against the per-member `type = ro` segment sum.
+
+**Headroom worth knowing:** `polyval-gcmsiv-short.a` is the tightest at
+**65 bytes** below its declared RESIDENT ceiling. A consumer asserting
+against 16128 still passes, but that archive is the one to watch.
+
+`LIB_POLYVAL_GCMSIV_BSS` **shrank** 881 → 849 B (the two scratch key
+copies going 256 → 240 each), and its internal layout changed. BSS is
+not part of `RESIDENT_BYTES`, so no manifest equate reflects either
+fact — see the upgrade note below.
 
 ## If you are upgrading
 
 1. **If you hard-coded a `LIB_POLYVAL_GCMSIV_BSS` buffer offset relative
-   to another buffer, re-link.** `gcmsiv_pt_len` moved after
-   `gcmsiv_dec_buf`. Sizes and segment membership are unchanged, and
+   to another buffer, re-link.** The segment shrank 881 → 849 B and its
+   layout changed: `gcmsiv_exp_enc_key` and `gcmsiv_saved_exp` are 240 B
+   each instead of 256, and `gcmsiv_pt_len` moved after
+   `gcmsiv_dec_buf`. No manifest equate reflects this — BSS is not part
+   of `RESIDENT_BYTES`. Every documented buffer keeps its size and
+   segment membership, and
    consumers that `.import` the labels are unaffected. This is the only
    change here that can require action.
 2. **If you pass a length above 64, you now get an error instead of a
@@ -191,8 +227,8 @@ at the time of writing, so neither is claimed as adopted.
 | Field      | Value |
 |------------|-------|
 | Filename   | `c64-polyval-v0.9.0.tar.gz` |
-| **Size**   | SIZE_PLACEHOLDER bytes |
-| **SHA256** | `SHA256_PLACEHOLDER` |
+| **Size**   | 120971 bytes |
+| **SHA256** | `89c9278e9357b70b8d83fdea1fec67daf487c351499409939e174a6befc60e98` |
 
 Re-running `make dist VERSION=v0.9.0` against this source tree must
 reproduce the recorded SHA256 byte-for-byte: every staged file's mtime
