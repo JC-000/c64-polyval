@@ -19,7 +19,10 @@ Tested routines:
   Full POLYVAL pipeline   - init + precompute + multi-block update
 
 Usage:
-    python3 tools/test_polyval_direct.py [--seed S] [--iterations N] [--verbose]
+    python3 tools/test_polyval_direct.py [--seed S|random] [--iterations N] [--verbose]
+
+`--seed random` samples a fresh 32-bit seed (printed, so a failure is still
+reproducible with `--seed <N>`).
 
 Requires: Python 3.10+, c64_test_harness, VICE x64sc
 """
@@ -637,7 +640,11 @@ def main():
     if "--seed" in sys.argv:
         idx = sys.argv.index("--seed")
         if idx + 1 < len(sys.argv):
-            seed = int(sys.argv[idx + 1])
+            raw = sys.argv[idx + 1]
+            if raw == "random":
+                seed = random.SystemRandom().randint(0, 2**32 - 1)
+            else:
+                seed = int(raw)
     random.seed(seed)
 
     iterations = DEFAULT_ITERATIONS
@@ -657,7 +664,8 @@ def main():
     print("\n=== Building ===")
     profile = os.environ.get("POLYVAL_PROFILE", "long")
     print(f"  Profile: {profile}")
-    subprocess.run(["make", "clean"], capture_output=True)
+    # No `make clean`: the parse-time flag stamp (issue #58) evicts objects
+    # assembled under a different POLYVAL_PROFILE.
     result = subprocess.run(
         ["make", f"POLYVAL_PROFILE={profile}"],
         capture_output=True, text=True,
