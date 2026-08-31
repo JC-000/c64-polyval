@@ -413,6 +413,8 @@ polyval_finalize:
 ; Exit:
 ;   A, X, Y      undefined
 ;   memory       polyval_htable = 16 entries * 16 bytes
+;                polyval_h      = PRESERVED (H' is built in polyval_acc;
+;                                 hazmat audit D-1, issue #71)
 ;                polyval_acc, polyval_temp = CLOBBERED
 ;
 ; Clobbers: A, X, Y, polyval_acc, polyval_temp, polyval_htable

@@ -827,11 +827,12 @@ polyval_shift_left_4:
 ; SHORT profile: builds only polyval_htable (256 B). Must be called once
 ; per new H before polyval_update / polyval_multiply.
 ;
-; PRECONDITION (undocumented until now): polyval_h must already contain
-; the desired H. This routine uses polyval_temp and polyval_acc as
-; scratch during the mulX_POLYVAL transform and leaves polyval_h
-; overwritten with H'. Callers that need H back after a precompute must
-; save a copy first. (See SURPRISES in the Phase 3 report.)
+; PRECONDITION: polyval_h must already contain the desired H.
+; polyval_h is PRESERVED: the mulX_POLYVAL transform shifts a copy in
+; polyval_temp and accumulates in polyval_acc; nothing here stores to
+; polyval_h. (The header said CLOBBERED from v0.1.0 until the
+; 2026-08-28 hazmat audit, finding D-1, issue #71, measured it
+; byte-identical on all three profiles.)
 ;
 ; Entry:
 ;   A, X, Y      n/a
@@ -840,10 +841,10 @@ polyval_shift_left_4:
 ; Exit:
 ;   A, X, Y      undefined
 ;   memory       polyval_htable[256]  filled
-;                polyval_h            CLOBBERED (holds H')
+;                polyval_h            PRESERVED (H' is built in polyval_acc)
 ;                polyval_acc, polyval_temp undefined
 ;
-; Clobbers: A, X, Y, polyval_acc, polyval_temp, polyval_h
+; Clobbers: A, X, Y, polyval_acc, polyval_temp
 ; Cycles:   4654 (SHORT, measured)
 ; IRQ-safe: no
 ; Reentrant: no

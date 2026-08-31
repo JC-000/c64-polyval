@@ -91,21 +91,43 @@
 ;                                   aes_key_expansion earlier)
 ;
 ; Exit:
-;   A, X, Y      undefined
-;   memory       gcmsiv_ct_buf    = ciphertext (pt_len bytes)
-;                gcmsiv_tag       = 16-byte authentication tag
-;                aes_expanded_key = restored to master-key schedule
-;                aes_current_key  = preserved
-;                polyval_h        = CLOBBERED (holds H' after tag_base)
-;                polyval_htable*  = built for the derived auth key
+;   On success (gcmsiv_pt_len <= gcmsiv_max_pt_len):
+;     A             = 0
+;     Z flag        = 1 (BEQ taken)
+;     X, Y          undefined
+;     gcmsiv_ct_buf    = ciphertext (pt_len bytes)
+;     gcmsiv_tag       = 16-byte authentication tag
+;     aes_expanded_key = restored to master-key schedule
+;     aes_current_key  = preserved
+;     polyval_h        = derived auth key H (polyval_precompute_table
+;                        leaves it intact)
+;     polyval_htable*  = built for the derived auth key
+;   On rejected length (gcmsiv_pt_len > gcmsiv_max_pt_len, issue #70):
+;     A             = 1
+;     Z flag        = 0 (BNE taken)
+;     X, Y          undefined
+;     no memory written — gcmsiv_ct_buf, gcmsiv_tag, aes_expanded_key
+;     and every derived-key buffer are untouched.
 ;
 ; Clobbers: A, X, Y, all POLYVAL / AES / GCM-SIV ZP and buffer state
 ;           except the listed outputs and preserved inputs.
 ; Cycles:   unmeasured (dominated by AES and POLYVAL precompute)
 ; IRQ-safe: no
 ; Reentrant: no
+;
+; Recommended usage:
+;   jsr gcmsiv_encrypt
+;   bne length_rejected
 ; =============================================================================
 gcmsiv_encrypt:
+        ; Step 0: Reject out-of-contract lengths before touching any state.
+        ; Without this, pt_len=65 read gcmsiv_pt_len itself as the 65th
+        ; plaintext byte and pt_len>=128 hashed no data at all while CTR
+        ; wrote pt_len bytes across the buffers that follow gcmsiv_ct_buf.
+        lda gcmsiv_pt_len
+        cmp #gcmsiv_max_pt_len+1
+        bcs @reject_len
+
         ; Step 1: Derive authentication key and encryption key from main key + nonce
         jsr gcmsiv_derive_keys
 
@@ -118,6 +140,13 @@ gcmsiv_encrypt:
         ; Step 4: Encrypt plaintext with AES-CTR using tag as IV
         jsr gcmsiv_ctr_encrypt
 
+        ; Return convention: success -> A=0, Z=1 (BEQ taken)
+        lda #0
+        rts
+
+@reject_len:
+        ; Return convention: rejected length -> A=1, Z=0 (BNE taken)
+        lda #1
         rts
 
 ; =============================================================================
@@ -283,7 +312,8 @@ gcmsiv_derive_keys:
         lda aes_expanded_key,x
         sta gcmsiv_exp_enc_key,x
         inx
-        bne @copy_exp            ; copies 256 bytes
+        cpx #aes_expanded_key_size
+        bne @copy_exp            ; copies exactly the 240-byte schedule
 
         ; Restore original key and re-expand
         ldx #0
@@ -328,7 +358,8 @@ gcmsiv_derive_ctr:
 ;   A, X, Y      undefined
 ;   memory       gcmsiv_tag_acc   = 16-byte POLYVAL result
 ;                polyval_acc      = same result (mirror)
-;                polyval_h        = CLOBBERED (now H')
+;                polyval_h        = derived auth key H (preserved by
+;                                   polyval_precompute_table)
 ;                polyval_htable*  = filled for the auth key
 ;                polyval_temp     = clobbered
 ;                gcmsiv_block_idx = clobbered
@@ -526,6 +557,14 @@ gcmsiv_finalize_tag:
 
 ; =============================================================================
 ; gcmsiv_install_enc_key - install derived enc key into aes_expanded_key
+;
+; Copies exactly aes_expanded_key_size (240) bytes. Before the hazmat
+; audit (I-1) these loops ran `inx / bne` = 256 iterations, so 16 bytes
+; past the end of aes_expanded_key (aes_mc_* and gcmsiv_nonce[0..7] in
+; the shipped layout, whatever the consumer's linker places there in
+; general) were snapshotted at derive time, transiently overwritten with
+; that snapshot during every finalize_tag / ctr_* window, and any write
+; made to them inside the window was silently reverted by the restore.
 ; =============================================================================
 gcmsiv_install_enc_key:
         ldx #0
@@ -533,6 +572,7 @@ gcmsiv_install_enc_key:
         lda aes_expanded_key,x
         sta gcmsiv_saved_exp,x
         inx
+        cpx #aes_expanded_key_size
         bne @save
 
         ldx #0
@@ -540,6 +580,7 @@ gcmsiv_install_enc_key:
         lda gcmsiv_exp_enc_key,x
         sta aes_expanded_key,x
         inx
+        cpx #aes_expanded_key_size
         bne @install
         rts
 
@@ -552,6 +593,7 @@ gcmsiv_restore_orig_key:
         lda gcmsiv_saved_exp,x
         sta aes_expanded_key,x
         inx
+        cpx #aes_expanded_key_size
         bne @restore
         rts
 
@@ -698,6 +740,13 @@ gcmsiv_gen_keystream:
 ;                gcmsiv_tag         = received 16-byte tag
 ;
 ; Exit:
+;   On rejected length (gcmsiv_pt_len > gcmsiv_max_pt_len, issue #70):
+;     A             = 1
+;     Z flag        = 0 (BNE taken)
+;     gcmsiv_tag_valid = 0
+;     gcmsiv_dec_buf   = zeroed (64 bytes), exactly as for a bad tag
+;     gcmsiv_tag       = untouched (received tag)
+;     aes_expanded_key = untouched; no key derivation is performed
 ;   On valid tag:
 ;     A             = 0
 ;     Z flag        = 1 (BEQ taken)
@@ -727,6 +776,13 @@ gcmsiv_gen_keystream:
 gcmsiv_decrypt:
         lda #0
         sta gcmsiv_tag_valid
+
+        ; Step 0: Reject out-of-contract lengths before touching any state
+        ; (same defect as gcmsiv_encrypt; a caller that branches on Z sees
+        ; this exactly like a tag failure, and gcmsiv_dec_buf is wiped).
+        lda gcmsiv_pt_len
+        cmp #gcmsiv_max_pt_len+1
+        bcs @reject_len
 
         ; Step 1: Derive keys
         jsr gcmsiv_derive_keys
@@ -802,6 +858,20 @@ gcmsiv_decrypt:
         cpx #16
         bne @restore_tag2
         ; Return convention: invalid tag -> A=1, Z=0 (BNE taken)
+        lda #1
+        rts
+
+@reject_len:
+        ; Wipe gcmsiv_dec_buf like a tag failure (it may still hold the
+        ; previous call's plaintext), leave gcmsiv_tag as received.
+        lda #0
+        ldx #0
+@clear_dec_rej:
+        sta gcmsiv_dec_buf,x
+        inx
+        cpx #gcmsiv_max_pt_len
+        bne @clear_dec_rej
+        ; Return convention: rejected length -> A=1, Z=0 (BNE taken)
         lda #1
         rts
 

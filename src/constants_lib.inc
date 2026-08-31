@@ -41,6 +41,12 @@ aes_key_size          = 32          ; 256 bits = 32 bytes
 aes_rounds            = 14          ; aes-256 uses 14 rounds
 aes_expanded_key_size = 240         ; (14+1) * 16 = 240 bytes
 
+; GCM-SIV per-call plaintext/ciphertext limit. gcmsiv_pt_buf / _ct_buf /
+; _dec_buf are gcmsiv_max_pt_len bytes each; gcmsiv_encrypt and
+; gcmsiv_decrypt reject gcmsiv_pt_len > gcmsiv_max_pt_len with A=1 / Z=0
+; (issue #70) instead of reading past the buffers.
+gcmsiv_max_pt_len     = 64
+
 ; ---------------------------------------------------------------------------
 ; POLYVAL build profile selector
 ;

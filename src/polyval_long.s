@@ -1024,11 +1024,12 @@ polyval_shift_left_4:
 ;   Step 3: Build the 8-bit Shoup slices and reduction slices from the
 ;           4-bit table (LONG profile only).
 ;
-; PRECONDITION (undocumented until now): polyval_h must already contain
-; the desired H. This routine destructively overwrites polyval_h with H'
-; during the build and does NOT restore it. Callers that need H back
-; after a precompute must save a copy before calling. (See SURPRISES in
-; the Phase 3 report.)
+; PRECONDITION: polyval_h must already contain the desired H.
+; polyval_h is PRESERVED: the 128 right-shifts run on a copy in
+; polyval_acc and nothing in this routine stores to polyval_h. (The
+; header said CLOBBERED from v0.1.0 until the 2026-08-28 hazmat audit,
+; finding D-1, issue #71, measured it byte-identical on all three
+; profiles; the 16-byte save the old text asked for was never needed.)
 ;
 ; Entry:
 ;   A, X, Y      n/a
@@ -1039,10 +1040,10 @@ polyval_shift_left_4:
 ;   memory       polyval_htable[256]    filled
 ;                polyval_htable8[4096]  filled (LONG only)
 ;                polyval_reduce8[4096]  filled (LONG only)
-;                polyval_h              CLOBBERED (now holds H')
+;                polyval_h              PRESERVED (H' is built in polyval_acc)
 ;                polyval_acc            undefined
 ;
-; Clobbers: A, X, Y, polyval_acc, polyval_h, pv_shift_ctr and internal
+; Clobbers: A, X, Y, polyval_acc, pv_shift_ctr and internal
 ;           scratch; see the implementation.
 ; Cycles:   LONG ~255211, SHORT ~4654 (see benchmark_polyval.py)
 ; IRQ-safe: no
