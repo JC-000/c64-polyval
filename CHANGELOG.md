@@ -9,7 +9,29 @@ Releases: https://github.com/JC-000/c64-polyval/releases — tagged releases
 track `MAJOR.MINOR.PATCH` and are the supported consumption points for
 downstream projects (see `API.md` §8 for the integration contract).
 
-## Unreleased
+## v0.9.0 — 2026-08-31
+
+Hardening **MINOR** from an adversarial audit of the library against
+`cryptography.hazmat` as an independent oracle (2026-08-28). Two latent
+defects fixed, one documentation error corrected, and the test suite
+rebuilt so that the checks which found them are permanent and have been
+demonstrated capable of failing.
+
+No cryptographic divergence was found: POLYVAL and AES-256-GCM-SIV agree
+with hazmat and with an independently written RFC 8452 oracle on all
+three profiles, across adversarial `H` values, message shapes to 1 KiB,
+all-zero and all-`FF` keys and nonces, every message length 0..64, CTR
+counter wrap at every byte boundary, and an exhaustive single-bit
+forgery sweep. Both defects were reachability and memory-safety issues
+around the AEAD entry points, not errors in the field arithmetic.
+
+**Verification is now three profiles, not one.** `run_all_tests.py`
+previously built with a plain `make` and certified the LONG profile
+only; SHORT and COMPACT shipped uncertified by the documented entry
+point. The runner now sweeps all three by default: **1253 passed, 6
+skipped, 0 failed per profile** (the 6 skips remain the RFC 8452
+non-empty-AAD vectors, which GCM-SIV intentionally does not support).
+
 
 ### Added
 
@@ -183,6 +205,30 @@ downstream projects (see `API.md` §8 for the integration contract).
   `src/polyval_api.inc` comments said "both profiles"; `README.md` and
   `CLAUDE.md` described the byte-identity receipt as covering "both
   profiles".
+
+### Compatibility
+
+- **ABI unchanged: `LIB_POLYVAL_ABI_VERSION` stays `1`.** No exported
+  symbol was removed or renamed. `gcmsiv_max_pt_len` is a new equate in
+  `src/constants_lib.inc`; additions alone do not move the ABI counter.
+- **`LIB_POLYVAL_GCMSIV_BSS` ordering changed.** `gcmsiv_pt_len` now
+  sits after `gcmsiv_dec_buf` instead of immediately after
+  `gcmsiv_pt_buf`. Every buffer keeps its size and segment membership,
+  and consumers that `.import` the labels are unaffected — but a
+  consumer that hard-coded one buffer's offset *relative to another*
+  rather than importing must re-link. This is the one change in this
+  release that can require action from a consumer.
+- **`gcmsiv_encrypt` now defines `A` on success** (`A=0` / `Z=1`),
+  where it was previously undefined. Existing callers that ignored the
+  register are unaffected; the rejection path returns `A=1` / `Z=0`,
+  matching the tag-failure convention `gcmsiv_decrypt` already used.
+- **PRGs are not byte-identical to v0.8.0, by design** — the fixes add
+  code. LONG 9474 → 9516 B, SHORT 18928 → 18970 B, COMPACT 5639 →
+  5681 B. This release makes no byte-identity claim.
+- Every declared §6.6 `RESIDENT` / `COLD` footprint value is unchanged
+  from v0.8.0; the measured AEAD figures grew by 42 B and remain inside
+  the declared, 256-byte-rounded envelope. Per-archive rows are in
+  `docs/RELEASE_NOTES_v0.9.0.md`.
 
 ## v0.8.0 — 2026-08-23
 
