@@ -556,6 +556,23 @@ working-tree `grep` reported all of it as fact.
 (`823772e`), and the working tree was still dirty. The commit being right
 says nothing about the files being read.
 
+**This applies to a repo's own TAG LIST too, not just its gitlinks.** A
+cycle after §6h was written, an ad-hoc check read c64-wireguard's latest
+tag with local `git tag` and got `verify93-rescue-amended-master` — a
+local-only tag in this workspace's clone. The remote has four tags, latest
+`v2.0.0-ca65`. Same root cause, different artifact: local clones in this
+workspace accumulate tags, branches and uncommitted work from other
+sessions.
+
+Two compounding traps in one line: also filter to semver shapes before
+sorting. `sort -V | tail -1` over a mixed tag list returns whichever name
+sorts last, which is not the newest release:
+
+```sh
+gh api "repos/JC-000/$r/tags?per_page=100" --jq '.[].name' \
+  | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+' | sort -V | tail -1
+```
+
 Read other repositories this way:
 
 ```sh
