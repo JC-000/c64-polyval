@@ -399,6 +399,56 @@ mechanism, vary the parameter across its range. The fixed-column story was
 relayed to three repos on two data points. Two points fit a lot of curves,
 and a symptom reproduced is not a cause established.
 
+## 6f. §5 footprint basis — measure a link span, never a sum of object sizes
+
+Raised by the contract session from c64-ChaCha20-Poly1305 #113, where all
+five `RESIDENT_BYTES` literals under-reported a real link by 39–295 B, in
+the direction §5 explicitly calls dangerous. c64-nist-curves hit the same
+class independently: six of twelve archives understating, one by 72 B.
+
+**The defective basis is `Σ od65 --dump-segments` per member** — the sum of
+what each object contributes. That omits the padding `ld65` inserts
+*between* sections when placing them, so wherever a segment carries
+`align = $100` the shortfall is systematic: `od65 basis + fill = real link`.
+
+**c64-polyval is clean, and was checked rather than assumed.** Measured at
+v0.11.0 by linking every member of each archive with `lib_only.cfg`, taking
+real segment extents from the `-m` map, and comparing against the declared
+equate:
+
+| Configuration | declared | real span | headroom |
+|---|---:|---:|---:|
+| LONG AEAD | 6656 | 6495 | +161 |
+| SHORT AEAD | 16128 | 15949 | +179 |
+| COMPACT AEAD | 2816 | 2660 | +156 |
+| LONG NO_AES | 4352 | 4160 | +192 |
+| SHORT NO_AES | 13824 | 13614 | +210 |
+| COMPACT NO_AES | 512 | 325 | +187 |
+
+Safe-direction in every configuration, headroom 156–210 B from the
+round-up-to-256 policy.
+
+**Two independent reasons it cannot bite here**, which is why it does not
+generalise from chacha to us:
+
+1. **Our declared basis is already a real link span**, not an object-size
+   sum — `ld65 -C src/lib_only.cfg -Ln -m`, `$4000` to the first BSS-area
+   segment start. A span includes inter-section fill by construction.
+2. **No aligned segment is inside the measured span.** The only three
+   `align = $100` segments — `LIB_POLYVAL_HTABLE`,
+   `LIB_POLYVAL_LONG_HTABLE8`, `LIB_POLYVAL_LONG_REDUCE8` — are all
+   `type = bss`, and §5 scopes the footprint to *code+rodata*, so they are
+   excluded. There is no alignment fill in the quantity being declared.
+
+Reason 2 means even the defective basis would have produced the right
+answer here — which is exactly why reason 1 has to be the one recorded.
+A correct number from a basis that happens not to be exercised is the same
+artifact as a green check that never examined the property (§6a, §6e).
+
+**Keep the span basis** even though the tables are BSS today. If a future
+variant ever places an aligned table in a file-emitting segment, an
+object-size sum silently starts under-reporting and nothing fails.
+
 ## 7. Refresh one-liner
 
 ```sh
