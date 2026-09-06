@@ -759,9 +759,30 @@ gcmsiv_gen_keystream:
 ;     gcmsiv_tag_valid = 0
 ;     gcmsiv_dec_buf   = zeroed (64 bytes)
 ;     gcmsiv_tag       = restored to received tag
-;   memory (always): polyval_*, aes_state, gcmsiv_counter/keystream/idx
-;                    all clobbered; aes_expanded_key restored to master
-;                    schedule; aes_current_key preserved.
+;   memory (on the two tag outcomes): polyval_*, aes_state,
+;                    gcmsiv_counter/keystream/idx all clobbered;
+;                    aes_expanded_key restored to master schedule;
+;                    aes_current_key preserved.
+;   memory (on the rejected-length outcome): the above are NOT touched --
+;                    the reject returns before gcmsiv_derive_keys, so
+;                    polyval_*, aes_state and the counter/keystream state
+;                    retain whatever the PREVIOUS call left there, which
+;                    for a prior AEAD call is derived-key material.
+;                    aes_expanded_key is likewise untouched and therefore
+;                    still the master schedule the Entry contract requires.
+;                    Read "clobbered" above as "may hold anything", never
+;                    as "scrubbed" -- this routine wipes gcmsiv_dec_buf and
+;                    nothing else.
+;
+; This split is issue #82. Until v0.10.1 the line above read
+; "memory (always): ... all clobbered", eight lines below a reject block
+; stating "no key derivation is performed" -- the banner contradicted
+; itself, and c64-polyval v0.10.0's release notes leaned on the reject
+; path being indistinguishable from a tag failure on EVERY documented
+; post-condition, which these three make false. The ABI-counter conclusion
+; did not change (see API.md 9.1: pt_len 0..64 was already the documented
+; domain at v0.8.0, so no conforming caller reaches this path), but the
+; justification did.
 ;
 ; Clobbers: A, X, Y, same footprint as gcmsiv_encrypt
 ; Cycles:   unmeasured

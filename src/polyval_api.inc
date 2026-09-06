@@ -88,4 +88,86 @@ POLYVAL_API_INC_ = 1
     POLYVAL_PROFILE_COMPACT = 3
 .endif
 
+
+; -----------------------------------------------------------------------------
+; Public symbol declarations (c64-lib-contract §6.1)
+; -----------------------------------------------------------------------------
+; §6.1 ships this file as "the consumer-facing `.inc` header". Through
+; v0.10.0 it declared nothing -- it was a comment block plus the three
+; profile equates above -- so a consumer who included it still had to
+; hand-author every `.import` from prose, which is what
+; test/consumer_stub_shipped.s was doing. The sibling fleet's shape is to
+; declare: c64-x25519's shipped src/x25519.inc carries 31 declarations.
+;
+; `.global`, not `.import`, deliberately. .global resolves to an import in
+; a TU that does not define the symbol and to an export in one that does,
+; so this file stays safe to include from a library TU as well as a
+; consumer one. Two properties were measured before adding this block,
+; because both are the kind of thing that would quietly punish a consumer:
+;
+;   1. An UNREFERENCED declaration of a symbol the linked archive does not
+;      contain does NOT fail the link. A POLYVAL-only consumer linking
+;      polyval-long.a (no AES, no GCM-SIV) links clean with the AEAD names
+;      declared here. ld65 only errors on unresolved symbols that are
+;      actually referenced.
+;   2. An UNREFERENCED declaration does NOT drag its archive member into
+;      the image. Measured against polyval.a: baseline stub 4166 bytes,
+;      and 4166 bytes with all nine AES/GCM-SIV entry points declared and
+;      none called. No bloat, so declaring the full surface costs a
+;      consumer who uses one corner of it nothing.
+;
+; Suppress the whole block with `-D POLYVAL_API_NO_DECLS=1` if you would
+; rather author your own import list.
+;
+; ZERO PAGE IS NOT DECLARED HERE. The §2 slots (polyval_acc, pv_mul_input,
+; polyval_zp_ptr, ...) are `.importzp`, a different directive with a
+; different address size, and a consumer overriding a slot via
+; CONTRACT_ZP_DEFINES must NOT also import it (SPEC §6.2: a `-D` of an
+; imported name is `Symbol already defined`). Import the ones you need
+; yourself; the inventory is in API.md §4 and exported from the archive's
+; zp_config.o.
+; -----------------------------------------------------------------------------
+
+.ifndef POLYVAL_API_NO_DECLS
+
+    ; --- POLYVAL primitive (all three profiles) ---
+    .global polyval_init
+    .global polyval_precompute_table
+    .global polyval_update
+    .global polyval_finalize
+    .global polyval_multiply
+    .global polyval_double
+
+    ; --- POLYVAL state (src/data.s) ---
+    .global polyval_h
+    .global polyval_temp
+
+    ; --- AES-256 primitive (absent from the POLYVAL-only archives) ---
+    .global aes_key_expansion
+    .global aes_encrypt_block
+    .global aes_decrypt_block
+    .global aes_current_key
+    .global aes_expanded_key
+    .global aes_state
+
+    ; --- AES-256-GCM-SIV AEAD (absent from the POLYVAL-only archives) ---
+    .global gcmsiv_encrypt
+    .global gcmsiv_decrypt
+    .global gcmsiv_derive_keys
+    .global gcmsiv_compute_tag_base
+    .global gcmsiv_finalize_tag
+    .global gcmsiv_ctr_encrypt
+    .global gcmsiv_ctr_decrypt
+
+    ; --- GCM-SIV buffers (src/data.s) ---
+    .global gcmsiv_nonce
+    .global gcmsiv_tag
+    .global gcmsiv_pt_buf
+    .global gcmsiv_ct_buf
+    .global gcmsiv_dec_buf
+    .global gcmsiv_pt_len
+    .global gcmsiv_tag_valid
+
+.endif ; POLYVAL_API_NO_DECLS
+
 .endif ; POLYVAL_API_INC_

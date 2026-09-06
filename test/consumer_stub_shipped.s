@@ -65,28 +65,18 @@
 .importzp pv_mul_input
 .importzp polyval_zp_ptr
 
-; --- Public entry points -----------------------------------------------------
-.import polyval_init
-.import polyval_update
-.import polyval_multiply
-.import polyval_precompute_table
-.import aes_key_expansion
-.import aes_encrypt_block
-.import aes_decrypt_block
-.import gcmsiv_encrypt
-.import gcmsiv_decrypt
-
-; --- Public buffers ----------------------------------------------------------
-.import polyval_h
-.import polyval_temp
-.import aes_current_key
-.import aes_state
-.import gcmsiv_nonce
-.import gcmsiv_tag
-.import gcmsiv_pt_buf
-.import gcmsiv_ct_buf
-.import gcmsiv_dec_buf
-.import gcmsiv_pt_len
+; --- Public entry points and buffers -----------------------------------------
+; NOT hand-written imports, deliberately, as of v0.10.1. Everything called
+; below is declared by `polyval.inc` itself via `.global`. That is the
+; point of this section: through v0.10.0 this stub listed 27 `.import`
+; lines, and the fact that it had to was the evidence that the shipped
+; header declared nothing while `API.md` and the Makefile both described
+; it as the consumer's "declaration of the public symbols". If the header
+; ever stops declaring the public surface, this file stops assembling.
+;
+; The §1 and §5 equates above ARE still imported explicitly: they are
+; manifest surface, not API surface, and the header deliberately does not
+; declare them.
 
 ; --- Link-time gates ---------------------------------------------------------
 ; .assert/lderror, never .if/.error: an .import'ed symbol has no value until

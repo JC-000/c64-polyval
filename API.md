@@ -727,7 +727,7 @@ v0.7.0:
 |---|---|---:|---|
 | `LIB_POLYVAL_VERSION_MAJOR` | `LIB_VERSION_MAJOR` | `0` | Semver major. |
 | `LIB_POLYVAL_VERSION_MINOR` | `LIB_VERSION_MINOR` | `10` | Semver minor. |
-| `LIB_POLYVAL_VERSION_PATCH` | `LIB_VERSION_PATCH` | `0` | Semver patch. |
+| `LIB_POLYVAL_VERSION_PATCH` | `LIB_VERSION_PATCH` | `1` | Semver patch. |
 | `LIB_POLYVAL_ABI_VERSION`   | `LIB_ABI_VERSION`   | `1` | Generation counter for the exported surface (§7). Independent of MAJOR. |
 
 The bare names are identical across every contract adopter, so a
@@ -751,30 +751,48 @@ non-exhaustive — and it holds when previously undocumented behaviour
 becomes documented, or when documentation is corrected over unchanged
 code.
 
-The counter **stays at 1 through v0.10.0**. The one change since v0.8.0
+The counter **stays at 1 through v0.10.1**. The one change since v0.8.0
 that could have moved it is the v0.9.0 length-rejection return added to
 `gcmsiv_encrypt` and `gcmsiv_decrypt` (`A=1` / `Z=0` above
-`gcmsiv_max_pt_len`, issue #70). It does not move the counter, for a
-different reason per entry point:
+`gcmsiv_max_pt_len`, issue #70).
 
-- **`gcmsiv_encrypt`** documented `A, X, Y undefined` on exit at v0.8.0 —
-  no return convention at all, so a conforming consumer could not have
-  been reading `A`. That is §7's "previously undocumented behaviour
-  becomes documented" limb.
-- **`gcmsiv_decrypt`** did carry an exhaustive documented return set
-  (`A=0` valid / `A=1` invalid, used as `jsr` then `beq`), so the
-  non-exhaustiveness test is live — but the reject path is written to be
-  indistinguishable from a tag failure on **every documented
-  post-condition**: `gcmsiv_dec_buf` wiped, `gcmsiv_tag_valid` cleared,
-  `gcmsiv_tag` left as received. The return set did not gain a value and
-  a v0.8.0-conforming consumer branching on `Z` handles the new case
-  correctly by construction.
+**The reason is the documented domain, and it covers both entry points at
+once.** v0.8.0's Entry banner on `gcmsiv_encrypt` and `gcmsiv_decrypt`
+alike already read `gcmsiv_pt_len = plaintext length (0..64)`. A
+`pt_len` above 64 was therefore *outside the documented input domain*
+before the change. §7's test is whether a consumer conforming to the
+previously documented contract can be broken — and no conforming
+consumer can reach the reject path at all, on either routine. The test
+cannot fire.
 
-The second bullet is a property of `@reject_len` in `src/gcm_siv.s`, not
-a general fact about domain guards: **if that path is ever made
-distinguishable from a tag failure, the counter moves.** This reading was
-put to the contract for arbitration
-([c64-lib-contract#180](https://github.com/JC-000/c64-lib-contract/issues/180)),
+That argument is what this rests on. Two weaker ones are worth recording
+because they are the obvious first answers and each covers only part of
+the ground:
+
+- `gcmsiv_encrypt` documented `A, X, Y undefined` on exit at v0.8.0, so a
+  conforming consumer could not have been reading `A` (§7's "previously
+  undocumented behaviour becomes documented" limb). **But that only
+  addresses `A`.** v0.8.0 also documented *unconditional* memory outputs
+  for encrypt — `gcmsiv_ct_buf = ciphertext`, `gcmsiv_tag = 16-byte tag`
+  — and the reject path produces neither.
+- `gcmsiv_decrypt`'s reject path deliberately mimics a tag failure:
+  `A=1` / `Z=0`, `gcmsiv_dec_buf` wiped 64 B, `gcmsiv_tag_valid` cleared,
+  `gcmsiv_tag` left as received, `aes_expanded_key` still the master
+  schedule. **But it is not a match on *every* documented
+  post-condition**, and v0.10.0's release notes said it was, which was
+  wrong. v0.8.0's `memory (always)` line documents `polyval_*`,
+  `aes_state` and `gcmsiv_counter`/`keystream`/`idx` as clobbered; the
+  reject path returns before `gcmsiv_derive_keys` and clobbers none of
+  them. Three post-conditions differ.
+
+The three that differ are a real consumer-visible difference even though
+they do not move the counter: a caller reading "clobbered" as *scrubbed*
+will find the previous call's derived-key material still sitting in
+`polyval_htable*` and `gcmsiv_keystream` after a length rejection. Treat
+"clobbered" as "may hold anything", which is what it means.
+
+Put to the contract for arbitration as
+[c64-lib-contract#180](https://github.com/JC-000/c64-lib-contract/issues/180),
 because contract v1.1.0's fleet position adjudicates three sibling
 libraries by name and does not mention c64-polyval, which shipped the
 same shape in the same week.
@@ -1321,8 +1339,9 @@ manifest equates and routines it needs:
 Consumers vendoring multiple c64-lib-contract adopters build every
 library with `ca65 -D LIB_NO_BARE_EXPORTS=1` and import each
 library's prefixed `LIB_<X>_*` symbols side by side — the bare
-`LIB_VERSION_*` names collide across adopters and are removed at
-contract v1.0. See the contract SPEC §1.
+`LIB_VERSION_*` names collide across adopters. Their removal was
+scheduled for contract v1.0 and was deferred there to a future MAJOR,
+so they keep shipping — gated, as below. See the contract SPEC §1.
 
 ### 9.8 §4 — Segment placement declarations (`src/polyval-example.cfg`, `src/c64.cfg`, `src/lib_only.cfg`)
 

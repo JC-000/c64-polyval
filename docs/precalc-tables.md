@@ -18,8 +18,9 @@ canonical [`precalc_table.inc`](../src/precalc_table.inc) macro as
 `LIB_POLYVAL_PRECALC_<name>_{SIZE,REGION,SHARED}` (SPEC v0.7.0
 library-prefixed form, `"POLYVAL"` passed as the fifth macro argument)
 plus the deprecated bare `LIB_PRECALC_<name>_{SIZE,REGION,SHARED}`
-triple, which is gated on `LIB_NO_BARE_EXPORTS` and removed at
-contract v1.0. Audits should grep `_PRECALC_`, which matches both
+triple, which is gated on `LIB_NO_BARE_EXPORTS`. That removal was
+scheduled for contract v1.0 and was **deferred there to a future
+MAJOR** (SPEC v1.0.0 §8.4) — the bare triple keeps shipping. Audits should grep `_PRECALC_`, which matches both
 forms.
 
 ## Enumerated tables

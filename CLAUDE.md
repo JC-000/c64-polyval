@@ -15,7 +15,7 @@ Companion docs (read alongside this file):
 - `API.md` — library API reference; §3 (profile selection), §4 (ZP layout),
   §7–§8 (consumer integration), §9 (c64-lib-contract surface) are load-bearing.
 - `CHANGELOG.md` — release history.
-- `docs/RELEASE_NOTES_v0.10.0.md` — current release attestation (size + SHA256).
+- `docs/RELEASE_NOTES_v0.10.1.md` — current release attestation (size + SHA256).
 - `docs/precalc-tables.md` — c64-lib-contract §8.4 precalc-table enumeration.
 
 ## c64-lib-contract adoption (current as of v0.10.0)
@@ -114,8 +114,11 @@ Section-by-section status (see `API.md` §9 for the full account):
   future-MAJOR items, neither actionable now: `lib-verify` is grandfathered
   in the reserved `lib-*` namespace, and archive **member** basenames take
   a `polyval_` prefix at the next MAJOR. Members cannot dual-name, so there
-  is no transitional path; v0.11.0's §6.5 zero-consumer carve-out does not
-  reach us (`c64-aes256-ecdsa` pins a tag).
+  is no transitional path. (Contract v0.11.0's §6.5 zero-consumer
+  "born prefixed" carve-out, which earlier revisions of this file discussed
+  at length, **no longer exists in v1.1.0 §6.5** — the cut removed it. It
+  was inapplicable to us anyway since `c64-aes256-ecdsa` pins a tag, so the
+  discussion is now moot rather than wrong.)
 - §7 semver + ABI counter. **v1.1.0 added the load-bearing paragraph**: the
   counter moves on what the code does, not on whether the export list
   changed — it moves when a consumer conforming to the *previously
@@ -139,29 +142,45 @@ Section-by-section status (see `API.md` §9 for the full account):
   so the bare `LIB_PRECALC_<name>_*` triple keeps shipping gated on
   `LIB_NO_BARE_EXPORTS`.
 
-**ABI counter — assessed at v0.10.0, holds at 1.** v0.9.0 gave
-`gcmsiv_encrypt` and `gcmsiv_decrypt` a length-rejection return
-(`A=1` / `Z=0` above `gcmsiv_max_pt_len`), which is superficially the shape
-v1.1.0 §7 says moves the counter. It does not, for each entry point for a
-different reason, and the reasoning is worth keeping because the next
-domain guard will raise it again:
-- `gcmsiv_encrypt` documented `A, X, Y undefined` on exit at v0.8.0 — **no**
-  return convention at all. A consumer conforming to that could not have
-  been reading `A`. This is §7's "behaviour that was previously
-  undocumented becomes documented", the same shape as `c64-nist-curves`
-  holding at 2 for v0.12.0.
-- `gcmsiv_decrypt` did have an exhaustive documented return set
-  (`A=0` valid / `A=1` invalid) — but the reject path was written to be
-  **indistinguishable from a tag failure on every documented
-  post-condition**: `gcmsiv_dec_buf` wiped, `gcmsiv_tag_valid` cleared,
-  `gcmsiv_tag` left as received. The return set did not gain a value and
-  exhaustive handling did not become non-exhaustive, so a v0.8.0-conforming
-  consumer cannot be broken by it.
+**ABI counter — holds at 1. Argue it from the DOMAIN, not from the reject
+path's post-conditions.** v0.9.0 gave `gcmsiv_encrypt` and `gcmsiv_decrypt`
+a length-rejection return (`A=1` / `Z=0` above `gcmsiv_max_pt_len`), which
+is superficially the shape v1.1.0 §7 says moves the counter.
 
-That second bullet is a property of `src/gcm_siv.s`'s `@reject_len` path,
-not a general fact — **if that path is ever changed to be distinguishable
-from a tag failure, the counter moves.** Arbitration was requested upstream
-so this reading is on the record rather than only in this file.
+The load-bearing reason it does not: **v0.8.0's Entry banner on both entry
+points already read `gcmsiv_pt_len = plaintext length (0..64)`**, so
+`pt_len > 64` was outside the documented input domain before the change.
+§7 asks whether a consumer conforming to the *previously documented*
+contract can be broken; no conforming consumer reaches the reject path on
+either routine, so the test cannot fire. This covers both entry points and
+every post-condition at once.
+
+**Do not reach for either of the two weaker arguments — v0.10.0 shipped
+one of them and it was wrong.** Recorded so it is not re-derived:
+- "`gcmsiv_encrypt` documented `A, X, Y undefined`, so nobody could read
+  `A`" — true, but addresses only `A`. v0.8.0 also documented
+  *unconditional* memory outputs (`gcmsiv_ct_buf = ciphertext`,
+  `gcmsiv_tag = 16-byte tag`) that the reject path does not produce.
+- "`gcmsiv_decrypt`'s reject path is indistinguishable from a tag failure
+  on **every** documented post-condition" — **false**, and v0.10.0's
+  release notes, API.md and this file all said it. It matches `A`/`Z`,
+  `gcmsiv_tag_valid`, the 64-byte `dec_buf` wipe, `gcmsiv_tag` and
+  `aes_expanded_key`. It does **not** match v0.8.0's `memory (always)`
+  line, which documents `polyval_*`, `aes_state` and
+  `gcmsiv_counter`/`keystream`/`idx` as clobbered — the reject path
+  returns before `gcmsiv_derive_keys` and clobbers none of them. Corrected
+  in v0.10.1.
+
+Those three are a real consumer-visible difference that simply does not
+move the counter: a caller reading "clobbered" as *scrubbed* finds the
+previous call's derived-key material still in `polyval_htable*` and
+`gcmsiv_keystream` after a length rejection. Also note `src/gcm_siv.s`'s
+`gcmsiv_decrypt` banner still carries that `memory (always)` line eight
+lines below a reject block stating no key derivation is performed — the
+banner contradicts itself, tracked as issue #82.
+
+Arbitration requested upstream (c64-lib-contract#180) so the reading is on
+the record; the issue was corrected there after v0.10.0.
 
 ZP slots are lowercase with `polyval_` / `pv_` library prefix
 (`polyval_acc`, `pv_mul_input`, `polyval_zp_ptr`, `polyval_aes_round`, ...).

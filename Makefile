@@ -250,6 +250,16 @@ POLYVAL_PIN = $(POLYVAL_PROFILE)$(if $(POLYVAL_NO_AES),-noaes)
 
 PIN_lib                               = long
 PIN_lib-polyval-gcmsiv                = long
+# consumer-check-shipped is the THIRD phony that reaches
+# $(LIB_DIR)/polyval.a, and it needs a row for the same reason the two
+# above do: the guard inspects the named GOAL, not the files a goal
+# eventually builds. Without it, `make consumer-check-shipped
+# POLYVAL_PROFILE=short` exited 0 having put polyval_short.o and a SHORT
+# manifest (RESIDENT 16128) into polyval.a -- the canonical LONG name --
+# and the shipped-surface check then certified that mis-pinned archive as
+# sound and left it in build/lib/ for whatever ran next. Measured, and
+# verbatim the failure the §6.3 block below documents.
+PIN_consumer-check-shipped            = long
 PIN_$(LIB_DIR)/polyval.a              = long
 PIN_$(LIB_DIR)/polyval-gcmsiv.a       = long
 PIN_$(LIB_DIR)/polyval-gcmsiv-short.a = short
