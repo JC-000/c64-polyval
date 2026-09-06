@@ -91,6 +91,15 @@ Section-by-section status (see `API.md` §9 for the full account):
   consumer-facing `.inc` header and an example `.cfg`", and through v0.9.0
   `build/lib/` held the `.a` alone, so a consumer had to read `src/` to
   link us. Added in v0.10.0; both are §6.5 name surface from that release.
+  The cfg is `src/polyval-example.cfg`, maintained **only** for shipping —
+  do not point this at `src/lib_only.cfg`, which carries `lib-verify`
+  scaffolding (a mandatory `LOADADDR` segment, `LIB_POLYVAL_VERIFY_CODE`)
+  and makes a consumer's first link emit
+  `ld65: Warning: Segment 'LOADADDR' does not exist`. That was tried and
+  reverted. `make consumer-check-shipped` is the guard: it assembles a stub
+  against the three shipped files in an empty directory **with no
+  `-I src`**, which is the only way this repo can detect an incomplete
+  shipped surface — every other build has `src/` on the include path.
 - §6.2 `CONTRACT_DEFINES` / `CONTRACT_ZP_DEFINES`, both `?=` empty, appended
   to `CA65FLAGS`. Polyval-specific reading: the library has zero
   `.importzp` sites for its own slots (every TU bakes the equates via
@@ -178,6 +187,10 @@ make lib CONTRACT_ZP_DEFINES='-D polyval_acc=0x40'   # §6.2 ZP slot override ($
 make lib CONTRACT_DEFINES='-D LIB_NO_BARE_EXPORTS=1' # §6.2 global defines (composing consumers)
 make lib-verify                       # library-only verification PRG at $4000 (pre-v0.3.0 `make lib`)
 make consumer-check                   # link test/consumer_stub.s against the library
+make consumer-check-shipped           # §6.1 guard: assemble+link using ONLY the three
+                                      #   shipped files (polyval.a / polyval.inc /
+                                      #   polyval-example.cfg) in an empty dir with no
+                                      #   -I src — issue #79 regression guard
 make consumer-check-noaes             # link test/consumer_stub_noaes.s (owns its own
                                       #   aes_state/gcmsiv_tag) against polyval-long.a,
                                       #   polyval-short.a AND polyval-compact.a —
@@ -336,12 +349,19 @@ src/
   aes_encrypt.s / aes_decrypt.s / tables.s
   gcm_siv.s
   data.s                 # all BSS + page-aligned tables (segment-partitioned)
+  polyval-example.cfg    # §6.1 consumer-facing example cfg (SHIPPED as
+                         #   build/lib/polyval-example.cfg; NOT used by any
+                         #   build in this repo — deliberately separate from
+                         #   c64.cfg and lib_only.cfg, which carry app-layer
+                         #   and verification scaffolding respectively)
   lib_main.s             # make lib-verify entry stub
   c64.cfg / lib_only.cfg # ld65 cfgs with LIB_POLYVAL_* SEGMENTS aliases
   exports.inc            # human-readable cross-module symbol map (NOT an .include)
 test/                    # consumer_stub.s (`make consumer-check`)
                          # consumer_stub_noaes.s (`make consumer-check-noaes`,
                          #   issue #47 guard; NOT vendored into the tarball)
+                         # consumer_stub_shipped.s (`make consumer-check-shipped`,
+                         #   issue #79 guard; NOT vendored into the tarball)
 tools/                   # test runner, harness, build_release.sh, vectors/
 docs/                    # RELEASE_NOTES_v*.md, precalc-tables.md
 ca65/release/v0.1.0/     # frozen historical artifact — DO NOT MODIFY

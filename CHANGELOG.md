@@ -59,8 +59,27 @@ normative paragraph to §7 on when `LIB_<X>_ABI_VERSION` moves.
   attributes §4 obliges us to declare — both silent at link — so they had
   to read `src/` to link us, which is the mid-build source-poking the
   rest of §6.1 forbids. Copied from `src/polyval_api.inc` and
-  `src/lib_only.cfg` under the §6.1 canonical basenames; both are §6.5
-  name surface from this release.
+  `src/polyval-example.cfg` under the §6.1 canonical basenames; both are
+  §6.5 name surface from this release.
+- **`make consumer-check-shipped`** — a guard that the shipped set is
+  actually sufficient. It copies only the three shipped files plus
+  `test/consumer_stub_shipped.s` into an empty scratch directory and
+  assembles there **with no `-I src`**, so a header depending on an
+  unshipped `src/` file fails hard instead of passing invisibly. Every
+  other build in this repo has `src/` on the include path and therefore
+  cannot see an incomplete shipped surface — which is why #79 survived
+  six releases. Shown capable of failing: dropping `polyval.inc` from
+  the staged set stops at
+  `consumer_stub_shipped.s(39): Error: Cannot open include file`, and
+  adding a `.include "constants_lib.inc"` stops at that line instead.
+  The link is warning-free, so any future warning from it is signal.
+- **`src/polyval-example.cfg`** — a purpose-built consumer template, not
+  used by any build in this repo. Shipping `src/lib_only.cfg` was tried
+  first and rejected: it carries `make lib-verify` scaffolding (a
+  mandatory `LOADADDR` segment, `LIB_POLYVAL_VERIFY_CODE`), so a
+  consumer's first link against it emits
+  `ld65: Warning: Segment 'LOADADDR' does not exist`, and its opening
+  line tells the reader it is for our internal verification build.
 
 ### Changed
 
@@ -80,6 +99,14 @@ normative paragraph to §7 on when `LIB_<X>_ABI_VERSION` moves.
 
 ### Fixed
 
+- **`lda #LIB_POLYVAL_GCMSIV_MAX_PT_LEN` does not assemble** — an
+  `.import`ed symbol has no value until link, so ca65 cannot prove it
+  fits a byte and reports `Range error`. Consumers must write
+  `lda #<LIB_POLYVAL_GCMSIV_MAX_PT_LEN`. Not a defect in the export (it
+  applies to every imported §5 scalar) but it is the first thing a
+  consumer hits, so it is now documented in `API.md` §9.4, in the
+  example cfg's trailing comment, and exercised in
+  `test/consumer_stub_shipped.s`.
 - Statements that had become **false going forward**, as opposed to merely
   citing a retired section number: the bare `LIB_VERSION_*` exports were
   documented in four places as "removed at contract v1.0", which contract

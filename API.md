@@ -900,6 +900,20 @@ Consumer use:
 .assert MY_MAX_MESSAGE <= LIB_POLYVAL_GCMSIV_MAX_PT_LEN, lderror, "message longer than c64-polyval accepts"
 ```
 
+**Using it as an immediate needs `#<`.** An `.import`ed symbol has no
+value until link, so ca65 cannot prove it fits in a byte and a bare
+`lda #LIB_POLYVAL_GCMSIV_MAX_PT_LEN` fails to assemble with
+`Range error`. Write:
+
+```asm
+lda #<LIB_POLYVAL_GCMSIV_MAX_PT_LEN
+sta gcmsiv_pt_len
+```
+
+This is the first thing a consumer hits, and it is not specific to this
+symbol — it applies to every imported scalar in §5. `.assert` is
+unaffected, because ld65 evaluates it after the value is known.
+
 `RESIDENT_BYTES` and `COLD_BYTES` are **safe-direction** per SPEC
 v0.10.0 §6.6 — retired at contract v1.0.0, with the obligation
 restated directly in §5 ("Footprint equates MUST be safe-direction:
@@ -983,7 +997,7 @@ deliverables §6.1 requires** — "producing `build/lib/<shortname>.a`
 | Shipped file | Copied from | What it is |
 |---|---|---|
 | `build/lib/polyval.inc` | `src/polyval_api.inc` | The consumer-facing header: public entry points, calling conventions, buffer surface and the profile-selector equates. `.include` it; it emits no code and no memory. |
-| `build/lib/polyval-example.cfg` | `src/lib_only.cfg` | The example ld65 config: the full `SEGMENTS{}` block mapping every `LIB_POLYVAL_*` segment, carrying the §4 load-bearing attribute declarations (`type = ro` on the AES rodata, `align = $100` on the three table segments) as comments on the segment lines. |
+| `build/lib/polyval-example.cfg` | `src/polyval-example.cfg` | The example ld65 config: a `$0801` consumer memory map plus the full `SEGMENTS{}` block mapping every `LIB_POLYVAL_*` segment, carrying the §4 load-bearing attribute declarations (`type = ro` on the AES rodata, `align = $100` on the three table segments) annotated in place with the consequence of dropping each. Ends with the recommended §1/§5 link-time asserts. |
 
 Shipping them is not decorative. A consumer who fetches only the `.a`
 has no declaration of the public symbols and no statement of the
@@ -992,6 +1006,31 @@ whose omissions are silent (§9.8) — so they would have to read `src/`
 to link, which is the mid-build source-poking §6.1 exists to forbid.
 `build/lib/` was archive-only through v0.9.0; the two files land there
 from v0.10.0 (they are §6.5 name surface from that release on).
+
+**The example cfg is purpose-built, not one of the two configs this
+repo builds itself with.** `src/c64.cfg` carries app-layer segments a
+consumer does not have; `src/lib_only.cfg` carries `make lib-verify`
+scaffolding — a mandatory `LOADADDR` segment and `LIB_POLYVAL_VERIFY_CODE`
+— that only our own stub emits. Shipping `lib_only.cfg` was tried and
+rejected: a consumer linking their own code against `polyval.a` with it
+gets `ld65: Warning: Segment 'LOADADDR' does not exist` on their first
+link, and the file's own opening line tells them it is for our internal
+verification build. `src/polyval-example.cfg` is maintained separately
+as the consumer-facing one.
+
+**`make consumer-check-shipped` keeps all three honest.** It copies
+exactly `polyval.a`, `polyval.inc` and `polyval-example.cfg` plus
+`test/consumer_stub_shipped.s` into an empty scratch directory and
+assembles there **with no `-I src`**, so a header that quietly depends
+on another `src/` file is a hard `Cannot open include file` instead of
+an invisible pass. This is the one check in the repo that can see an
+incomplete shipped surface: every other build runs with `src/` on the
+include path and therefore cannot. The link is warning-free, so any
+future warning from it is signal. Shown capable of failing, both ways
+that matter — remove `polyval.inc` from the staged set and it stops at
+`consumer_stub_shipped.s(39): Error: Cannot open include file
+'polyval.inc'`; add a `.include "constants_lib.inc"` (a file a consumer
+never receives) and it stops at that line instead.
 
 Each archive bundles the SPEC §1 / §2 / §5 core (`lib_version.o`,
 `zp_config.o`, `lib_manifest.o`) plus the variant-specific .o set;

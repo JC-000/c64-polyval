@@ -60,18 +60,53 @@ Every one of the seven archive targets now stages both files:
 | Shipped file | Copied from | What it is |
 |---|---|---|
 | `build/lib/polyval.inc` | `src/polyval_api.inc` | Consumer-facing header: public entry points, calling conventions, buffer surface, profile-selector equates. Emits no code and no memory. |
-| `build/lib/polyval-example.cfg` | `src/lib_only.cfg` | Example ld65 config: the full `SEGMENTS{}` block mapping every `LIB_POLYVAL_*` segment, carrying the §4 placement declarations as comments on the segment lines. |
+| `build/lib/polyval-example.cfg` | `src/polyval-example.cfg` | Example ld65 config: a `$0801` consumer memory map plus the full `SEGMENTS{}` block mapping every `LIB_POLYVAL_*` segment, with each §4 placement attribute annotated in place by the consequence of dropping it. Ends with the recommended §1/§5 link-time asserts. |
 
-Renamed on the way out to the §6.1 canonical `<shortname>` basenames —
-the `src/` names describe what the files are *for here*
-(`lib_only.cfg`), not what a consumer receives. Both are §6.5 name
-surface from this release forward. They are attached as an **order-only**
-prerequisite of each archive rule, so a header edit does not force a
-pointless re-archive, and kept flat in `build/lib/` rather than a `cfg/`
-subdirectory: a nested output directory needs its own order-only
-prerequisite, and naming only the parent is the defect that made
-`c64-x25519`'s `make lib` fail on a warm tree whose subdirectory had
-been cleaned away.
+They are attached as an **order-only** prerequisite of each archive
+rule, so a header edit does not force a pointless re-archive, and kept
+flat in `build/lib/` rather than a `cfg/` subdirectory: a nested output
+directory needs its own order-only prerequisite, and naming only the
+parent is the defect that made `c64-x25519`'s `make lib` fail on a warm
+tree whose subdirectory had been cleaned away. Both are §6.5 name
+surface from this release forward.
+
+**The example cfg is purpose-built.** The obvious move — ship
+`src/lib_only.cfg`, which already has the complete `SEGMENTS{}` block —
+was tried and reverted. That file is the `make lib-verify` config: it
+declares a mandatory `LOADADDR` segment and a `LIB_POLYVAL_VERIFY_CODE`
+segment that only our own verification stub emits, so a consumer
+linking their own code against `polyval.a` with it takes
+`ld65: Warning: Segment 'LOADADDR' does not exist` on their first
+build, and reads an opening line telling them the file is for our
+internal verification build. `src/polyval-example.cfg` is maintained
+separately, is used by no build in this repo, and is warning-free for a
+consumer.
+
+**A guard so this cannot rot: `make consumer-check-shipped`.** It copies
+exactly the three shipped files plus `test/consumer_stub_shipped.s` into
+an empty scratch directory and assembles there **with no `-I src`**.
+That is the whole mechanism: every other build in this repository runs
+with `src/` on the include path, so a header quietly depending on an
+unshipped `src/` file assembles fine for us and fails only for a
+consumer. This is the one check that can see an incomplete shipped
+surface — which is why #79 survived six releases without anything going
+red.
+
+Shown capable of failing, in both directions that matter:
+
+| Perturbation | Result |
+|---|---|
+| Remove `polyval.inc` from the staged set | `consumer_stub_shipped.s(39): Error: Cannot open include file 'polyval.inc'` |
+| Add `.include "constants_lib.inc"` (a file consumers never receive) | `Error: Cannot open include file 'constants_lib.inc'` at that line |
+| Neither | links clean, **zero ld65 warnings** |
+
+The stub imports the full public surface — §1 version equates, all four
+§5 manifest equates plus the new bound, the §2 slots by `.importzp`
+from the archive's `zp_config.o`, every public entry point and buffer —
+and carries the `.assert`/`lderror` gates the example cfg recommends, so
+those recommendations are exercised rather than merely written down. The
+zero-warning property is deliberate: a warning from this target in
+future is signal, not noise.
 
 ### §5 — the 64-byte ceiling was not referenceable ([#80](https://github.com/JC-000/c64-polyval/issues/80))
 
@@ -110,6 +145,14 @@ Two details are load-bearing:
   compile error into silent divergence" shape. Verified unguarded:
   that `-D` fails with
   `src/lib_manifest.s(388): Error: Symbol 'LIB_POLYVAL_GCMSIV_MAX_PT_LEN' is already defined`.
+
+  One consumer-facing wrinkle, not specific to this symbol but this is
+  where people will meet it: an `.import`ed symbol has no value until
+  link, so ca65 cannot prove it fits in a byte and a bare
+  `lda #LIB_POLYVAL_GCMSIV_MAX_PT_LEN` is a `Range error`. Write
+  `lda #<LIB_POLYVAL_GCMSIV_MAX_PT_LEN`. `.assert` is unaffected — ld65
+  evaluates it once the value is known. Documented in `API.md` §9.4 and
+  in the shipped example cfg.
 - **It is absent from the POLYVAL-only archives.** `polyval-long.a`,
   `polyval-short.a` and `polyval-compact.a` ship no `gcm_siv.o`, so
   there is no entry point in them for the bound to describe — the §6.4
@@ -245,6 +288,9 @@ All seven archive targets build and stage both shipped files.
 (`warm flip both knobs, reverse, 9 objects, 0 spurious rebuilds`).
 `make consumer-check` and `make consumer-check-noaes` link clean — the
 latter against all three POLYVAL-only archives, the issue #47 guard.
+`make consumer-check-shipped` links clean with zero warnings, and has
+been demonstrated failing for the right reason in both perturbations
+tabulated above.
 
 ### Byte-identity receipt
 
@@ -272,12 +318,14 @@ Two things you may want:
 
 1. **Take the shipped header and cfg** instead of copying out of `src/`.
    `make lib` now leaves `build/lib/polyval.inc` and
-   `build/lib/polyval-example.cfg` next to the archive. If you have
-   vendored `src/lib_only.cfg`, note that the example cfg is that file —
-   check its segment-line comments against your own cfg, particularly
+   `build/lib/polyval-example.cfg` next to the archive. If you
+   previously vendored `src/lib_only.cfg` or `src/c64.cfg` as a starting
+   point, diff your cfg against the new example — in particular
    `type = ro` on `LIB_POLYVAL_AES_RODATA` (dropping it silently loses
-   522 initialised S-box bytes) and `align = $100` on the three table
-   segments.
+   522 initialised S-box bytes and AES then reads power-on garbage) and
+   `align = $100` on the three table segments (dropping it is completely
+   silent and invalidates the documented cycle counts). The example
+   annotates each attribute with what happens if it goes missing.
 2. **Assert against `LIB_POLYVAL_GCMSIV_MAX_PT_LEN`** rather than a
    literal `64`, if you bound your message sizes at build time.
 

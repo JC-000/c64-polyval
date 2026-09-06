@@ -172,8 +172,11 @@ shared 8×8 quarter-square-multiply surface are covered:
   Per §6.1 every one of those targets also stages the two non-archive
   deliverables: `build/lib/polyval.inc` (the consumer-facing header)
   and `build/lib/polyval-example.cfg` (an example ld65 config carrying
-  the §4 placement declarations), so a consumer never has to read
-  `src/` to link. Every documented profile × variant pair has its own
+  the §4 placement declarations annotated with the consequence of
+  dropping each), so a consumer never has to read `src/` to link.
+  `make consumer-check-shipped` proves those three files are sufficient
+  on their own, by assembling a stub against them in an empty directory
+  with no `-I src`. Every documented profile × variant pair has its own
   target — the profile selects an archived object, so it cannot ride a
   §6.2 define. Consumer
   defines reach every build per §6.2 via
