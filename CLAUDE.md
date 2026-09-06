@@ -16,7 +16,7 @@ Companion docs (read alongside this file):
   §7–§8 (consumer integration), §9 (c64-lib-contract surface) are load-bearing.
 - `CHANGELOG.md` — release history.
 - `docs/RELEASE_NOTES_v0.10.0.md` — current release attestation (size + SHA256).
-- `docs/precalc-tables.md` — c64-lib-contract §8.0 precalc-table enumeration.
+- `docs/precalc-tables.md` — c64-lib-contract §8.4 precalc-table enumeration.
 
 ## c64-lib-contract adoption (current as of v0.10.0)
 This library implements the [c64-lib-contract](https://github.com/JC-000/c64-lib-contract),
@@ -128,7 +128,8 @@ Section-by-section status (see `API.md` §9 for the full account):
   has no shared shape with the 8×8 quarter-square-multiply primitive
   (`sqtab` / `reu_mul` / `ct_mul_8x8`) that `c64-nist-curves`, `c64-x25519`
   and `c64-ChaCha20-Poly1305` converged on. This library neither provides
-  nor defers any of them and has no deferral switch, so §8.0's mask
+  nor defers any of them and has no deferral switch, so §8.0's bit-allocation
+  and mask
   obligations and v0.10.6's provider-surface rule are both N/A.
 - §8.4 precalc-table enumeration (applies regardless of §8.1–§8.3) —
   `src/precalc_table.inc` (canonical macro, copied verbatim; refreshed
@@ -347,7 +348,7 @@ src/
   lib_manifest.s         # §5: LIB_POLYVAL_*_BYTES + REU_BANKS_USED +
                          #     LIB_POLYVAL_GCMSIV_MAX_PT_LEN (published
                          #     input bound); §8.4 LIB_PRECALC_TABLE invocations
-  precalc_table.inc      # §8.0: canonical LIB_PRECALC_TABLE macro (copied verbatim)
+  precalc_table.inc      # §8.4: canonical LIB_PRECALC_TABLE macro (copied verbatim)
   constants_lib.inc      # AES sizes, profile selectors, .include "zp_config.s"
   polyval_long.s / polyval_short.s / polyval_compact.s
   aes_encrypt.s / aes_decrypt.s / tables.s

@@ -1236,9 +1236,13 @@ variant ever introduces an equate-reserved region (e.g. an
 REU-staging window), it must ship the §6.7 guard in a TU that is a
 member of no archive, with a non-weak import.
 
-### 9.6 §8.0 — Precalculated-table enumeration (`src/lib_manifest.s`, `docs/precalc-tables.md`)
+### 9.6 §8.4 — Precalc-table enumeration (`src/lib_manifest.s`, `docs/precalc-tables.md`)
 
-Added in v0.4.0. SPEC §8.0 requires every adopter to enumerate any
+Added in v0.4.0, against what was then SPEC §8.0; contract v0.10.3
+promoted the catch-loop to its own `### 8.4` heading, which is where it
+still sits at v1.1.0 (§8.0 is now the shared-primitive bit-allocation
+table, a different clause that does not apply here). Cite **§8.4**.
+SPEC §8.4 requires every adopter to enumerate any
 precalculated table meeting the floor (≥ 256 B AND one of:
 REU-resident, hot-loop-read, or page-aligned for fetch alignment) —
 regardless of whether the library consumes any §8.1–§8.3 shared
@@ -1320,7 +1324,7 @@ library's prefixed `LIB_<X>_*` symbols side by side — the bare
 `LIB_VERSION_*` names collide across adopters and are removed at
 contract v1.0. See the contract SPEC §1.
 
-### 9.8 §4 — Segment placement declarations (`src/c64.cfg`, `src/lib_only.cfg`)
+### 9.8 §4 — Segment placement declarations (`src/polyval-example.cfg`, `src/c64.cfg`, `src/lib_only.cfg`)
 
 Added for contract v0.8.0. (Numbered out of SPEC order so the
 established §9.1–§9.7 cross-references stay valid.) SPEC §4 requires

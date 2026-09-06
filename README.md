@@ -186,7 +186,7 @@ shared 8×8 quarter-square-multiply surface are covered:
 - §8 (shared primitives, §8.1–§8.3) — N/A; GF(2^128) carry-less
   multiplication shares no shape with the 8×8 quarter-square-multiply
   primitive the elliptic-curve / ChaCha20 libraries converged on.
-- §8.0/§8.4 — precalculated-table enumeration (required of every
+- §8.4 — precalc-table enumeration (required of every
   adopter regardless of §8.1–§8.3 applicability): `src/precalc_table.inc`
   + `LIB_PRECALC_TABLE` invocations in `src/lib_manifest.s` with the
   v0.7.0 `"POLYVAL"` prefix argument, documented in
