@@ -27,9 +27,9 @@ The watch **ends** when all five hold at the same time. Not four.
 
 > **S4 is a TAGGING gate, not a work gate** (checked 2026-09-06). The
 > contract is frozen clean at v1.2.2, zero open issues, zero open PRs. S4
-> waits on **three settling tags**: c64-ChaCha20-Poly1305's (fix landed on
-> `main`, unreleased), c64-x25519 **v0.16.0** (their #128), and
-> c64-nist-curves **v0.14.0** (#153 + #154). Verify each against the
+> waits on **two settling tags**: c64-ChaCha20-Poly1305's (fix landed on
+> `main`, unreleased) and c64-nist-curves **v0.14.0** (#153 + #154).
+> c64-x25519 settled at **v0.16.0**, verified at the tag. Verify each against the
 > **tag**, never against a branch: a fix on a branch is not a release, and
 > a consumer pins tags. Equally — read the **tag**, not the latest GitHub
 > Release; they are different things and §6g is the cycle where that cost
@@ -164,7 +164,7 @@ tag, and is **observed**, not asserted on someone else's behalf.
 |---|---|---|---|
 | c64-polyval | adopter | **v0.11.0 (tagged, released)** | verified against v1.2.2: §6.1 member isolation fixed, the withdrawn-§6.1 claims corrected, `lib_version.s` conformant outright under v1.2.1's carve-out |
 | c64-nist-curves | adopter | v0.13.0 | member isolation fixed (split into `data_reu_wait.s` / `data_mul_stage.s` / `data_shared.s`; their contract#179 made the clause normative). `zp_config.o` still fails §6.1 as their #154 — **scheduled, not deferred**: reported by the contract session as carried by their settling tag **v0.14.0** with #153 and nothing else. Not independently verified here (the issue has no milestone); recorded as reported |
-| c64-x25519 | adopter | **v0.15.0** | member isolation **TAGGED since v0.14.0** — verified at the tag: `src/precalc_manifest.s` present and `lib_manifest.s` has 0 macro invocations at v0.15.0, against 3 at v0.13.0. v0.15.0 also carries §8.2 `A = a` and ABI 3 → 4. Settling tag is **v0.16.0** for their #128, a third member-isolation shape found after v0.15.0 |
+| c64-x25519 | adopter | **v0.16.0 — SETTLED** | their settling tag, verified at the tag with a §6g positive control: `src/precalc_manifest.s` present, `lib_manifest.s` 0 macro invocations (3 at v0.13.0), ref+path confirmed to exist so the zero is a real zero. Member isolation shipped at v0.14.0; v0.15.0 added §8.2 `A = a` and ABI 3 → 4; v0.16.0 closes their #128 |
 | c64-ChaCha20-Poly1305 | adopter | v0.10.0 | **fix landed, UNTAGGED.** #108 closed; verified on their master — `src/lib/precalc_manifest.s` exists and `lib_manifest.s` has zero macro invocations. The fix commits are all after `v0.10.0`, so the shipped tag still carries the defect. S4 wants the tag |
 | c64-mlkem | adopter | v0.5.0 | **clean** — defines `LIB_NO_BARE_EXPORTS = 1` in its enumerating TU per §8.4's zero-consumer carve-out, so nothing displaceable is there to isolate |
 | c64-https | consumer | v0.4.3 | pins nistcurves + x25519 |
