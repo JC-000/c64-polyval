@@ -25,10 +25,13 @@ The watch **ends** when all five hold at the same time. Not four.
 | **S4** | Every contract **adopter** has a tag conformant with the latest contract tag. | §5 fleet table |
 | **S5** | Every contract **consumer** has a tag that links only conformant adopter tags. | §5 fleet table |
 
-> **S5 is much further out than S4, measured 2026-09-06.** S4 is one tag
-> away. S5 needs **five stale submodule pins bumped across three consumer
-> repos, then three consumer tags** — every consumer is behind on every
-> pin it holds. Do not read "S4 nearly closed" as "settlement nearly
+> **S5, re-measured from the remotes 2026-09-06.** Four stale pins across
+> **two** consumer repos, then their tags: c64-https (`nistcurves`
+> v0.11.2 → v0.14.0, `x25519` v0.13.0 → v0.16.0) and c64-wireguard
+> (`chacha20poly1305` v0.9.0 → v0.11.0, `x25519` v0.11.2 → v0.16.0).
+> c64-aes256-ecdsa is **not** an archive consumer on `master` and does not
+> belong in this count — the earlier "five pins across three repos" figure
+> included a submodule that exists only in a local checkout (§6h). Do not read "S4 nearly closed" as "settlement nearly
 > reached": they are different orders of work, and the second is in repos
 > this watch can only observe.
 
@@ -181,7 +184,7 @@ tag, and is **observed**, not asserted on someone else's behalf.
 | c64-mlkem | adopter | v0.5.0 | **clean** — defines `LIB_NO_BARE_EXPORTS = 1` in its enumerating TU per §8.4's zero-consumer carve-out, so nothing displaceable is there to isolate |
 | c64-https | consumer | v0.4.3 | pins `libs/nistcurves` **v0.11.2** and `libs/x25519` **v0.13.0** — both stale; needs nistcurves v0.14.0 and x25519 v0.16.0 |
 | c64-wireguard | consumer | v2.0.0-ca65 | pins `libs/chacha20poly1305` **v0.9.0** and `libs/x25519` **v0.11.2** — both stale; needs chacha v0.11.0 and x25519 v0.16.0 |
-| c64-aes256-ecdsa | consumer | (none) | pins `libs/polyval` at **v0.7.1** — five releases behind, needs v0.11.0. **Enumerates `aes_sbox` + `aes_inv_sbox` with no library-prefix argument**, so it emits bare-only triples that collide with ours on any AEAD archive — dormant while it links `polyval-short.a` (NO_AES). See §6c |
+| c64-aes256-ecdsa | consumer | (none) | **Not an archive consumer on `master`.** Verified from `origin/master`: no `.gitmodules`, no `libs/` tree, and `src/polyval.s` is built as its own `MODULES` entry. The v0.7.1 submodule pin recorded here earlier came from a **locally modified clone**, not the repo — see §6h. Its `src/precalc_manifest.s` does emit bare-only triples overlapping three of our names (`aes_sbox`, `aes_inv_sbox`, `polyval_htable`), latent until it links one of our archives — their #28. **Enumerates `aes_sbox` + `aes_inv_sbox` with no library-prefix argument**, so it emits bare-only triples that collide with ours on any AEAD archive — dormant while it links `polyval-short.a` (NO_AES). See §6c |
 
 ---
 
@@ -535,6 +538,46 @@ reporting green about a property it never actually examined.** §6a (a sweep
 blind to macro-emitted names), §6e (a diff whose extractor drops a symbol
 from both sides), §6f (a footprint basis that happens not to be exercised),
 and now the watch's own fleet table.
+
+## 6h. Read another repo from its REMOTE, never from a local checkout
+
+The fleet table recorded c64-aes256-ecdsa as pinning `libs/polyval` at
+`v0.7.1`, and issue **ecdsa#28** was filed partly on that basis. Both were
+wrong. That repository's `origin/master` has **no `.gitmodules`, no `libs/`
+tree**, and builds its own `src/polyval.s` as a `MODULES` entry — it links
+no c64-polyval archive at all.
+
+The local clone at `~/Documents/c64-aes256-ecdsa` carried **uncommitted
+changes**: a staged `.gitmodules`, a modified `README.md` and `Makefile`,
+and a populated `libs/polyval` directory. `git submodule status` and a
+working-tree `grep` reported all of it as fact.
+
+**`HEAD` matching `origin/master` is not enough** — it was equal here
+(`823772e`), and the working tree was still dirty. The commit being right
+says nothing about the files being read.
+
+Read other repositories this way:
+
+```sh
+git -C "$d" fetch -q origin
+git -C "$d" ls-tree -r origin/master | awk '$2=="commit"{print $4, $3}'   # real gitlinks
+git -C "$d" show origin/master:path/to/file                              # real file content
+```
+
+Three traps met doing this, all §6g-shaped:
+
+1. **`ls-tree` without `-r`** shows only top-level entries, so nested
+   gitlinks under `libs/` vanish and the listing looks empty.
+2. **A repo whose default branch is not `master`** — `git show
+   origin/master:f` on a `main` repo yields empty output and a `grep -c`
+   of 0. Resolve it: `git ls-remote --symref origin HEAD`.
+3. **An empty gitlink list can be true.** For ecdsa it *was* true, and
+   only checking `.gitmodules` and the `MODULES` list distinguished "no
+   submodules" from "I looked wrong".
+
+The correction cost a wrong claim in someone else's tracker. Filing against
+another repo means reading that repo as published, not as checked out here
+— a clone in this workspace may be mid-work by another session.
 
 ## 7. Refresh one-liner
 
