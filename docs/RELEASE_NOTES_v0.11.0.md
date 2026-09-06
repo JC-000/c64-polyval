@@ -55,14 +55,37 @@ ld65: Error: Duplicate external identifier: 'LIB_PRECALC_polyval_htable_SHARED'
 "it was not theoretical".** §6.1's rationale, as corrected at v1.2.2, names
 two collision directions, and they do not both bite here today:
 
-- **Library versus library** — two adopters exporting the identical bare
+- **Library versus library** — two libraries exporting the identical bare
   name, no consumer definition anywhere. This is the direction #177 was
-  actually reported for, and for c64-polyval it is **latent, not live**:
-  our five enumerated tables are `polyval_htable`, `polyval_htable8`,
-  `polyval_reduce8`, `aes_sbox` and `aes_inv_sbox`, and no sibling adopter
-  currently enumerates any of them. (The names the fleet *does* share are
-  `sqtab`, in four adopters, and `reu_mul`, in two — neither of which we
-  consume.)
+  actually reported for, and **it is live for c64-polyval, with our own
+  declared consumer.**
+
+  > **Corrected after tagging.** This section first said the direction was
+  > "latent — no sibling adopter enumerates any of our five table names."
+  > That was wrong. It swept the five contract *adopters* and missed the
+  > *consumer*, which our own fleet table lists. The corrected finding is
+  > below; it makes the case for this release stronger, not weaker.
+
+  `c64-aes256-ecdsa` — the consumer that pins c64-polyval by tag —
+  enumerates `aes_sbox` and `aes_inv_sbox` in its own
+  `src/precalc_manifest.s`, at the same size (256) and region (RODATA) we
+  use, so there is no §8.4 asymmetry to report — just a straight duplicate
+  external at link. Its invocations pass **no library-prefix argument**, so
+  they emit bare triples only. c64-polyval's AEAD archives emit the
+  identical six names.
+
+  Reproduced, not argued: two objects — one emulating that enumeration, one
+  importing `LIB_POLYVAL_RESIDENT_BYTES` — linked against `polyval.a` give
+  `ld65: Error: Duplicate external identifier: 'LIB_PRECALC_aes_inv_sbox_SHARED'`
+  on v0.10.1, and a clean link here.
+
+  **It is dormant in their current configuration**, and the notes should say
+  so rather than imply urgency: they link `polyval-short.a`, a
+  `LIB_POLYVAL_NO_AES` archive whose manifest suppresses exactly those two
+  rows under the issue #23 gating. The same object links clean against
+  `polyval-short.a` on both trees. The collision arms the moment they move
+  to any of the four AEAD archives — the obvious next step for an AES
+  consumer, and what those targets exist for.
 - **Consumer definition** — the probe above. Unrealistic as written, but it
   is the direction that is reachable in this library today.
 
@@ -76,6 +99,14 @@ sides and neither consumer can repair it — member surgery is banned.
 
 The clause is unconditional in any case: a displaceable name must be
 isolated whether or not a collision exists yet. This release satisfies it.
+
+**One thing this release does not do, stated so it is not overclaimed:** it
+de-arms the *uninvited* path, not the collision class. Importing a §5
+footprint equate no longer drags the bare precalc names into a link. A
+consumer that imports a precalc name *directly* still pulls the member and
+still collides — that residue belongs to the deprecation of the bare
+exports, which is deferred to a future contract MAJOR, not to member
+isolation.
 
 ### What moved
 

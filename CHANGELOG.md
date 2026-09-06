@@ -40,11 +40,15 @@ bare names arrived uninvited. This is contract #177's exact shape, and the
 consumer cannot repair it — `ar65` member surgery is banned two paragraphs
 above.
 
-**The link failure is real and reproducible**, though be precise about
-which of §6.1's two collision directions bites here: the library-versus-
-library one is *latent* (no sibling adopter enumerates any of our five
-table names — the shared ones are `sqtab` and `reu_mul`, neither of which
-we consume), and the consumer-definition one is reachable but contrived.
+**The link failure is real and reproducible, and the library-versus-library
+direction is live with our own declared consumer.** `c64-aes256-ecdsa`
+enumerates `aes_sbox` and `aes_inv_sbox` with no library-prefix argument,
+so it emits the identical bare triples our AEAD archives do. It is dormant
+only because they link `polyval-short.a`, a `NO_AES` archive where the
+issue #23 gating suppresses those rows; it arms on any AEAD archive.
+(The first draft of these notes called this direction "latent" on a sweep
+of the five *adopters* that missed the *consumer* — corrected after
+tagging, in the release notes and on the release page.)
 The clause is unconditional regardless, and §8.4's rule that table names
 are never library-prefixed puts every bare name in one flat namespace, so
 one future adopter enumerating `aes_sbox` makes the latent direction live

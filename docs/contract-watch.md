@@ -151,7 +151,7 @@ tag, and is **observed**, not asserted on someone else's behalf.
 | c64-mlkem | adopter | v0.5.0 | **clean** — defines `LIB_NO_BARE_EXPORTS = 1` in its enumerating TU per §8.4's zero-consumer carve-out, so nothing displaceable is there to isolate |
 | c64-https | consumer | v0.4.3 | pins nistcurves + x25519 |
 | c64-wireguard | consumer | v1.1.0 | pins x25519 + chacha20poly1305 |
-| c64-aes256-ecdsa | consumer | (none) | pins c64-polyval by tag |
+| c64-aes256-ecdsa | consumer | (none) | pins c64-polyval at **v0.7.1** (four releases behind). **Enumerates `aes_sbox` + `aes_inv_sbox` with no library-prefix argument**, so it emits bare-only triples that collide with ours on any AEAD archive — dormant while it links `polyval-short.a` (NO_AES). See §6c |
 
 ---
 
@@ -249,6 +249,33 @@ tag, an in-flight register of other repositories' open issues, and a fleet
 table. Frozen into a release tarball it would be stale on arrival and would
 make claims about other repositories that a consumer could read as current.
 It lives on `master`.
+
+## 6c. Sweep CONSUMERS too, not just adopters
+
+v0.11.0 shipped a release note claiming the library-versus-library
+collision direction was latent because "no sibling **adopter** enumerates
+any of our five table names". True, and irrelevant: `c64-aes256-ecdsa` is
+a **consumer**, it is in the §5 fleet table above, and it enumerates two of
+them. The sweep was scoped to the wrong list by habit.
+
+The bare `LIB_PRECALC_*` namespace is flat across everything that includes
+`precalc_table.inc` — adopters, consumers, and any app that vendors the
+macro. Sweep all of them:
+
+```sh
+for r in c64-nist-curves c64-x25519 c64-ChaCha20-Poly1305 c64-mlkem \
+         c64-polyval c64-aes256-ecdsa c64-https c64-wireguard; do
+  printf '%-24s ' "$r"
+  grep -rhE '^[[:space:]]*LIB_PRECALC_TABLE' ~/Documents/$r/src 2>/dev/null \
+    | grep -oE '"[a-z0-9_]+"' | tr -d '"' | sort -u | tr '\n' ' '; echo
+done
+```
+
+Two traps met while doing it: matching commented examples inside
+`precalc_table.inc` itself (it documents `"sqtab"` and `"name"`, which made
+every repo look like an `sqtab` enumerator), and an invocation with **no
+fifth argument**, which emits the bare triple *only* — the collision-prone
+form, and easy to read past.
 
 ## 7. Refresh one-liner
 
