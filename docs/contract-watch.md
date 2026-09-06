@@ -144,7 +144,7 @@ tag, and is **observed**, not asserted on someone else's behalf.
 
 | Repo | Role | Latest tag | Conformant? |
 |---|---|---|---|
-| c64-polyval | adopter | v0.10.1 → **v0.11.0 pending tag** | verified against v1.2.2: §6.1 member isolation fixed, the withdrawn-§6.1 claims corrected, `lib_version.s` conformant outright under v1.2.1's carve-out |
+| c64-polyval | adopter | **v0.11.0 (tagged, released)** | verified against v1.2.2: §6.1 member isolation fixed, the withdrawn-§6.1 claims corrected, `lib_version.s` conformant outright under v1.2.1's carve-out |
 | c64-nist-curves | adopter | v0.12.0 | has `src/precalc_manifest.s`; v1.2.0 changelog says "already conforms" |
 | c64-x25519 | adopter | v0.13.0 | has `src/precalc_manifest.s`; split landed for v0.14.0 (**untagged** — S4 needs the tag); staging-buffer split still owed |
 | c64-ChaCha20-Poly1305 | adopter | v0.10.0 | **BLOCKED on S4** — §6.1 member isolation: shipped `lib_manifest.o` exports 9 bare `LIB_PRECALC_*` names beside 8 importable §5/§8.0 equates (#177's shape). Measured in their prebuilt archive; filed as [chacha#110](https://github.com/JC-000/c64-ChaCha20-Poly1305/issues/110) |
