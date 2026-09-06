@@ -35,7 +35,10 @@
 ; LIB_POLYVAL_* names are the permanent, collision-free form a consumer
 ; linking multiple adopters imports side by side. The unprefixed names
 ; are identical across every adopter library — that collision is the
-; reason they are DEPRECATED and removed at contract v1.0. Until then
+; reason they are DEPRECATED. Their removal was scheduled for contract
+; v1.0 and was DEFERRED there to a future MAJOR (SPEC v1.0.0 §1):
+; dropping four exports is a real ABI change for every adopter and will
+; be its own release. Until then
 ; they remain required for existing single-library consumers, gated on
 ; LIB_NO_BARE_EXPORTS (ca65 -D LIB_NO_BARE_EXPORTS=1) so a composing
 ; consumer can suppress them build-wide. The bare form aliases the
@@ -51,7 +54,7 @@
 .setcpu "6502"
 
 LIB_POLYVAL_VERSION_MAJOR = 0
-LIB_POLYVAL_VERSION_MINOR = 9
+LIB_POLYVAL_VERSION_MINOR = 10
 LIB_POLYVAL_VERSION_PATCH = 0
 LIB_POLYVAL_ABI_VERSION   = 1
 
@@ -64,7 +67,8 @@ LIB_POLYVAL_ABI_VERSION   = 1
 .export LIB_POLYVAL_ABI_VERSION:   abs
 
 .ifndef LIB_NO_BARE_EXPORTS
-    ; Deprecated bare forms — removed at contract v1.0.
+    ; Deprecated bare forms — removal deferred to a future contract
+    ; MAJOR (SPEC v1.0.0 §1), not v1.0 as previously scheduled.
     LIB_VERSION_MAJOR = LIB_POLYVAL_VERSION_MAJOR
     LIB_VERSION_MINOR = LIB_POLYVAL_VERSION_MINOR
     LIB_VERSION_PATCH = LIB_POLYVAL_VERSION_PATCH

@@ -9,6 +9,121 @@ Releases: https://github.com/JC-000/c64-polyval/releases — tagged releases
 track `MAJOR.MINOR.PATCH` and are the supported consumption points for
 downstream projects (see `API.md` §8 for the integration contract).
 
+## v0.10.0 — 2026-09-06
+
+Contract-alignment **MINOR** for
+[c64-lib-contract SPEC v1.1.0](https://github.com/JC-000/c64-lib-contract).
+Two real conformance gaps closed, one of them a §6.1 MUST that had been
+open for the whole life of the archive targets; the rest is docs brought
+back into agreement with a specification that lost roughly seven eighths
+of its text.
+
+**No behavioural change to any routine.** The POLYVAL, AES-256 and
+GCM-SIV code paths are untouched; the PRGs are byte-identical to v0.9.0
+on all three profiles. `LIB_POLYVAL_ABI_VERSION` stays **1**.
+
+### What changed in the contract
+
+Contract **v1.0.0** (2026-09-03) cut SPEC.md from 40,737 words to 5,154
+under a stated two-prong scope rule — a clause belongs there only if it
+governs a name, value or placement two independently-built artifacts must
+agree on, **and** a violation is invisible from inside any single
+repository's own build. **No symbol, equate, bit value, segment name or
+build target changed**, so nothing this library exports had to move.
+Retired: §9, §12, §13, §14, §15 and sub-clauses §6.3, §6.6, §6.7.
+Surviving sections kept their numbers. **v1.1.0** then added one
+normative paragraph to §7 on when `LIB_<X>_ABI_VERSION` moves.
+
+### Added
+
+- **`LIB_POLYVAL_GCMSIV_MAX_PT_LEN = 64`**, exported from
+  `src/lib_manifest.s` ([#80](https://github.com/JC-000/c64-polyval/issues/80)).
+  §5 asks that a real input ceiling be published there as a symbol a
+  consumer can reference, rather than re-derived. Ours existed only as
+  `gcmsiv_max_pt_len` in `src/constants_lib.inc` — visible to a consumer
+  who *vendors* our source, invisible to one who links the archive as
+  §6.1 tells them to, leaving them to hard-code `64` out of prose.
+  Deliberately **not** `.ifndef`-guarded, unlike the other four equates
+  in that file: it is derived from the value `gcm_siv.s` actually
+  compares against, so a `-D` override must collide loudly rather than
+  export a ceiling the code does not enforce. Absent from
+  `polyval-long.a` / `-short.a` / `-compact.a`, which ship no
+  `gcm_siv.o` (§6.4, the issue #23 discipline).
+- **`build/lib/polyval.inc` and `build/lib/polyval-example.cfg`**, staged
+  by every one of the seven archive targets
+  ([#79](https://github.com/JC-000/c64-polyval/issues/79)). §6.1 requires
+  `make lib` to produce the archive *plus the consumer-facing `.inc`
+  header and an example `.cfg`*; `build/lib/` had only ever held the
+  `.a`. A consumer linking the archive therefore had no declaration of
+  the public symbols and no statement of the load-bearing segment
+  attributes §4 obliges us to declare — both silent at link — so they had
+  to read `src/` to link us, which is the mid-build source-poking the
+  rest of §6.1 forbids. Copied from `src/polyval_api.inc` and
+  `src/lib_only.cfg` under the §6.1 canonical basenames; both are §6.5
+  name surface from this release.
+
+### Changed
+
+- `src/precalc_table.inc` refreshed from the v1.1.0 canonical. Comment-only
+  (the contract's own 1.0.0 entry notes adopters' copies need not be
+  refreshed), but one of the comments had become false — see below.
+- `API.md` §9 rewritten. Its preamble was a version-by-version narrative of
+  the contract's growth from v0.1.0 to v0.11.1 — the genre the contract
+  itself has just deleted as out of scope. Replaced with the current
+  surface, a table of which sections apply, and an explicit account of
+  where the retired clauses' obligations went. §9.5 now groups §6.3, §6.6
+  and §6.7 under a "retired clauses" heading rather than presenting them
+  as live conformance.
+- `CLAUDE.md`'s contract section rewritten on the same basis.
+- `README.md`'s contract section updated for the new shipped surface and
+  the published bound.
+
+### Fixed
+
+- Statements that had become **false going forward**, as opposed to merely
+  citing a retired section number: the bare `LIB_VERSION_*` exports were
+  documented in four places as "removed at contract v1.0", which contract
+  v1.0.0 explicitly **deferred to a future MAJOR** rather than doing —
+  `src/lib_version.s`, `src/lib_manifest.s`, `src/precalc_table.inc`,
+  `API.md`, `README.md`.
+- `API.md` §9.4 said one tag carries "four footprint pairs". It has carried
+  seven since v0.8.0 — the count was against a stale archive list rather
+  than against the `lib-polyval-*` target list, which is exactly the
+  failure mode the surrounding prose warns about.
+
+### Assessed, no change
+
+- **`LIB_POLYVAL_ABI_VERSION` holds at 1** under the new §7 paragraph. The
+  v0.9.0 length-rejection return is superficially the shape §7 says moves
+  the counter, but `gcmsiv_encrypt` documented no return convention at all
+  at v0.8.0 (§7's "previously undocumented becomes documented" limb), and
+  `gcmsiv_decrypt`'s reject path was written to be indistinguishable from a
+  tag failure on every documented post-condition, so its return set did not
+  gain a value. The second of those is a property of `@reject_len` in
+  `src/gcm_siv.s` and not a general fact: if that path is ever made
+  distinguishable from a tag failure, the counter moves. Put to the
+  contract for arbitration as
+  [c64-lib-contract#180](https://github.com/JC-000/c64-lib-contract/issues/180),
+  because v1.1.0's fleet position names three sibling libraries and not
+  this one, which shipped the same shape in the same week. Reasoning
+  recorded in `API.md` §9.1 and `CLAUDE.md`.
+- **Retired-section citations elsewhere in this repository are deliberately
+  left as written** — in `CHANGELOG.md`, in `docs/RELEASE_NOTES_v0.*.md`,
+  and in the in-line `§6.6` comments in `src/lib_manifest.s`. Each is a
+  claim about the tagged revision it was made against and still resolves
+  at `git show v0.17.1:SPEC.md`; the contract's own `RETIRED.md` asks
+  adopters not to churn them. `src/lib_manifest.s` gained one header note
+  saying where the §6.6 obligation lives now, in place of rewriting
+  thirteen in-line citations.
+- **The §6.3 machinery is kept as local engineering**, not conformance: the
+  `PIN_` parse-time goal table, the `build/.ca65flags` stamp and
+  `tools/check_knob_staleness.sh` all stay exactly as they are. They are
+  good properties for this Makefile independent of any clause requiring
+  them.
+- §1 and §8.4 zero-consumer carve-outs remain N/A — `c64-aes256-ecdsa`
+  pins a tag, so the bare exports and the bare `LIB_PRECALC_<name>_*`
+  triple keep shipping, gated on `LIB_NO_BARE_EXPORTS`.
+
 ## v0.9.0 — 2026-08-31
 
 Hardening **MINOR** from an adversarial audit of the library against

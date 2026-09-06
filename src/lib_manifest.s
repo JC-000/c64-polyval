@@ -46,7 +46,19 @@
 ; constants_lib.inc roll-up) can suppress the directives and avoid
 ; ld65 "duplicate symbol" errors.
 ;
-; The numbers are SAFE-DIRECTION per SPEC v0.10.0 §6.6: each value is
+; SECTION NUMBERING. Comments in this file cite SPEC §6.6, which was
+; RETIRED at contract v1.0.0 along with §6.3, §6.7, §9, §12, §13, §14 and
+; §15. The obligation did not go away: §5 now carries it directly
+; ("Footprint equates MUST be safe-direction: round up, never down ...
+; RESIDENT and COLD are a pair"), so every safe-direction statement below
+; is still live, read against §5. The §6.6 citations are left in place
+; because they are accurate records of the tag they were written against
+; and resolve permanently at `git show v0.17.1:SPEC.md` — the contract's
+; own RETIRED.md asks adopters not to churn them. What §6.6 uniquely
+; carried and §5 does NOT is the *consumer-side* assert snippet, which
+; was only ever RECOMMENDED and lived in the consumer's tree anyway.
+;
+; The numbers are SAFE-DIRECTION per SPEC v0.10.0 §6.6 (now §5): each value is
 ; >= the measured segment sum for the archive it ships in, rounded UP
 ; to the next 256-byte boundary (the fleet convention — headroom under
 ; one page absorbs incidental growth without forcing consumer .assert
@@ -346,6 +358,50 @@ LIB_MANIFEST_S_INCLUDED = 1
 
 
 ; -----------------------------------------------------------------------------
+; Published input bound (SPEC §5)
+; -----------------------------------------------------------------------------
+; §5: "Where a library's real input restriction is a bound a consumer must
+; respect -- a maximum length, a ceiling -- it SHOULD publish that bound
+; here as a symbol the consumer can reference ... A consumer SHOULD
+; reference the published symbol rather than re-derive the value."
+;
+; c64-polyval has exactly one such bound: gcmsiv_encrypt / gcmsiv_decrypt
+; reject gcmsiv_pt_len > 64 with A=1 / Z=0. It is a genuine ceiling, not a
+; relation over two caller-supplied values, so a scalar expresses it
+; honestly and §5's publish duty applies rather than its
+; do-not-publish-a-vacuous-one carve-out.
+;
+; Before this release the bound existed only as `gcmsiv_max_pt_len` in
+; src/constants_lib.inc -- an assemble-time equate in a header, reachable
+; only by a consumer who VENDORS our source. A consumer who does what §6.1
+; tells them to do (fetch the archive and link it) could not see it at all,
+; and had to hard-code 64 from prose in API.md. That is the re-derivation
+; §5's second sentence asks consumers not to do.
+;
+; NOT `.ifndef`-guarded, deliberately, and it is the only equate in this
+; file that is not. The other four are consumer-overridable *descriptions*;
+; this one is a *derived* export -- gcm_siv.s compares against
+; gcmsiv_max_pt_len from constants_lib.inc, and nothing a consumer defines
+; can move the `cmp #gcmsiv_max_pt_len+1` already assembled into the
+; archive. A guard here would let a `-D LIB_POLYVAL_GCMSIV_MAX_PT_LEN=128`
+; assemble quietly and export a ceiling twice the one the code enforces,
+; which is the §3 "bare guard converts a compile error into silent
+; divergence" shape. Assigning unconditionally makes that `-D` collide
+; loudly with `Symbol already defined`, which is the correct answer.
+;
+; Gated on LIB_POLYVAL_NO_AES for the same reason as the aes_sbox rows
+; below (issue #23, §6.4): polyval-long.a / polyval-short.a /
+; polyval-compact.a ship no gcm_siv.o, so there is no GCM-SIV entry point
+; in those archives to have a plaintext ceiling. A manifest describing a
+; bound on a routine the archive does not contain is the over-claim §6.4
+; forbids.
+; -----------------------------------------------------------------------------
+.ifndef LIB_POLYVAL_NO_AES
+  LIB_POLYVAL_GCMSIV_MAX_PT_LEN = gcmsiv_max_pt_len
+.endif
+
+
+; -----------------------------------------------------------------------------
 ; §8.0 catch-loop: precalculated-table enumeration
 ; -----------------------------------------------------------------------------
 ; c64-lib-contract SPEC §8.0 requires every adopter to enumerate any
@@ -361,7 +417,8 @@ LIB_MANIFEST_S_INCLUDED = 1
 ; The fifth macro argument is the SPEC v0.7.0 library prefix: each
 ; invocation emits both LIB_POLYVAL_PRECALC_<name>_* (collision-free,
 ; permanent) and the deprecated bare LIB_PRECALC_<name>_* triple, the
-; latter gated on LIB_NO_BARE_EXPORTS (removed at contract v1.0). The
+; latter gated on LIB_NO_BARE_EXPORTS (removal deferred to a future
+; contract MAJOR — SPEC v1.0.0 §8.4). The
 ; prefix names the declaring library, never the table -- table names
 ; stay unprefixed per SPEC §8.1.
 ;
@@ -410,6 +467,14 @@ LIB_PRECALC_TABLE "aes_inv_sbox", 256, PRECALC_REGION_RODATA, PRECALC_SHARED_NO,
 .export LIB_POLYVAL_REU_BANKS_USED:  abs
 .export LIB_POLYVAL_RESIDENT_BYTES:  abs
 .export LIB_POLYVAL_COLD_BYTES:      abs
+
+; The §5 published input bound. Absent from the POLYVAL-only archives
+; along with its definition above -- the `.ifndef` must wrap the export
+; too, or ld65 reports an undefined export for polyval-{long,short,
+; compact}.a rather than simply omitting the row.
+.ifndef LIB_POLYVAL_NO_AES
+.export LIB_POLYVAL_GCMSIV_MAX_PT_LEN: abs
+.endif
 
 .endif ; !LIB_MANIFEST_NO_EXPORTS
 

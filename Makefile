@@ -447,6 +447,38 @@ $(LIB_PRG) $(LIB_LBL_RAW): $(LIB_OBJECTS) $(BUILD_DIR)/lib_main.o $(LIB_CFG) | $
 $(LIB_LABELS): $(LIB_LBL_RAW) $(TOOLS_DIR)/vice_label_shim.py
 	$(PYTHON) $(TOOLS_DIR)/vice_label_shim.py $(LIB_LBL_RAW) $(LIB_LABELS)
 
+# --- Consumer-facing shipped surface (c64-lib-contract SPEC §6.1) ---------
+# §6.1: "Every library MUST provide `make lib`, producing
+# build/lib/<shortname>.a PLUS the consumer-facing `.inc` header and an
+# example `.cfg`." The archive alone is not the deliverable -- a consumer
+# that fetches only the .a has no declaration of the public symbols and no
+# statement of the load-bearing segment attributes §4 obliges us to declare,
+# so it would have to read our src/ to link us, which is the mid-build
+# source-poking §6.1 exists to forbid.
+#
+# Staged by copy rather than generated: both files are hand-maintained
+# sources that a consumer copies into their own tree, and a generator would
+# put a second, drifting description of the API between src/ and consumers.
+#
+# Shipped names are the §6.1 canonical basenames -- <shortname> is `polyval`
+# -- rather than the src/ working names, because the src/ names are internal
+# (`lib_only.cfg` describes what the file is FOR here, not what a consumer
+# receives). These are §6.5 name surface from this release on.
+#
+# Kept flat in $(LIB_DIR) rather than a cfg/ subdirectory: a nested output
+# directory needs its own order-only prerequisite, and naming only the
+# parent is the c64-x25519 defect where `make lib` failed on a warm tree
+# whose subdirectory had been cleaned away (their Makefile:242).
+LIB_INC     = $(LIB_DIR)/polyval.inc
+LIB_EXAMPLE_CFG = $(LIB_DIR)/polyval-example.cfg
+LIB_SHIPPED = $(LIB_INC) $(LIB_EXAMPLE_CFG)
+
+$(LIB_INC): $(SRC_DIR)/polyval_api.inc | $(LIB_DIR)
+	cp $< $@
+
+$(LIB_EXAMPLE_CFG): $(LIB_CFG) | $(LIB_DIR)
+	cp $< $@
+
 # --- Library archives (c64-lib-contract SPEC §6) --------------------------
 # Each archive bundles one consumer use case as a single ar65 `.a` file
 # under build/lib/. Consumers fetch one archive and link it directly; no
@@ -471,11 +503,11 @@ $(LIB_LABELS): $(LIB_LBL_RAW) $(TOOLS_DIR)/vice_label_shim.py
 lib:                $(LIB_DIR)/polyval.a
 lib-polyval-gcmsiv: $(LIB_DIR)/polyval-gcmsiv.a
 
-$(LIB_DIR)/polyval.a: $(LIB_AEAD_OBJS) | $(LIB_DIR)
+$(LIB_DIR)/polyval.a: $(LIB_AEAD_OBJS) | $(LIB_DIR) $(LIB_SHIPPED)
 	rm -f $@
 	$(AR65) a $@ $(LIB_AEAD_OBJS)
 
-$(LIB_DIR)/polyval-gcmsiv.a: $(LIB_AEAD_OBJS) | $(LIB_DIR)
+$(LIB_DIR)/polyval-gcmsiv.a: $(LIB_AEAD_OBJS) | $(LIB_DIR) $(LIB_SHIPPED)
 	rm -f $@
 	$(AR65) a $@ $(LIB_AEAD_OBJS)
 
@@ -516,23 +548,23 @@ lib-polyval-gcmsiv-compact:
 	$(MAKE) clean
 	$(MAKE) POLYVAL_PROFILE=compact $(LIB_DIR)/polyval-gcmsiv-compact.a
 
-$(LIB_DIR)/polyval-long.a: $(LIB_POLYVAL_LONG_OBJS) | $(LIB_DIR)
+$(LIB_DIR)/polyval-long.a: $(LIB_POLYVAL_LONG_OBJS) | $(LIB_DIR) $(LIB_SHIPPED)
 	rm -f $@
 	$(AR65) a $@ $(LIB_POLYVAL_LONG_OBJS)
 
-$(LIB_DIR)/polyval-short.a: $(LIB_POLYVAL_SHORT_OBJS) | $(LIB_DIR)
+$(LIB_DIR)/polyval-short.a: $(LIB_POLYVAL_SHORT_OBJS) | $(LIB_DIR) $(LIB_SHIPPED)
 	rm -f $@
 	$(AR65) a $@ $(LIB_POLYVAL_SHORT_OBJS)
 
-$(LIB_DIR)/polyval-compact.a: $(LIB_POLYVAL_COMPACT_OBJS) | $(LIB_DIR)
+$(LIB_DIR)/polyval-compact.a: $(LIB_POLYVAL_COMPACT_OBJS) | $(LIB_DIR) $(LIB_SHIPPED)
 	rm -f $@
 	$(AR65) a $@ $(LIB_POLYVAL_COMPACT_OBJS)
 
-$(LIB_DIR)/polyval-gcmsiv-short.a: $(LIB_AEAD_OBJS) | $(LIB_DIR)
+$(LIB_DIR)/polyval-gcmsiv-short.a: $(LIB_AEAD_OBJS) | $(LIB_DIR) $(LIB_SHIPPED)
 	rm -f $@
 	$(AR65) a $@ $(LIB_AEAD_OBJS)
 
-$(LIB_DIR)/polyval-gcmsiv-compact.a: $(LIB_AEAD_OBJS) | $(LIB_DIR)
+$(LIB_DIR)/polyval-gcmsiv-compact.a: $(LIB_AEAD_OBJS) | $(LIB_DIR) $(LIB_SHIPPED)
 	rm -f $@
 	$(AR65) a $@ $(LIB_AEAD_OBJS)
 
