@@ -280,8 +280,8 @@ since `c64-aes256-ecdsa` pins a tag.
 | Field      | Value |
 |------------|-------|
 | Filename   | `c64-polyval-v0.11.0.tar.gz` |
-| **Size**   | SIZE_PLACEHOLDER bytes |
-| **SHA256** | `SHA256_PLACEHOLDER` |
+| **Size**   | 142336 bytes |
+| **SHA256** | `bd566d1cbfc5f189ab6e82a60d43a611caec97245a3103bf72f85921856998e6` |
 
 Re-running `make dist VERSION=v0.11.0` against this source tree must
 reproduce the recorded SHA256 byte-for-byte: every staged file's mtime is
