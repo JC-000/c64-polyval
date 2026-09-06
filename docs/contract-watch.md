@@ -129,9 +129,17 @@ verdict, and do not re-read it every cycle unless it changes.
 
 | Ref | What | Changes our answer? |
 |---|---|---|
-| ~~PR #187~~ | **MERGED as v1.2.1**, verbatim as read. Moved to the ledger; the G2 call it justified was correct. | resolved |
+**As of 2026-09-06 the contract has ZERO open issues and ZERO open PRs, at
+v1.2.2.** The register is empty; S3 is met with nothing pending. Re-check
+before trusting this — that repo has shipped several releases a day.
+
+| Ref | What | Changes our answer? |
+|---|---|---|
+| ~~PR #187~~ | merged as **v1.2.1**, verbatim as read; the G2 call it justified was correct | resolved |
 | ~~#186~~ | closed by v1.2.1 | resolved |
-| #188 | §2 / bare `zp_` alias placement | **No** — ruled at v1.2.2, which measured the fleet and found c64-polyval exports no bare `zp_` aliases. |
+| ~~#188~~ | §2 / bare `zp_` alias placement | resolved at v1.2.2, which measured the fleet and found c64-polyval exports no bare `zp_` aliases |
+| ~~#180~~ | our §7 arbitration | **closed, and the ruling corrected in place.** It had affirmed our post-conditions argument; we found three post-conditions differ, and the contract re-based the ruling on the documented-input-domain argument. The forward test is recorded in `CLAUDE.md` and `API.md` §9.1 |
+| ~~#182~~ | §8.2 `reu_mul` fetch entry | closed; N/A here (no REU) |
 | #182 | §8.2 `reu_mul` providers disagree on the fetch entry | **N/A** (G3) — no REU. |
 | #180 | our own §7 arbitration request | Open, ours. Answer either way is a follow-up; holding at 1 is the status quo. |
 
@@ -145,9 +153,9 @@ tag, and is **observed**, not asserted on someone else's behalf.
 | Repo | Role | Latest tag | Conformant? |
 |---|---|---|---|
 | c64-polyval | adopter | **v0.11.0 (tagged, released)** | verified against v1.2.2: §6.1 member isolation fixed, the withdrawn-§6.1 claims corrected, `lib_version.s` conformant outright under v1.2.1's carve-out |
-| c64-nist-curves | adopter | v0.12.0 | has `src/precalc_manifest.s`; v1.2.0 changelog says "already conforms" |
+| c64-nist-curves | adopter | **v0.13.0** | member isolation fixed (split into `data_reu_wait.s` / `data_mul_stage.s` / `data_shared.s`; their contract#179 is what made the clause normative). **Not fully clean**: their own release notes record `zp_config.o` still failing §6.1, ruled at v1.2.2 as contract#188 and deferred as their #154 — no name, value, archive or ABI change. Counts as a known deferral, not as conformant |
 | c64-x25519 | adopter | v0.13.0 | has `src/precalc_manifest.s`; split landed for v0.14.0 (**untagged** — S4 needs the tag); staging-buffer split still owed |
-| c64-ChaCha20-Poly1305 | adopter | v0.10.0 | **BLOCKED on S4** — §6.1 member isolation: shipped `lib_manifest.o` exports 9 bare `LIB_PRECALC_*` names beside 8 importable §5/§8.0 equates (#177's shape). Measured in their prebuilt archive; filed as [chacha#110](https://github.com/JC-000/c64-ChaCha20-Poly1305/issues/110) |
+| c64-ChaCha20-Poly1305 | adopter | v0.10.0 | **BLOCKED on S4** — their [#108](https://github.com/JC-000/c64-ChaCha20-Poly1305/issues/108) is open and now names **two** members (`lib_manifest.o`, `poly1305_lib.o`), down from three. Our duplicate #110 was closed in its favour |
 | c64-mlkem | adopter | v0.5.0 | **clean** — defines `LIB_NO_BARE_EXPORTS = 1` in its enumerating TU per §8.4's zero-consumer carve-out, so nothing displaceable is there to isolate |
 | c64-https | consumer | v0.4.3 | pins nistcurves + x25519 |
 | c64-wireguard | consumer | v1.1.0 | pins x25519 + chacha20poly1305 |

@@ -791,11 +791,19 @@ will find the previous call's derived-key material still sitting in
 `polyval_htable*` and `gcmsiv_keystream` after a length rejection. Treat
 "clobbered" as "may hold anything", which is what it means.
 
+**What would move the counter**, since the rejected arguments above are not
+a test: a change that breaks a caller who was conforming to the *documented
+input domain* — widening or narrowing the documented `gcmsiv_pt_len` range,
+changing what a value inside `0..64` does, or adding a return observable to
+a caller inside that domain. Not the reject path becoming distinguishable
+from a tag failure; that is the wrong property to watch.
+
 Put to the contract for arbitration as
 [c64-lib-contract#180](https://github.com/JC-000/c64-lib-contract/issues/180),
-because contract v1.1.0's fleet position adjudicates three sibling
-libraries by name and does not mention c64-polyval, which shipped the
-same shape in the same week.
+now closed, because contract v1.1.0's fleet position adjudicates three
+sibling libraries by name and does not mention c64-polyval, which shipped
+the same shape in the same week. The ruling was corrected in place after we
+corrected ours.
 
 Additive changes do not move the counter either: `LIB_POLYVAL_GCMSIV_MAX_PT_LEN`
 (§9.4) and the two v0.10.0 shipped files (§9.5) are new surface, which

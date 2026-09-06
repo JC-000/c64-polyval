@@ -184,8 +184,21 @@ previous call's derived-key material still in `polyval_htable*` and
 lines below a reject block stating no key derivation is performed — the
 banner contradicts itself, tracked as issue #82.
 
-Arbitration requested upstream (c64-lib-contract#180) so the reading is on
-the record; the issue was corrected there after v0.10.0.
+**What WOULD move the counter, stated because the rejected arguments above
+are not a test.** Not the reject path becoming distinguishable from a tag
+failure — that was the wrong property, and testing it is the trap v0.10.0
+fell into. The counter moves on **a change that breaks a caller who was
+conforming to the documented input domain**. Concretely: widening or
+narrowing the documented `gcmsiv_pt_len` range, changing what a value
+inside `0..64` does, or adding a return a caller inside that domain can
+observe. A guard that only fires outside the documented domain cannot move
+it, however its post-conditions read.
+
+Arbitration requested upstream (c64-lib-contract#180, now closed) so the
+reading is on the record. The contract session corrected its own published
+ruling there after we corrected ours, and made the sharper point this
+paragraph records: "a future reader applying my original reasoning to a
+third case would test the wrong property."
 
 ZP slots are lowercase with `polyval_` / `pv_` library prefix
 (`polyval_acc`, `pv_mul_input`, `polyval_zp_ptr`, `polyval_aes_round`, ...).
