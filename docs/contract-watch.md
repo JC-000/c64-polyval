@@ -336,6 +336,61 @@ the obligation moved (§5), and `RETIRED.md` asks adopters not to churn them.
 Kind 2 is about a live obligation stated in the present tense, not about a
 citation of a retired clause that is honestly labelled as history.
 
+## 6e. Parsing `od65` — and why a comparison check fails silently here
+
+Every conformance measurement in §6a and §6d runs through
+`od65 --dump-exports`. Its `Name:` field is padded by **`|24 − namelen|`
+spaces** — a negative `%*s` width left-justifying, *not* a fixed column.
+At namelen exactly 24 the padding is zero and the output reads
+`Name:"foo"` with no separator at all.
+
+**c64-polyval has such a symbol: `polyval_precompute_table`, exactly 24.**
+It is exported from all three profile objects, so it is in every archive
+this library ships. Measured here, 29 distinct lengths from our own
+archives, 9 through 42 — every one matches `|24 − namelen|`:
+
+```
+namelen 22 -> "      Name:  \"LIB_POLYVAL_COLD_BYTES\""      2 spaces
+namelen 24 -> "      Name:\"polyval_precompute_table\""      0 spaces  <-- runs together
+namelen 42 -> 18 spaces
+```
+
+A fixed-column model predicts zero padding for *every* length ≥ 24 and is
+refuted by the 42-length row. It also predicts long names are the hazard,
+when the hazard is the single length where the expression is zero.
+
+**Use quote-anchored extraction. Never field-splitting.**
+
+```sh
+od65 --dump-exports x.o | grep -oE '"[A-Za-z_][A-Za-z0-9_]*"' | tr -d '"'   # correct
+od65 --dump-exports x.o | awk '/Name:/{print $2}'                           # WRONG
+```
+
+Verified on the real object: the quote-anchored form returns
+`polyval_precompute_table`; the field-splitting form returns **nothing** for
+it. `\s*` and quote-anchored `sed` are safe; `\s+` and field-splitting are
+not.
+
+**The near-miss, which is the part worth internalising.** v0.11.0's central
+evidence was per-archive export-set *equality* — the same extraction run
+over a `master` build and a patched build, sorted and diffed. Had that used
+field-splitting, `polyval_precompute_table` would have been dropped from
+**both** sides and the sets would still have matched. The check would have
+reported "identical, zero added, zero dropped" while being blind to one
+symbol in every archive.
+
+**A comparison check does not fail loudly when its extractor is broken
+symmetrically — it agrees, wrongly.** That is strictly worse than a check
+that errors, and it is the same family as a sweep that cannot see a class
+and returns silence (§6a) and a green artifact that never examined the
+property it reports on. When the evidence is a diff, verify the *extractor*
+against a known-hard input before trusting the *result*.
+
+**The general rule, from the contract session:** before broadcasting a
+mechanism, vary the parameter across its range. The fixed-column story was
+relayed to three repos on two data points. Two points fit a lot of curves,
+and a symptom reproduced is not a cause established.
+
 ## 7. Refresh one-liner
 
 ```sh
