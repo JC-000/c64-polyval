@@ -25,6 +25,14 @@ The watch **ends** when all five hold at the same time. Not four.
 | **S4** | Every contract **adopter** has a tag conformant with the latest contract tag. | §5 fleet table |
 | **S5** | Every contract **consumer** has a tag that links only conformant adopter tags. | §5 fleet table |
 
+> **S4 is now a TAGGING gate, not a work gate** (checked 2026-09-06). Both
+> remaining member-isolation fixes — c64-ChaCha20-Poly1305 and c64-x25519 —
+> are landed on master and unreleased. The contract itself is frozen clean
+> at v1.2.2 with zero open issues and zero open PRs. What S4 is waiting for
+> is two tags, plus a ruling-deferred item (c64-nist-curves #154). Verify
+> each against the **tag**, never against master: a fix on master is not a
+> release, and a consumer pins tags.
+
 **S4 and S5 are observed, not enforced.** This repository can only PR and tag
 in c64-polyval. For every other repo the watch's output is an issue filed
 against that repo, or a row in §5 saying what it is waiting on. Do not open
@@ -154,8 +162,8 @@ tag, and is **observed**, not asserted on someone else's behalf.
 |---|---|---|---|
 | c64-polyval | adopter | **v0.11.0 (tagged, released)** | verified against v1.2.2: §6.1 member isolation fixed, the withdrawn-§6.1 claims corrected, `lib_version.s` conformant outright under v1.2.1's carve-out |
 | c64-nist-curves | adopter | **v0.13.0** | member isolation fixed (split into `data_reu_wait.s` / `data_mul_stage.s` / `data_shared.s`; their contract#179 is what made the clause normative). **Not fully clean**: their own release notes record `zp_config.o` still failing §6.1, ruled at v1.2.2 as contract#188 and deferred as their #154 — no name, value, archive or ABI change. Counts as a known deferral, not as conformant |
-| c64-x25519 | adopter | v0.13.0 | has `src/precalc_manifest.s`; split landed for v0.14.0 (**untagged** — S4 needs the tag); staging-buffer split still owed |
-| c64-ChaCha20-Poly1305 | adopter | v0.10.0 | **BLOCKED on S4** — their [#108](https://github.com/JC-000/c64-ChaCha20-Poly1305/issues/108) is open and now names **two** members (`lib_manifest.o`, `poly1305_lib.o`), down from three. Our duplicate #110 was closed in its favour |
+| c64-x25519 | adopter | v0.13.0 | **fix landed, UNTAGGED** — `src/precalc_manifest.s` present, split intended for v0.14.0; staging-buffer split still owed. S4 wants the tag |
+| c64-ChaCha20-Poly1305 | adopter | v0.10.0 | **fix landed, UNTAGGED.** #108 closed; verified on their master — `src/lib/precalc_manifest.s` exists and `lib_manifest.s` has zero macro invocations. The fix commits are all after `v0.10.0`, so the shipped tag still carries the defect. S4 wants the tag |
 | c64-mlkem | adopter | v0.5.0 | **clean** — defines `LIB_NO_BARE_EXPORTS = 1` in its enumerating TU per §8.4's zero-consumer carve-out, so nothing displaceable is there to isolate |
 | c64-https | consumer | v0.4.3 | pins nistcurves + x25519 |
 | c64-wireguard | consumer | v1.1.0 | pins x25519 + chacha20poly1305 |
