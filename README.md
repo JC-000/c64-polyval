@@ -123,7 +123,9 @@ python3.13 tools/polyval_reference.py     # Python reference self-test (no VICE)
 ## Library contract
 
 c64-polyval implements [c64-lib-contract](https://github.com/JC-000/c64-lib-contract)
-(currently at SPEC v0.10.6) — see the
+(currently at SPEC **v1.1.0**, which cut the document by roughly seven
+eighths at its v1.0.0 without changing a single symbol, equate, segment
+name or build target) — see the
 [SPEC](https://github.com/JC-000/c64-lib-contract/blob/main/SPEC.md)
 and the
 [adopters table](https://github.com/JC-000/c64-lib-contract/blob/main/adopters.md).
@@ -134,7 +136,7 @@ shared 8×8 quarter-square-multiply surface are covered:
   `LIB_POLYVAL_ABI_VERSION` exported from `src/lib_version.s`
   (SPEC v0.7.0 prefixed form), plus the deprecated bare
   `LIB_VERSION_*` aliases, gated on `LIB_NO_BARE_EXPORTS` until
-  contract v1.0 removes them.
+  a future contract MAJOR removes them.
 - §2 — every claimed zero-page slot declared in `src/zp_config.s`
   under the `polyval_*` prefix.
 - §3 — N/A; c64-polyval makes no REU claims
@@ -150,22 +152,33 @@ shared 8×8 quarter-square-multiply surface are covered:
 - §5 — aggregate manifest equates (`LIB_POLYVAL_ZP_USAGE_BYTES`,
   `LIB_POLYVAL_RESIDENT_BYTES`, `LIB_POLYVAL_COLD_BYTES`,
   `LIB_POLYVAL_REU_BANKS_USED`) in `src/lib_manifest.s`. The two
-  byte-count equates are per-archive and safe-direction per SPEC
-  v0.10.0 §6.6: measured for each (profile × variant) archive and
-  rounded UP to the next 256-byte boundary, so a consumer's
-  `declared ≤ budget` assert implies `actual ≤ budget` — see
-  `API.md` §9.4 for the per-archive value table. §6.7 (declared
-  non-segment reservations) is N/A: every buffer is
-  segment-resident, no placement equate reserves address space
-  invisible to ld65 — see `API.md` §9.5.
+  byte-count equates are per-archive and safe-direction: measured for
+  each (profile × variant) archive and rounded UP to the next 256-byte
+  boundary, so a consumer's `declared ≤ budget` assert implies
+  `actual ≤ budget` — see `API.md` §9.4 for the per-archive value
+  table. §5 also carries the **published input bound**
+  `LIB_POLYVAL_GCMSIV_MAX_PT_LEN = 64`, the ceiling above which
+  `gcmsiv_encrypt` / `gcmsiv_decrypt` reject with `A=1` / `Z=0`;
+  consumers should assert against it rather than hard-code 64. (The
+  footprint rule was SPEC §6.6 and the bound rule was §14.2 before the
+  v1.0.0 cut; both now live in §5 itself. §6.7, declared non-segment
+  reservations, was retired outright and was N/A here anyway — every
+  buffer is segment-resident.)
 - §6 — `make lib`, `make lib-polyval-{long,short,compact}`,
   `make lib-polyval-gcmsiv` and
   `make lib-polyval-gcmsiv-{short,compact}` produce
   ar65 archive bundles under
-  `build/lib/` (canonical `polyval[-<variant>].a` basenames). Every
-  documented profile × variant pair has its own target, per SPEC §6.3
-  as clarified in v0.10.4/v0.10.5 — the profile selects an archived
-  object, so it cannot ride a §6.2 define. Consumer
+  `build/lib/` (canonical `polyval[-<variant>].a` basenames).
+  Per §6.1 every one of those targets also stages the two non-archive
+  deliverables: `build/lib/polyval.inc` (the consumer-facing header)
+  and `build/lib/polyval-example.cfg` (an example ld65 config carrying
+  the §4 placement declarations annotated with the consequence of
+  dropping each), so a consumer never has to read `src/` to link.
+  `make consumer-check-shipped` proves those three files are sufficient
+  on their own, by assembling a stub against them in an empty directory
+  with no `-I src`. Every documented profile × variant pair has its own
+  target — the profile selects an archived object, so it cannot ride a
+  §6.2 define. Consumer
   defines reach every build per §6.2 via
   `CONTRACT_DEFINES` / `CONTRACT_ZP_DEFINES`, e.g.
   `make lib CONTRACT_ZP_DEFINES='-D polyval_acc=0x40'` — see
@@ -173,7 +186,7 @@ shared 8×8 quarter-square-multiply surface are covered:
 - §8 (shared primitives, §8.1–§8.3) — N/A; GF(2^128) carry-less
   multiplication shares no shape with the 8×8 quarter-square-multiply
   primitive the elliptic-curve / ChaCha20 libraries converged on.
-- §8.0/§8.4 — precalculated-table enumeration (required of every
+- §8.4 — precalc-table enumeration (required of every
   adopter regardless of §8.1–§8.3 applicability): `src/precalc_table.inc`
   + `LIB_PRECALC_TABLE` invocations in `src/lib_manifest.s` with the
   v0.7.0 `"POLYVAL"` prefix argument, documented in

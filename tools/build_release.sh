@@ -149,7 +149,16 @@ cp "$NOTES_REL" "$STAGE_ROOT/$NOTES_REL"
 cp docs/precalc-tables.md "$STAGE_ROOT/docs/precalc-tables.md"
 
 # --- src/ : *.s, *.inc, linker configs, include/ ------------------------
-for f in src/*.s src/*.inc src/c64.cfg src/lib_only.cfg; do
+# `src/*.cfg` is a GLOB, not the enumeration `src/c64.cfg src/lib_only.cfg`
+# it replaced. That enumeration was a silent-omission trap of exactly the
+# kind CLAUDE.md already flags for docs/*.md: adding src/polyval-example.cfg
+# (the c64-lib-contract §6.1 consumer-facing example, issue #79) left it out
+# of the tarball with no diagnostic from this script, from `make dist`, or
+# from the reproducibility re-run -- the tarball is simply, quietly, missing
+# a file a consumer was told to expect. Globbing the extension the way the
+# two lines above already glob *.s and *.inc removes the trap instead of
+# adding one more name to forget.
+for f in src/*.s src/*.inc src/*.cfg; do
   [[ -e "$f" ]] || continue
   cp "$f" "$STAGE_ROOT/$f"
 done

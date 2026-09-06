@@ -35,6 +35,14 @@
 #   consumer-check       assemble + link test/consumer_stub.s against the
 #                        library to prove the public ABI is callable from a
 #                        clean consumer. Output build/consumer_stub.prg.
+#   consumer-check-shipped
+#                        SPEC §6.1 shipped-surface guard (issue #79): copy
+#                        ONLY build/lib/{polyval.a,polyval.inc,
+#                        polyval-example.cfg} + test/consumer_stub_shipped.s
+#                        into an empty scratch dir and assemble there with
+#                        no -I src, proving the shipped set is a sufficient
+#                        consumer surface. The only check that can see an
+#                        incomplete one.
 #   consumer-check-noaes link test/consumer_stub_noaes.s -- a consumer that
 #                        owns its own AES/GCM-SIV -- against polyval-long.a,
 #                        polyval-short.a and polyval-compact.a. Guards issue
@@ -320,7 +328,7 @@ endif
 .PHONY: all lib lib-verify lib-polyval-long lib-polyval-short \
         lib-polyval-compact lib-polyval-gcmsiv lib-polyval-gcmsiv-short \
         lib-polyval-gcmsiv-compact consumer-check \
-        consumer-check-noaes run clean dist
+        consumer-check-noaes consumer-check-shipped run clean dist
 .DEFAULT_GOAL := all
 
 all: $(PRG) $(LABELS)
@@ -447,6 +455,52 @@ $(LIB_PRG) $(LIB_LBL_RAW): $(LIB_OBJECTS) $(BUILD_DIR)/lib_main.o $(LIB_CFG) | $
 $(LIB_LABELS): $(LIB_LBL_RAW) $(TOOLS_DIR)/vice_label_shim.py
 	$(PYTHON) $(TOOLS_DIR)/vice_label_shim.py $(LIB_LBL_RAW) $(LIB_LABELS)
 
+# --- Consumer-facing shipped surface (c64-lib-contract SPEC §6.1) ---------
+# §6.1: "Every library MUST provide `make lib`, producing
+# build/lib/<shortname>.a PLUS the consumer-facing `.inc` header and an
+# example `.cfg`." The archive alone is not the deliverable -- a consumer
+# that fetches only the .a has no declaration of the public symbols and no
+# statement of the load-bearing segment attributes §4 obliges us to declare,
+# so it would have to read our src/ to link us, which is the mid-build
+# source-poking §6.1 exists to forbid.
+#
+# Staged by copy rather than generated: both files are hand-maintained
+# sources that a consumer copies into their own tree, and a generator would
+# put a second, drifting description of the API between src/ and consumers.
+#
+# The header ships under the §6.1 canonical <shortname> basename rather than
+# its src/ working name. The cfg is a PURPOSE-BUILT consumer template, not a
+# copy of either config this repo builds itself with:
+#
+#   c64.cfg       full demo app at $0801 -- carries app-layer segments a
+#                 consumer does not have.
+#   lib_only.cfg  library-only verification link at $4000 -- carries a
+#                 MANDATORY LOADADDR segment and LIB_POLYVAL_VERIFY_CODE,
+#                 both scaffolding for `make lib-verify`'s stub.
+#
+# Shipping lib_only.cfg was tried and rejected: a consumer linking their own
+# stub against polyval.a with it gets `ld65: Warning: Segment 'LOADADDR'
+# does not exist`, because only our verify stub emits that segment. Handing
+# a consumer a file whose own first line says it is for our internal
+# verification build, and which warns on their very first link, is not what
+# §6.1 means by "an example .cfg". src/polyval-example.cfg is maintained as
+# the consumer-facing one; `make consumer-check-shipped` links against it so
+# it cannot rot. These are §6.5 name surface from this release on.
+#
+# Kept flat in $(LIB_DIR) rather than a cfg/ subdirectory: a nested output
+# directory needs its own order-only prerequisite, and naming only the
+# parent is the c64-x25519 defect where `make lib` failed on a warm tree
+# whose subdirectory had been cleaned away (their Makefile:242).
+LIB_INC     = $(LIB_DIR)/polyval.inc
+LIB_EXAMPLE_CFG = $(LIB_DIR)/polyval-example.cfg
+LIB_SHIPPED = $(LIB_INC) $(LIB_EXAMPLE_CFG)
+
+$(LIB_INC): $(SRC_DIR)/polyval_api.inc | $(LIB_DIR)
+	cp $< $@
+
+$(LIB_EXAMPLE_CFG): $(SRC_DIR)/polyval-example.cfg | $(LIB_DIR)
+	cp $< $@
+
 # --- Library archives (c64-lib-contract SPEC §6) --------------------------
 # Each archive bundles one consumer use case as a single ar65 `.a` file
 # under build/lib/. Consumers fetch one archive and link it directly; no
@@ -471,11 +525,11 @@ $(LIB_LABELS): $(LIB_LBL_RAW) $(TOOLS_DIR)/vice_label_shim.py
 lib:                $(LIB_DIR)/polyval.a
 lib-polyval-gcmsiv: $(LIB_DIR)/polyval-gcmsiv.a
 
-$(LIB_DIR)/polyval.a: $(LIB_AEAD_OBJS) | $(LIB_DIR)
+$(LIB_DIR)/polyval.a: $(LIB_AEAD_OBJS) | $(LIB_DIR) $(LIB_SHIPPED)
 	rm -f $@
 	$(AR65) a $@ $(LIB_AEAD_OBJS)
 
-$(LIB_DIR)/polyval-gcmsiv.a: $(LIB_AEAD_OBJS) | $(LIB_DIR)
+$(LIB_DIR)/polyval-gcmsiv.a: $(LIB_AEAD_OBJS) | $(LIB_DIR) $(LIB_SHIPPED)
 	rm -f $@
 	$(AR65) a $@ $(LIB_AEAD_OBJS)
 
@@ -516,25 +570,55 @@ lib-polyval-gcmsiv-compact:
 	$(MAKE) clean
 	$(MAKE) POLYVAL_PROFILE=compact $(LIB_DIR)/polyval-gcmsiv-compact.a
 
-$(LIB_DIR)/polyval-long.a: $(LIB_POLYVAL_LONG_OBJS) | $(LIB_DIR)
+$(LIB_DIR)/polyval-long.a: $(LIB_POLYVAL_LONG_OBJS) | $(LIB_DIR) $(LIB_SHIPPED)
 	rm -f $@
 	$(AR65) a $@ $(LIB_POLYVAL_LONG_OBJS)
 
-$(LIB_DIR)/polyval-short.a: $(LIB_POLYVAL_SHORT_OBJS) | $(LIB_DIR)
+$(LIB_DIR)/polyval-short.a: $(LIB_POLYVAL_SHORT_OBJS) | $(LIB_DIR) $(LIB_SHIPPED)
 	rm -f $@
 	$(AR65) a $@ $(LIB_POLYVAL_SHORT_OBJS)
 
-$(LIB_DIR)/polyval-compact.a: $(LIB_POLYVAL_COMPACT_OBJS) | $(LIB_DIR)
+$(LIB_DIR)/polyval-compact.a: $(LIB_POLYVAL_COMPACT_OBJS) | $(LIB_DIR) $(LIB_SHIPPED)
 	rm -f $@
 	$(AR65) a $@ $(LIB_POLYVAL_COMPACT_OBJS)
 
-$(LIB_DIR)/polyval-gcmsiv-short.a: $(LIB_AEAD_OBJS) | $(LIB_DIR)
+$(LIB_DIR)/polyval-gcmsiv-short.a: $(LIB_AEAD_OBJS) | $(LIB_DIR) $(LIB_SHIPPED)
 	rm -f $@
 	$(AR65) a $@ $(LIB_AEAD_OBJS)
 
-$(LIB_DIR)/polyval-gcmsiv-compact.a: $(LIB_AEAD_OBJS) | $(LIB_DIR)
+$(LIB_DIR)/polyval-gcmsiv-compact.a: $(LIB_AEAD_OBJS) | $(LIB_DIR) $(LIB_SHIPPED)
 	rm -f $@
 	$(AR65) a $@ $(LIB_AEAD_OBJS)
+
+# --- Shipped-surface guard (SPEC §6.1; issue #79) --------------------------
+# Proves the three files `make lib` puts in build/lib/ are a COMPLETE and
+# SUFFICIENT consumer surface, by assembling and linking a stub that has
+# access to nothing else.
+#
+# The scratch directory is the mechanism, not decoration. Every other build
+# in this repo runs with `-I src` on the ca65 command line, so a header that
+# quietly depends on another src/ file assembles fine for us and fails only
+# for a consumer who never received that file. This recipe copies exactly
+# polyval.a + polyval.inc + polyval-example.cfg plus the stub into an empty
+# directory and assembles there with NO -I at all: a reachback into src/ is
+# then a hard "Cannot open include file" rather than an invisible pass.
+#
+# It depends on $(LIB_DIR)/polyval.a, so the shipped .inc and .cfg are staged
+# by that rule's order-only prerequisites before this runs.
+CHECK_SHIPPED_DIR = $(BUILD_DIR)/shipped-check
+
+consumer-check-shipped: $(LIB_DIR)/polyval.a
+	rm -rf $(CHECK_SHIPPED_DIR)
+	mkdir -p $(CHECK_SHIPPED_DIR)
+	cp $(LIB_DIR)/polyval.a $(LIB_INC) $(LIB_EXAMPLE_CFG) $(CHECK_SHIPPED_DIR)/
+	cp $(TEST_DIR)/consumer_stub_shipped.s $(CHECK_SHIPPED_DIR)/
+	cd $(CHECK_SHIPPED_DIR) && \
+	    $(CA65) -o consumer_stub_shipped.o consumer_stub_shipped.s && \
+	    $(LD65) -C polyval-example.cfg -o consumer_stub_shipped.prg \
+	        consumer_stub_shipped.o polyval.a
+	@test -s $(CHECK_SHIPPED_DIR)/consumer_stub_shipped.prg
+	@echo "consumer-check-shipped: polyval.a + polyval.inc + polyval-example.cfg" \
+	      "are a sufficient consumer surface (no src/ on the include path)"
 
 # --- Consumer-stub smoke check --------------------------------------------
 # Assembles test/consumer_stub.s against the public .inc surface only and

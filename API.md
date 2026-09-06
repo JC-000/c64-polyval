@@ -665,98 +665,58 @@ use v0.2.0's source-tarball + `src/exports.inc` integration path
 instead. The v0.1.0 tree is kept only for reproducibility of the
 prior release.
 
-## 9. Library contract (c64-lib-contract v0.11.1)
+## 9. Library contract (c64-lib-contract v1.1.0)
 
-As of v0.3.0, c64-polyval implements
-[c64-lib-contract](https://github.com/JC-000/c64-lib-contract)
-SPEC v0.1.0 §1–§6 in full. The contract pins a small set of
-cross-library symbols every adopter library exports so a downstream
-consumer (c64-wireguard, c64-https, …) can size-check, version-gate,
-and collision-check its dependencies at assemble time. Six SPEC
-sections apply to c64-polyval; §3 (REU bank claims) is N/A because
-the library makes no 17xx REU claims.
+c64-polyval implements the
+[c64-lib-contract](https://github.com/JC-000/c64-lib-contract), a small
+cross-library ABI spec every sibling library in the fleet exports against
+so a downstream consumer (c64-aes256-ecdsa, c64-wireguard, c64-https, …)
+can version-gate, size-check and collision-check its dependencies at
+assemble and link time. Adoption began at c64-polyval v0.3.0; this
+section describes the surface as it stands today, against **SPEC
+v1.1.0**.
 
-The contract has since advanced to v0.9.1 (a PATCH re-landing three
-review amendments the v0.9.0 merge missed and folding in adopter
-defect reports; its restated §6.2 ZP-scoping rule — slot defines
-reach every TU that defines the slot, never a TU that `.importzp`s
-it — cites this library's PR #34 as the measured evidence for the
-defining-TU direction). c64-polyval v0.5.0 adopts
-the v0.7.0 surface: library-prefixed §1 version exports and §8.4
-precalc-table equates (`LIB_POLYVAL_*` forms alongside the deprecated
-bare names, the latter gated on `LIB_NO_BARE_EXPORTS` until contract
-v1.0 removes them) — see §9.1 and §9.6. Contract v0.7.1–v0.7.3 are
-doc-only upstream (flag spelling, `od65`-vs-archive audit guidance,
-§8 bit-constant export prohibition — the last is N/A here since no
-`LIB_POLYVAL_SHARED_PRIMITIVES` mask is emitted); v0.7.4 pins the
-macro's byte-valued `_REGION`/`_SHARED` exports `: abs` so consumer
-imports (which default to absolute) link without address-size
-warnings, adopted here via the verbatim re-copy (issue #27). §7
-(Semver expectations) is a doc-only renumbering with no export
-surface — no action needed. Contract v0.7.5 is doc-only: it redefines
-`LIB_<X>_ABI_VERSION` as a monotonic generation counter for the
-exported surface — starting at 1, bumped on any breaking export
-change, independent of semver MAJOR — which is what c64-polyval
-already ships (`LIB_POLYVAL_ABI_VERSION = 1` against MAJOR 0, §9.1);
-no action needed. Contract v0.8.0 extends §4 with mandatory
-declarations of load-bearing segment-placement attributes, adopted
-here as comments on the segment lines of `src/c64.cfg` /
-`src/lib_only.cfg` — see §9.8. Contract v0.8.1 is doc-only: it fixes
-the SPEC's own §1 consumer version-guard snippets (issues #73/#74),
-canonicalizing the `.assert`/`lderror` form this library's §9.7
-example and `src/lib_version.s` comment already use. Contract v0.8.2
-(doc-only) adds the spec-tagging policy — every spec version is now
-tagged (issue #71). Contract v0.8.3 (doc-only) corrects §4's own
-risk table after adopter reports (contract #78; this library's §9.8
-measurements are part of that record): both ld65 diagnostics are
-conditional on library shape, not on the violation, and the common
-shapes are the silent ones. Contract v0.8.4 is doc-only: it states
-that `ZEROPAGE` is exempt from §4's prefixed-segment rule because §2
-owns zero-page allocation — matching this library's existing
-`.segment "ZEROPAGE"` usage; no action needed. Contract v0.8.5 adds
-export-discipline rulings to §8.1/§8.2 (the shared-primitive
-consumer-input equates MUST NOT be exported) — N/A here, since
-c64-polyval consumes no §8.1–§8.3 primitive and emits none of those
-equates. Contract v0.8.6 makes the `$`-hex quoting rule normative for
-every `-D` snippet (make-mediated interfaces pass `$`-free `0x`
-values) — already adopted here via the snippet fixes in PR #33.
-Contract v0.9.0 rewrites §6 into the six-clause build-and-consume
-chapter (obligations attach to *archives*, not "the library") and
-adds the §2 ZP prefix registry, in which **`polyval_` and `pv_` are
-registered to this library**; adopted in §9.2 and §9.5 below —
-`CONTRACT_DEFINES` / `CONTRACT_ZP_DEFINES` forwarding is the one
-code change, the rest of the chapter is verified conformant as-is.
-Contract v0.9.2 is doc-only upstream (a §2 registry row for
-`chacha20poly1305_`, two §8.2 clarifications, and an
-archive-inspection tooling note) — every item was already satisfied
-or N/A here; no action needed. Contract v0.10.1–v0.10.3 are doc-only:
-v0.10.1 is the #76 phase-4 section reorder, resolved with every
-section number unchanged (none of this library's §-citations moved);
-v0.10.2 fixes three SPEC snippet defects (this library audited clean
-for both broken forms — its guards already use `.assert`/`lderror`
-and it carries no `.if ::` selector gates); v0.10.3 promotes the
-precalc catch-loop to a real `### 8.4` heading, making the fleet's
-long-standing §8.4 citations — including this library's —
-retroactively correct, with the canonical `precalc_table.inc`
-deliberately unchanged (re-verified byte-identical here,
-SHA256 `feb98890…`). Contract v0.10.0 is phase 2 of the
-contract-#76 restructuring: **§6.6 lands** (consumer footprint
-asserts against the per-archive §6.4 manifest — the library-side
-obligations are safe-direction round-up values and per-(profile ×
-variant) release-note deltas) and **§6.7 is added** (declared
-non-segment reservations). §6.6 is adopted in §9.4/§9.5 below —
-`LIB_POLYVAL_RESIDENT_BYTES` / `_COLD_BYTES` are now measured per
-archive and rounded UP to the next 256-byte boundary, replacing the
-pre-§6.6 rounded-DOWN, profile-only values; §6.7 is N/A (§9.5),
-since every c64-polyval buffer is segment-resident and the library
-places no §8.x equate-reserved region.
-§8 (Shared primitives: `sqtab`, `reu_mul`, `ct_mul_8x8`) covers the
-8×8 quarter-square-multiply primitive shared by the elliptic-curve
-and ChaCha20 field-arithmetic libraries; GF(2^128) carry-less
-multiplication has no equivalent shape, so §8.1–§8.3 are N/A and
-`LIB_POLYVAL_SHARED_PRIMITIVES` is correctly not exported. §8.0's
-precalculated-table enumeration duty *does* apply regardless of
-§8.1–§8.3 applicability — see §9.6 below, added in v0.4.0.
+**The contract was cut by roughly seven eighths at its v1.0.0** (2026-09-03).
+No symbol, equate, bit value, segment name or build target changed in
+that release — what went was rationale, incident history and process
+regulation, under a stated two-prong scope rule: a clause belongs in the
+contract only if it governs a name, value or placement that two
+independently-built artifacts must agree on, **and** a violation is
+invisible from inside any single repository's own build. Sections §9,
+§12, §13, §14, §15 and sub-clauses §6.3, §6.6 and §6.7 were retired;
+surviving sections kept their original numbers.
+
+Two of those retirements touched obligations c64-polyval had
+implemented, and in both cases the obligation survives in a different
+place rather than lapsing:
+
+| Retired | Where it lives now for this library |
+|---|---|
+| **§6.6** (consumer footprint asserts) | §5 — `LIB_POLYVAL_RESIDENT_BYTES` / `_COLD_BYTES` are still safe-direction round-up values and still a pair. §9.4. |
+| **§6.3** (every contemplated configuration is reachable) | Nothing in the contract. The `PIN_` parse-time goal guard and the `build/.ca65flags` stamp are **kept as local engineering**, not as conformance — see §9.5. |
+| **§14** (entry-point termination / documented domain) | §5's one crossing sentence — publish a real input bound as a referenceable symbol. Discharged by `LIB_POLYVAL_GCMSIV_MAX_PT_LEN`; §9.4. |
+| **§6.7**, **§9**, **§12**, **§13**, **§15** | N/A to this library then and now. |
+
+Citations to a retired section elsewhere in this repository — in
+`CHANGELOG.md`, in `docs/RELEASE_NOTES_v0.*.md`, and in source comments —
+are deliberately **left as written**. Each is a claim about the tagged
+spec revision it was made against, it resolves permanently at
+`git show v0.17.1:SPEC.md`, and the contract's own `RETIRED.md` asks
+adopters not to rewrite them.
+
+Which sections apply here:
+
+| Section | Status |
+|---|---|
+| §1 version identification | Implemented — §9.1 |
+| §2 zero page | Implemented — §9.2 |
+| §3 REU layout | **N/A** — c64-polyval makes no 17xx REU claims (§9.3) |
+| §4 segments | Implemented, including the load-bearing cfg attribute declarations — §9.8 |
+| §5 aggregate manifest + published bound | Implemented — §9.4 |
+| §6 build and consume | Implemented — §9.5 |
+| §7 semver + ABI counter | `LIB_POLYVAL_ABI_VERSION = 1` — §9.1 |
+| §8.1–§8.3 shared primitives | **N/A** — GF(2^128) carry-less multiplication has no shared shape with the 8×8 quarter-square-multiply primitive the elliptic-curve and ChaCha20 libraries converged on, so `LIB_POLYVAL_SHARED_PRIMITIVES` is correctly not exported |
+| §8.4 precalc-table enumeration | Implemented — applies regardless of §8.1–§8.3 applicability — §9.6 |
 
 ### 9.1 §1 — Version identification (`src/lib_version.s`)
 
@@ -766,13 +726,14 @@ v0.7.0:
 | Symbol (prefixed, permanent) | Deprecated bare alias | Value | Meaning |
 |---|---|---:|---|
 | `LIB_POLYVAL_VERSION_MAJOR` | `LIB_VERSION_MAJOR` | `0` | Semver major. |
-| `LIB_POLYVAL_VERSION_MINOR` | `LIB_VERSION_MINOR` | `9` | Semver minor. |
+| `LIB_POLYVAL_VERSION_MINOR` | `LIB_VERSION_MINOR` | `10` | Semver minor. |
 | `LIB_POLYVAL_VERSION_PATCH` | `LIB_VERSION_PATCH` | `0` | Semver patch. |
-| `LIB_POLYVAL_ABI_VERSION`   | `LIB_ABI_VERSION`   | `1` | ABI compatibility level. Coarser than MINOR. |
+| `LIB_POLYVAL_ABI_VERSION`   | `LIB_ABI_VERSION`   | `1` | Generation counter for the exported surface (§7). Independent of MAJOR. |
 
 The bare names are identical across every contract adopter, so a
 consumer linking two libraries cannot import both manifests
-(contract #43); they are deprecated, removed at contract v1.0, and
+(contract #43); they are deprecated, removed at a future contract
+MAJOR, and
 gated on `LIB_NO_BARE_EXPORTS` (`ca65 -D LIB_NO_BARE_EXPORTS=1`) so a
 composing consumer can suppress them build-wide. New consumers should
 import the `LIB_POLYVAL_*` form. The bare aliases are defined in
@@ -780,6 +741,47 @@ terms of the prefixed literals, so the two forms cannot drift.
 
 Consumers `.import` whichever subset they need and gate compilation
 on them — see the worked example in §9.7.
+
+**§7 — when `LIB_POLYVAL_ABI_VERSION` moves.** Contract v1.1.0 added the
+rule that the counter turns on *what the code does*, not on whether the
+export list changed: it moves when a consumer conforming to the
+previously documented contract can be broken — typically when an entry
+point's return set gains a value, making exhaustive handling silently
+non-exhaustive — and it holds when previously undocumented behaviour
+becomes documented, or when documentation is corrected over unchanged
+code.
+
+The counter **stays at 1 through v0.10.0**. The one change since v0.8.0
+that could have moved it is the v0.9.0 length-rejection return added to
+`gcmsiv_encrypt` and `gcmsiv_decrypt` (`A=1` / `Z=0` above
+`gcmsiv_max_pt_len`, issue #70). It does not move the counter, for a
+different reason per entry point:
+
+- **`gcmsiv_encrypt`** documented `A, X, Y undefined` on exit at v0.8.0 —
+  no return convention at all, so a conforming consumer could not have
+  been reading `A`. That is §7's "previously undocumented behaviour
+  becomes documented" limb.
+- **`gcmsiv_decrypt`** did carry an exhaustive documented return set
+  (`A=0` valid / `A=1` invalid, used as `jsr` then `beq`), so the
+  non-exhaustiveness test is live — but the reject path is written to be
+  indistinguishable from a tag failure on **every documented
+  post-condition**: `gcmsiv_dec_buf` wiped, `gcmsiv_tag_valid` cleared,
+  `gcmsiv_tag` left as received. The return set did not gain a value and
+  a v0.8.0-conforming consumer branching on `Z` handles the new case
+  correctly by construction.
+
+The second bullet is a property of `@reject_len` in `src/gcm_siv.s`, not
+a general fact about domain guards: **if that path is ever made
+distinguishable from a tag failure, the counter moves.** This reading was
+put to the contract for arbitration
+([c64-lib-contract#180](https://github.com/JC-000/c64-lib-contract/issues/180)),
+because contract v1.1.0's fleet position adjudicates three sibling
+libraries by name and does not mention c64-polyval, which shipped the
+same shape in the same week.
+
+Additive changes do not move the counter either: `LIB_POLYVAL_GCMSIV_MAX_PT_LEN`
+(§9.4) and the two v0.10.0 shipped files (§9.5) are new surface, which
+§7 makes MINOR.
 
 ### 9.2 §2 — Zero-page contract (`src/zp_config.s`)
 
@@ -852,7 +854,8 @@ guarantees above.
 
 ### 9.4 §5 — Aggregate manifest (`src/lib_manifest.s`)
 
-Four absolute equates for assemble-time size and collision asserts.
+Four absolute equates for assemble-time size and collision asserts,
+plus one published input bound.
 `ZP_USAGE_BYTES` and `REU_BANKS_USED` are configuration-invariant:
 
 | Symbol | Value | Meaning |
@@ -860,8 +863,62 @@ Four absolute equates for assemble-time size and collision asserts.
 | `LIB_POLYVAL_ZP_USAGE_BYTES` | 45 | Total ZP bytes claimed (§9.2). |
 | `LIB_POLYVAL_REU_BANKS_USED` | 0 | Bitmask of REU banks; always 0. |
 
+**Published input bound (new in v0.10.0).** §5 says that where a
+library's real input restriction is a bound a consumer must respect,
+it SHOULD publish that bound *here* as a symbol the consumer can
+reference, and that a consumer SHOULD reference the published symbol
+rather than re-derive the value. c64-polyval has exactly one such
+bound, and now exports it:
+
+| Symbol | Value | Meaning |
+|---|---:|---|
+| `LIB_POLYVAL_GCMSIV_MAX_PT_LEN` | 64 | Maximum `gcmsiv_pt_len`. Above it, `gcmsiv_encrypt` / `gcmsiv_decrypt` reject with `A=1` / `Z=0` (§2.7, §6). |
+
+Before v0.10.0 the bound existed only as `gcmsiv_max_pt_len` in
+`src/constants_lib.inc` — reachable by a consumer who *vendors* our
+source, but invisible to one who does what §6.1 tells them to do and
+links the shipped archive. Such a consumer had to hard-code `64` from
+prose, which is the re-derivation §5 asks them to avoid.
+
+It is the one equate in `src/lib_manifest.s` that is **not**
+`.ifndef`-guarded, deliberately. The other four are consumer-overridable
+descriptions; this one is derived — `gcm_siv.s` compares against
+`gcmsiv_max_pt_len`, and nothing a consumer defines can move the
+`cmp #gcmsiv_max_pt_len+1` already assembled into the archive. A guard
+would let `-D LIB_POLYVAL_GCMSIV_MAX_PT_LEN=128` assemble quietly and
+export a ceiling twice the enforced one; unguarded, that `-D` fails
+loudly with `Symbol already defined`, which is the correct answer and
+is what §3's guard-vs-bare-import rule prescribes for a derived equate.
+It is absent from `polyval-long.a` / `-short.a` / `-compact.a`, which
+ship no `gcm_siv.o` and so have no entry point for the bound to
+describe (§6.4).
+
+Consumer use:
+
+```asm
+.import LIB_POLYVAL_GCMSIV_MAX_PT_LEN
+.assert MY_MAX_MESSAGE <= LIB_POLYVAL_GCMSIV_MAX_PT_LEN, lderror, "message longer than c64-polyval accepts"
+```
+
+**Using it as an immediate needs `#<`.** An `.import`ed symbol has no
+value until link, so ca65 cannot prove it fits in a byte and a bare
+`lda #LIB_POLYVAL_GCMSIV_MAX_PT_LEN` fails to assemble with
+`Range error`. Write:
+
+```asm
+lda #<LIB_POLYVAL_GCMSIV_MAX_PT_LEN
+sta gcmsiv_pt_len
+```
+
+This is the first thing a consumer hits, and it is not specific to this
+symbol — it applies to every imported scalar in §5. `.assert` is
+unaffected, because ld65 evaluates it after the value is known.
+
 `RESIDENT_BYTES` and `COLD_BYTES` are **safe-direction** per SPEC
-v0.10.0 §6.6: each declared value is ≥ the measured code+rodata
+v0.10.0 §6.6 — retired at contract v1.0.0, with the obligation
+restated directly in §5 ("Footprint equates MUST be safe-direction:
+round up, never down"), so the rule below is current, only its
+section number moved. Each declared value is ≥ the measured code+rodata
 segment sum of the archive it ships in, rounded UP to the next
 256-byte boundary (the fleet convention — under one page of headroom
 absorbs incidental growth, and the equate moving is itself the
@@ -873,9 +930,13 @@ configuration axes — `POLYVAL_PROFILE` *and* `LIB_POLYVAL_NO_AES` —
 so each archive's manifest describes that archive (SPEC §6.4/§6.6;
 previously they were profile-gated only, and the POLYVAL-only
 archives over-claimed ~2.3 KB of AES+GCM-SIV code they do not
-contain). One row per shipped archive, per §6.6 obligation 2 — a
-value repeated across two archives of the same configuration still
-gets its own row. Values measured 2026-08-15 (LONG / SHORT) and
+contain). One row per shipped archive — a value repeated across two
+archives of the same configuration still gets its own row. That
+row-per-archive discipline came from §6.6 obligation 2 and is
+**retained as local practice** now that §6.6 is retired: one tag
+carries one footprint pair per archive, so merging two archives into
+a shared row makes the count unverifiable against the
+`lib-polyval-*` target list. Values measured 2026-08-15 (LONG / SHORT) and
 2026-08-23 (COMPACT), ca65/ld65 V2.18; AEAD rows re-measured
 2026-08-29 after the issue #69 / #70 fixes added 42 B to
 `LIB_POLYVAL_GCMSIV_CODE` (no declared value moved; the POLYVAL-only
@@ -893,8 +954,8 @@ archives do not ship `gcm_siv.o`):
 
 `COLD_BYTES` (boot-only init paths: `aes_key_expansion` where AES
 ships, plus `polyval_precompute_table`) is a subset carve-out of the
-`RESIDENT_BYTES` load image, reclaimable after init — the §6.6 pair
-semantics: budget RESIDENT for the image, get COLD back after init.
+`RESIDENT_BYTES` load image, reclaimable after init — the pair
+semantics §5 now states directly: budget RESIDENT for the image, get COLD back after init.
 COMPACT places its cold code last in `LIB_POLYVAL_COMPACT_CODE` on
 purpose, so the overlayable region runs to the segment end and is
 contiguous; it is also the configuration where the `LIB_POLYVAL_NO_AES`
@@ -908,7 +969,12 @@ per-configuration measurement methodology.
 
 SPEC v0.9.0 rewrote §6 from a single archive-targets clause into a
 six-clause chapter whose obligations attach to archives, not "the
-library". c64-polyval's status per clause:
+library". Contract v1.0.0 then retired §6.3, §6.6 and §6.7, leaving
+**four** live clauses — §6.1, §6.2, §6.4 and §6.5. c64-polyval's
+status per surviving clause follows; the three retired clauses are
+covered at the end, because this library implemented all three and
+what happened to each is worth stating rather than leaving as a gap
+in the numbering.
 
 **§6.1 — Targets and artifact names.** Seven ar65 archive Make
 targets ship the library as a single `.a` file consumers can link
@@ -923,6 +989,48 @@ directly without rebuilding `.o` files:
 | `make lib-polyval-gcmsiv` | `build/lib/polyval-gcmsiv.a` | Full AEAD bundle, **LONG** profile (currently byte-identical to `polyval.a`). |
 | `make lib-polyval-gcmsiv-short` | `build/lib/polyval-gcmsiv-short.a` | Full AEAD bundle, **SHORT** profile — the RFC 8452 per-message-`H` configuration. |
 | `make lib-polyval-gcmsiv-compact` | `build/lib/polyval-gcmsiv-compact.a` | Full AEAD bundle, **COMPACT** profile. |
+
+**Every one of those targets also stages the two non-archive
+deliverables §6.1 requires** — "producing `build/lib/<shortname>.a`
+**plus the consumer-facing `.inc` header and an example `.cfg`**":
+
+| Shipped file | Copied from | What it is |
+|---|---|---|
+| `build/lib/polyval.inc` | `src/polyval_api.inc` | The consumer-facing header: public entry points, calling conventions, buffer surface and the profile-selector equates. `.include` it; it emits no code and no memory. |
+| `build/lib/polyval-example.cfg` | `src/polyval-example.cfg` | The example ld65 config: a `$0801` consumer memory map plus the full `SEGMENTS{}` block mapping every `LIB_POLYVAL_*` segment, carrying the §4 load-bearing attribute declarations (`type = ro` on the AES rodata, `align = $100` on the three table segments) annotated in place with the consequence of dropping each. Ends with the recommended §1/§5 link-time asserts. |
+
+Shipping them is not decorative. A consumer who fetches only the `.a`
+has no declaration of the public symbols and no statement of the
+placement attributes §4 obliges this library to declare — both of
+whose omissions are silent (§9.8) — so they would have to read `src/`
+to link, which is the mid-build source-poking §6.1 exists to forbid.
+`build/lib/` was archive-only through v0.9.0; the two files land there
+from v0.10.0 (they are §6.5 name surface from that release on).
+
+**The example cfg is purpose-built, not one of the two configs this
+repo builds itself with.** `src/c64.cfg` carries app-layer segments a
+consumer does not have; `src/lib_only.cfg` carries `make lib-verify`
+scaffolding — a mandatory `LOADADDR` segment and `LIB_POLYVAL_VERIFY_CODE`
+— that only our own stub emits. Shipping `lib_only.cfg` was tried and
+rejected: a consumer linking their own code against `polyval.a` with it
+gets `ld65: Warning: Segment 'LOADADDR' does not exist` on their first
+link, and the file's own opening line tells them it is for our internal
+verification build. `src/polyval-example.cfg` is maintained separately
+as the consumer-facing one.
+
+**`make consumer-check-shipped` keeps all three honest.** It copies
+exactly `polyval.a`, `polyval.inc` and `polyval-example.cfg` plus
+`test/consumer_stub_shipped.s` into an empty scratch directory and
+assembles there **with no `-I src`**, so a header that quietly depends
+on another `src/` file is a hard `Cannot open include file` instead of
+an invisible pass. This is the one check in the repo that can see an
+incomplete shipped surface: every other build runs with `src/` on the
+include path and therefore cannot. The link is warning-free, so any
+future warning from it is signal. Shown capable of failing, both ways
+that matter — remove `polyval.inc` from the staged set and it stops at
+`consumer_stub_shipped.s(39): Error: Cannot open include file
+'polyval.inc'`; add a `.include "constants_lib.inc"` (a file a consumer
+never receives) and it stops at that line instead.
 
 Each archive bundles the SPEC §1 / §2 / §5 core (`lib_version.o`,
 `zp_config.o`, `lib_manifest.o`) plus the variant-specific .o set;
@@ -1001,11 +1109,6 @@ because command-line variable assignments are passed down via
 `make lib-polyval-short CONTRACT_ZP_DEFINES='-D polyval_acc=0x40'`
 archive exports `polyval_acc` at `$40`).
 
-**§6.3 — Reachability.** Every documented configuration axis
-(`POLYVAL_PROFILE`, `POLYVAL_NO_AES`, `LIB_NO_BARE_EXPORTS`, §2 slot
-overrides) is reachable through §6.1 targets plus §6.2 variables with
-no library edits. `lib-app-owned` N/A as above.
-
 **§6.4 — The manifest describes the archive it ships in.** Already
 conformant, both halves: (1) `lib_manifest.o` is assembled under the
 same configuration as the archive it ships in — the
@@ -1021,8 +1124,41 @@ variant-mangled `LIB_POLYVAL_<VARIANT>_*` names — only the canonical
 §5 four plus the `LIB_POLYVAL_PRECALC_*` families — so §6.4's
 deprecation of mangled names requires nothing here.
 
-**§6.3 — Reachability and the looks-reachable rule (SPEC v0.10.4 /
-v0.10.5).** Adopted. `POLYVAL_PROFILE` is member-set-shaped — it
+**§6.5 — Name surface.** Known future-MAJOR item, recorded, not
+actioned: archive **member** basenames (`lib_version.o`,
+`zp_config.o`, `lib_manifest.o`, …) must take the `polyval_` prefix
+(`polyval_lib_version.o`, …) at this repo's next MAJOR. Members
+cannot carry two names at once, so this cannot ride a dual-name
+window — it changes only at MAJOR, together with the `lib-verify`
+rename above.
+
+#### Retired §6 clauses (§6.3, §6.6, §6.7)
+
+Contract v1.0.0 retired these three under its two-prong scope rule — a
+clause belongs in the contract only if it governs something two
+independently-built artifacts must agree on **and** a violation is
+invisible from inside a single repository's own build. All three failed
+a prong: §6.3 and §6.6 fail at an adopter's own build, and §6.7's guard
+TU ships in no archive, so nothing it asserts crosses a library
+boundary. c64-polyval had implemented §6.3 and §6.6 and had assessed
+§6.7 as N/A; the text below is retained because **the machinery stayed**
+in every case, and a reader finding the `PIN_` table or the
+`.ca65flags` stamp in the `Makefile` needs to know what they are for
+now that no contract clause names them.
+
+The retired text itself is at `git show v0.17.1:SPEC.md`.
+
+**§6.3 — Reachability and the looks-reachable rule** — RETIRED at
+contract v1.0.0; the mechanism is **kept as local engineering**, not
+as conformance. Nothing about the `PIN_` table or the parse-time
+flag stamp changes: they still reject a mismatched archive goal and
+still invalidate stale objects on a knob change, because those are
+good properties for this Makefile to have, not because a clause
+requires them. `tools/check_knob_staleness.sh` still runs on
+`lib-verify`. What the retirement removes is the obligation, and
+with it the reason to grow the mechanism further to satisfy a
+clause. The record of what was implemented (SPEC v0.10.4 /
+`POLYVAL_PROFILE` is member-set-shaped — it
 selects which multiply object is archived — so per v0.10.4 each
 documented profile × variant pair takes a §6.1 target rather than a
 §6.2 define; `lib-polyval-gcmsiv-short` closed the last unreached
@@ -1043,16 +1179,14 @@ recursive `$(MAKE)` assignment wins), and the one pair a wrapper
 cannot re-pin — `LIB_POLYVAL_NO_AES=1` on an AEAD target — is
 rejected rather than built.
 
-**§6.5 — Name surface.** Known future-MAJOR item, recorded, not
-actioned: archive **member** basenames (`lib_version.o`,
-`zp_config.o`, `lib_manifest.o`, …) must take the `polyval_` prefix
-(`polyval_lib_version.o`, …) at this repo's next MAJOR. Members
-cannot carry two names at once, so this cannot ride a dual-name
-window — it changes only at MAJOR, together with the `lib-verify`
-rename above.
-
-**§6.6 — Consumer footprint asserts (SPEC v0.10.0).** Adopted. The
-library-side obligations are met in `src/lib_manifest.s`:
+**§6.6 — Consumer footprint asserts** — RETIRED at contract v1.0.0.
+Its library-side half moved into **§5**, which now states directly
+that footprint equates MUST be safe-direction and that RESIDENT and
+COLD are a pair, so everything below is still live under §5. What
+was deleted is the consumer-side snippet, which was RECOMMENDED
+only and lives in the consumer's own tree — it is kept here because
+it is still the right thing for a c64-polyval consumer to write.
+The library-side obligations are met in `src/lib_manifest.s`:
 (1) `LIB_POLYVAL_RESIDENT_BYTES` / `LIB_POLYVAL_COLD_BYTES` are
 per-archive (§6.4 gating on `POLYVAL_PROFILE` ×
 `LIB_POLYVAL_NO_AES`) and safe-direction — each ≥ the measured
@@ -1060,8 +1194,11 @@ segment sum of its archive, rounded UP to the next 256-byte
 boundary (the per-archive table in §9.4); (2) the two equates are
 documented as a pair (COLD is a reclaimable-after-init carve-out of
 the RESIDENT image), and release notes state footprint deltas per
-(profile × variant) — one tag carries four footprint pairs, so a
-single per-version delta would be meaningless. The RECOMMENDED
+(profile × variant) — one tag carries **seven** footprint pairs, one
+per shipped archive, so a single per-version delta would be
+meaningless. (This said "four" from v0.7.0 through v0.9.0, counted
+against a stale archive list rather than against the `lib-polyval-*`
+targets; corrected in v0.10.0.) The RECOMMENDED
 consumer pattern, polyval-ized from the SPEC (one per linked
 archive, in the consumer's own build; `lderror` because the
 operands are imports; the consumer's memory area publishes its
@@ -1084,7 +1221,8 @@ declared values are safe-direction, `declared ≤ budget` implies
 budget fails the link with a named cause instead of an opaque
 segment overflow discovered mid-bisect.
 
-**§6.7 — Declared non-segment reservations (SPEC v0.10.0).** N/A —
+**§6.7 — Declared non-segment reservations** — RETIRED at contract
+v1.0.0, and N/A here both before and after —
 by construction, and in exactly the shape the clause's Rule 1
 prefers ("prefer a segment when nothing forces the equate"): every
 c64-polyval buffer and table is segment-resident (`.res` in the
@@ -1098,9 +1236,13 @@ variant ever introduces an equate-reserved region (e.g. an
 REU-staging window), it must ship the §6.7 guard in a TU that is a
 member of no archive, with a non-weak import.
 
-### 9.6 §8.0 — Precalculated-table enumeration (`src/lib_manifest.s`, `docs/precalc-tables.md`)
+### 9.6 §8.4 — Precalc-table enumeration (`src/lib_manifest.s`, `docs/precalc-tables.md`)
 
-Added in v0.4.0. SPEC §8.0 requires every adopter to enumerate any
+Added in v0.4.0, against what was then SPEC §8.0; contract v0.10.3
+promoted the catch-loop to its own `### 8.4` heading, which is where it
+still sits at v1.1.0 (§8.0 is now the shared-primitive bit-allocation
+table, a different clause that does not apply here). Cite **§8.4**.
+SPEC §8.4 requires every adopter to enumerate any
 precalculated table meeting the floor (≥ 256 B AND one of:
 REU-resident, hot-loop-read, or page-aligned for fetch alignment) —
 regardless of whether the library consumes any §8.1–§8.3 shared
@@ -1110,7 +1252,7 @@ invokes it once per enumerated table with `"POLYVAL"` as the SPEC
 v0.7.0 library-prefix argument, exporting
 `LIB_POLYVAL_PRECALC_<name>_{SIZE,REGION,SHARED}` plus the deprecated
 bare `LIB_PRECALC_<name>_*` triple (gated on `LIB_NO_BARE_EXPORTS`,
-removed at contract v1.0):
+removed at a future contract MAJOR):
 
 | Table | Size | Region | Ships in |
 |---|---:|---|---|
@@ -1182,7 +1324,7 @@ library's prefixed `LIB_<X>_*` symbols side by side — the bare
 `LIB_VERSION_*` names collide across adopters and are removed at
 contract v1.0. See the contract SPEC §1.
 
-### 9.8 §4 — Segment placement declarations (`src/c64.cfg`, `src/lib_only.cfg`)
+### 9.8 §4 — Segment placement declarations (`src/polyval-example.cfg`, `src/c64.cfg`, `src/lib_only.cfg`)
 
 Added for contract v0.8.0. (Numbered out of SPEC order so the
 established §9.1–§9.7 cross-references stay valid.) SPEC §4 requires
