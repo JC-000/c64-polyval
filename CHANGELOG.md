@@ -9,6 +9,136 @@ Releases: https://github.com/JC-000/c64-polyval/releases — tagged releases
 track `MAJOR.MINOR.PATCH` and are the supported consumption points for
 downstream projects (see `API.md` §8 for the integration contract).
 
+## v0.10.1 — 2026-09-06
+
+Corrective **PATCH**. v0.10.0 shipped four hours earlier with four real
+defects, two of them introduced by that release's own §6.1 work and one
+of them a false statement in its central argument. Found by adversarial
+review whose report arrived after the tag was cut. Tags are immutable
+here, so this is the remedy.
+
+**No behavioural change.** PRGs remain byte-identical to v0.9.0 on all
+three profiles. `LIB_POLYVAL_ABI_VERSION` stays **1** — see below, where
+the *reason* changes even though the answer does not.
+
+### Fixed — defects introduced by v0.10.0
+
+- **The shipped example cfg silently collided a consumer's zero page with
+  the library's slots.** `src/polyval-example.cfg` had
+  `ZP: start = $0002`, so a consumer declaring anything in
+  `.segment "ZEROPAGE"` landed on `polyval_zp_ptr2` (`$02-$03`) and
+  `polyval_aes_round` (`$04`). Measured: a consumer's `my_ptr: .res 2` /
+  `my_count: .res 1` placed at `$02-$04`, **ld65 exit 0, zero warnings** —
+  the library's slots are `.exportzp` equates, invisible to ld65's
+  allocator, so nothing can diagnose it and the corruption appears at
+  runtime in whichever routine reads the slot. This was in the file whose
+  opening line says "COPY THIS INTO YOUR OWN TREE", making it a
+  first-use trap, and it was the one §2/§4 hazard the cfg did not
+  annotate while annotating two less likely ones. The area now starts at
+  `$31` — the largest gap between the library's three discontiguous
+  regions (`$02-$09`, `$10-$30`, `$fb-$fe`) — with the full slot map, the
+  reason, and the `CONTRACT_ZP_DEFINES` relocation route documented in
+  place. A `LIB_POLYVAL_ZP_USAGE_BYTES` assert was added to the cfg's
+  recommended-asserts block, with an explicit note that it bounds the
+  *total* and that no link-time assert can catch an address overlap —
+  that one is a review obligation.
+- **`make consumer-check-shipped` punched a hole in the `PIN_` guard and
+  then certified the wrong artifact.** The new phony reached
+  `$(LIB_DIR)/polyval.a` without a `PIN_` row, and the guard inspects the
+  named goal rather than the files it builds. Measured:
+  `make consumer-check-shipped POLYVAL_PROFILE=short` exited 0 having put
+  `polyval_short.o` and a SHORT manifest (`RESIDENT_BYTES = 16128`) into
+  `polyval.a` — the canonical **LONG** name — after which the
+  shipped-surface check pronounced that mis-pinned archive sound and left
+  it in `build/lib/`. Verbatim the failure the Makefile's own §6.3 block
+  documents and the `PIN_` table exists to prevent. Fixed by
+  `PIN_consumer-check-shipped = long`; the mis-pinned invocation is now
+  rejected at parse time.
+
+### Fixed — defects v0.10.0 claimed to have fixed and had not
+
+- **Two of the "removed at contract v1.0" sites survived**, and v0.10.0's
+  notes claimed the sweep was complete. `docs/precalc-tables.md` (which
+  **ships in the release tarball**) and `API.md` §9.7 both still told
+  readers the bare exports are removed at contract v1.0, which v1.0.0
+  deferred to a future MAJOR. Both were missed because the phrase wraps
+  across a line break and the sweep grepped line-at-a-time; re-checked
+  with `tr '\n' ' '` across every tracked `.md`/`.s`/`.inc`, and the
+  only remaining occurrences are self-referential ones describing the
+  correction itself.
+
+### Fixed — a false justification, not a false conclusion
+
+- **`LIB_POLYVAL_ABI_VERSION` still holds at 1, but v0.10.0 argued it
+  wrongly.** Release notes, `API.md` §9.1 and `CLAUDE.md` all stated that
+  `gcmsiv_decrypt`'s reject path is "indistinguishable from a tag failure
+  on **every** documented post-condition". It is not. v0.8.0's banner
+  carries a `memory (always)` line documenting `polyval_*`, `aes_state`
+  and `gcmsiv_counter`/`keystream`/`idx` as clobbered; `@reject_len`
+  returns before `gcmsiv_derive_keys` and clobbers none of them. Three
+  documented post-conditions differ. A fourth — `aes_expanded_key`
+  "restored to master schedule" — held only derivatively, because the
+  routine never touches it and Entry already required it to be the master
+  schedule. The `gcmsiv_encrypt` bullet had a matching gap: it argued
+  only about `A` while v0.8.0 also documented *unconditional* memory
+  outputs (`gcmsiv_ct_buf`, `gcmsiv_tag`) the reject path does not
+  produce.
+
+  The correct argument, which covers both entry points and every
+  post-condition at once: **v0.8.0's Entry banner on both routines
+  already read `gcmsiv_pt_len = plaintext length (0..64)`**, so
+  `pt_len > 64` was outside the documented input domain before the
+  change, and §7's "can a conforming consumer be broken" test cannot fire
+  because no conforming consumer reaches the path. Both weaker arguments
+  are now recorded in `CLAUDE.md` as explicitly rejected, so they are not
+  re-derived. [c64-lib-contract#180](https://github.com/JC-000/c64-lib-contract/issues/180)
+  was corrected in place, since it had been filed with the weaker
+  reasoning.
+
+- **`src/gcm_siv.s`'s `gcmsiv_decrypt` banner contradicted itself**
+  ([#82](https://github.com/JC-000/c64-polyval/issues/82)) — the
+  `memory (always)` line sat eight lines below a reject block stating "no
+  key derivation is performed". This is where the error above came from.
+  The line is now split by outcome, and says plainly that "clobbered"
+  means "may hold anything" and never "scrubbed": after a length
+  rejection the *previous* call's derived-key material is still in
+  `polyval_htable*` and `gcmsiv_keystream`. Comment-only; PRG verified
+  byte-identical.
+
+### Changed
+
+- **`src/polyval_api.inc` now declares the public surface.** Through
+  v0.10.0 the shipped header held a comment block and three profile
+  equates and declared nothing, while the Makefile, `API.md` §9.5 and the
+  release notes all described it as the consumer's "declaration of the
+  public symbols" — and `test/consumer_stub_shipped.s` hand-wrote 27
+  `.import` lines, which was the evidence. The fleet's shape settles it:
+  `c64-x25519`'s shipped `src/x25519.inc` carries 31 declarations. Ours
+  now carries 29, as `.global` rather than `.import` so the file stays
+  safe to include from a defining TU. Two properties measured before
+  adding them, since both would have punished consumers silently: an
+  unreferenced declaration of a symbol the linked archive does not
+  contain does **not** fail the link (a POLYVAL-only consumer linking
+  `polyval-long.a` is unaffected by the AEAD names), and an unreferenced
+  declaration does **not** drag its archive member into the image
+  (baseline stub 4166 bytes; 4166 with all nine AES/GCM-SIV entry points
+  declared and none called). Suppress with `-D POLYVAL_API_NO_DECLS=1`.
+  Zero page is deliberately **not** declared — `.importzp` is a different
+  directive, and a consumer overriding a slot via `CONTRACT_ZP_DEFINES`
+  must not also import it (§6.2).
+- `test/consumer_stub_shipped.s` no longer hand-writes those imports, so
+  the guard now also proves the header declares. Demonstrated capable of
+  failing: `-D POLYVAL_API_NO_DECLS=1` stops it at
+  `Symbol 'gcmsiv_encrypt' is undefined`.
+- The example cfg's `LOADADDR` entry is documented as deliberately **not**
+  `optional`: a consumer who forgets to emit the segment gets
+  `ld65: Warning: Segment 'LOADADDR' does not exist` rather than a silent
+  `.prg` with no load header.
+- `CLAUDE.md` records that contract v0.11.0's §6.5 zero-consumer
+  "born prefixed" carve-out **no longer exists** at v1.1.0 — the cut
+  removed it. It was inapplicable here regardless, so the earlier
+  discussion is moot rather than wrong.
+
 ## v0.10.0 — 2026-09-06
 
 Contract-alignment **MINOR** for
