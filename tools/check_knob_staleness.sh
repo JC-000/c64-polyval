@@ -90,7 +90,7 @@ n=$(ls "$SCRATCH"/*.o 2>/dev/null | wc -l | tr -d ' ')
 # Guards against "unconditional rebuild wearing a stamp", which would satisfy
 # every assertion above while destroying incremental builds.
 rebuilt=$($MAKE_Q lib 2>&1 | grep -c '^ca65' || true)
-[ "$rebuilt" = "0" ] || fail "unchanged invocation recompiled $rebuilt TUs, expected 0 (SPEC §6.3 C1)"
+[ "$rebuilt" = "0" ] || fail "unchanged invocation recompiled $rebuilt TUs, expected 0 (was SPEC §6.3 C1; clause retired at contract v1.0.0, check kept as local engineering)"
 
 # --- #56 reject branch must remain intact -----------------------------------
 if $MAKE_Q lib CONTRACT_DEFINES="-D POLYVAL_PROFILE=1" >/dev/null 2>&1; then

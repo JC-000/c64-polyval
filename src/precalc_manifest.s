@@ -87,7 +87,7 @@ PRECALC_MANIFEST_S_INCLUDED = 1
 ; -----------------------------------------------------------------------------
 ; §8.0 catch-loop: precalculated-table enumeration
 ; -----------------------------------------------------------------------------
-; c64-lib-contract SPEC §8.0 requires every adopter to enumerate any
+; c64-lib-contract SPEC §8.4 requires every adopter to enumerate any
 ; precalculated table meeting the floor (>= 256 B AND one of:
 ; REU-resident, hot-loop-read, page-aligned for fetch alignment) via
 ; the LIB_PRECALC_TABLE macro, in addition to the docs/precalc-tables.md

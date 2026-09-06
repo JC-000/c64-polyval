@@ -317,7 +317,9 @@ $(foreach g,$(MAKECMDGOALS),$(if $(PIN_$(g)),$(if $(filter $(PIN_$(g)),$(POLYVAL
 # clean and stays silent from a warm tree is worse than one that never fires,
 # because a consumer probing interactively concludes the define was accepted.
 #
-# SPEC §6.3's looks-reachable rule -- a knob naming an axis MUST select it or
+# SPEC §6.3's looks-reachable rule -- RETIRED at contract v1.0.0; kept here
+# as local engineering, not conformance. It said a knob naming an axis MUST
+# select it or
 # reject loudly. These cannot select it, so they reject. Parse time, before
 # anything is built: a half-built tree is itself the input to the stale shape.
 #

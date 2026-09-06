@@ -277,6 +277,65 @@ every repo look like an `sqtab` enumerator), and an invocation with **no
 fifth argument**, which emits the bare triple *only* — the collision-prone
 form, and easy to read past.
 
+## 6d. Two kinds of stale citation — sweep for the second one
+
+Contributed by the contract session from four repos' findings. The first
+kind is easy and the second is the one that survives audits.
+
+**Kind 1 — wrong quotation.** Superseded clause text reproduced verbatim.
+Our `src/precalc_manifest.s` quoted v1.2.0 §6.1 without v1.2.1's carve-out,
+under which that very file would have been non-conformant. Found by diffing
+the quote against the frozen tag: `git show v1.2.2:SPEC.md`.
+
+**Kind 2 — correct citation, wrong tense.** c64-nist-curves' Makefile had
+`# §6.1 (contract v1.1.0) requires make lib to produce the archive PLUS the
+.inc header and an example .cfg`. The citation is *accurate* — v1.1.0 did
+require it. The defect is the present-tense **requires** in a repo claiming
+conformance through v1.2.2. A quotation diff finds nothing here, because
+nothing is wrong with the quotation.
+
+**The durable form subsumes both:** *does every present-tense obligation in
+my tree still exist at the tag I claim?* Sweep the modal verbs and check
+each against the frozen SPEC:
+
+```sh
+python3 - <<'EOF'
+import re, subprocess, pathlib
+files = [f for f in subprocess.run(["git","ls-files"],capture_output=True,text=True).stdout.split()
+         if re.search(r"\.(md|s|inc|cfg|sh|py)$|Makefile$", f)
+         and not f.startswith("docs/RELEASE_NOTES_v0.")]
+pat = re.compile(r"§\d+(?:\.\d+)?[^.;\n]{0,80}?\b(requires|MUST|must|owes|obliges|demands)\b[^.;\n]{0,50}")
+for f in files:
+    flat = " ".join(pathlib.Path(f).read_text(errors="ignore").split())
+    for m in pat.finditer(flat):
+        print(f"{f}\n    {m.group(0)[:150]}")
+EOF
+```
+
+Note it must flatten newlines first — these phrases wrap, which is the same
+trap as G6.
+
+**Run on this repo at v0.11.0 it returned 31 hits and three were real**, all
+present-tense obligations against retired or renumbered clauses:
+
+| Site | Was | Now |
+|---|---|---|
+| `src/precalc_manifest.s` | "SPEC §8.0 requires every adopter to enumerate" | §8.4 — and this was a file created *the same day* I fixed §8.0→§8.4 everywhere else |
+| `Makefile` | "SPEC §6.3's looks-reachable rule — a knob … MUST" | §6.3 retired at v1.0.0; marked as local engineering |
+| `tools/check_knob_staleness.sh` | fail message citing "SPEC §6.3 C1" | same |
+
+**Not every citation of a moved section is stale.** c64-nist-curves' own
+distinction: their `check_archives.py` cites §6.1 for the *live*
+member-isolation clause and correctly keeps it; their example cfg cited
+"§4 / §6.1" where §4's standalone-build clause is live and §6.1's file
+requirement is not. Judge per clause, not per section number.
+
+The `§6.6` citations in `src/lib_manifest.s` are deliberately **not** in
+this table: they are historical, the file carries a header note saying where
+the obligation moved (§5), and `RETIRED.md` asks adopters not to churn them.
+Kind 2 is about a live obligation stated in the present tense, not about a
+citation of a retired clause that is honestly labelled as history.
+
 ## 7. Refresh one-liner
 
 ```sh
