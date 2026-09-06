@@ -34,10 +34,14 @@ The watch **ends** when all five hold at the same time. Not four.
 
 > **S4 is a TAGGING gate, not a work gate** (checked 2026-09-06). The
 > contract is frozen clean at v1.2.2, zero open issues, zero open PRs. S4
-> waits on **one settling tag**: c64-nist-curves **v0.14.0** (#153 + #154).
-> c64-x25519 settled at **v0.16.0** and c64-ChaCha20-Poly1305 at
-> **v0.11.0**, both verified at the tag. After that, S5 is the consumers
-> re-pinning to conformant adopter tags. Verify each against the
+> **S4 IS MET as of 2026-09-06.** All five adopters carry a settling tag,
+> each verified at the tag: c64-polyval **v0.11.0**, c64-nist-curves
+> **v0.14.0**, c64-x25519 **v0.16.0**, c64-ChaCha20-Poly1305 **v0.11.0**,
+> c64-mlkem **v0.5.0** (clean by the §8.4 zero-consumer carve-out).
+>
+> **S5 is the only condition still open**, and it is the larger one: five
+> stale submodule pins across three consumer repos, then three consumer
+> tags. See the consumer rows below. Verify each against the
 > **tag**, never against a branch: a fix on a branch is not a release, and
 > a consumer pins tags. Equally — read the **tag**, not the latest GitHub
 > Release; they are different things and §6g is the cycle where that cost
@@ -171,7 +175,7 @@ tag, and is **observed**, not asserted on someone else's behalf.
 | Repo | Role | Latest tag | Conformant? |
 |---|---|---|---|
 | c64-polyval | adopter | **v0.11.0 (tagged, released)** | verified against v1.2.2: §6.1 member isolation fixed, the withdrawn-§6.1 claims corrected, `lib_version.s` conformant outright under v1.2.1's carve-out |
-| c64-nist-curves | adopter | v0.13.0 | member isolation fixed (split into `data_reu_wait.s` / `data_mul_stage.s` / `data_shared.s`; their contract#179 made the clause normative). `zp_config.o` still fails §6.1 as their #154 — **scheduled, not deferred**: reported by the contract session as carried by their settling tag **v0.14.0** with #153 and nothing else. Not independently verified here (the issue has no milestone); recorded as reported |
+| c64-nist-curves | adopter | **v0.14.0 — SETTLED** | #153 and #154 both closed. #154 verified at the tag with a §6g positive control: bare `zp_*` aliases in `zp_config.s` went **4 → 0**, and `src/zp_aliases.s` (104 lines) plus `src/mul_aliases.s` appeared as the separate archived TUs. #153 is §8.2 REU — **N/A to this library** and their domain to certify; recorded as closed by them, not audited here |
 | c64-x25519 | adopter | **v0.16.0 — SETTLED** | their settling tag, verified at the tag with a §6g positive control: `src/precalc_manifest.s` present, `lib_manifest.s` 0 macro invocations (3 at v0.13.0), ref+path confirmed to exist so the zero is a real zero. Member isolation shipped at v0.14.0; v0.15.0 added §8.2 `A = a` and ABI 3 → 4; v0.16.0 closes their #128 |
 | c64-ChaCha20-Poly1305 | adopter | **v0.11.0 — SETTLED** | verified at the tag with a §6g positive control. `lib_manifest.s` 5 macro invocations at v0.10.0 → **0** at v0.11.0, `src/lib/precalc_manifest.s` present. Both #108 members done: `poly1305_lib.s` went 11 `.export` lines → 2, moving out the 8 `APP_OWNED` §8.1/§8.3 names. Their release also corrects the five under-reporting footprint equates from #113 |
 | c64-mlkem | adopter | v0.5.0 | **clean** — defines `LIB_NO_BARE_EXPORTS = 1` in its enumerating TU per §8.4's zero-consumer carve-out, so nothing displaceable is there to isolate |
