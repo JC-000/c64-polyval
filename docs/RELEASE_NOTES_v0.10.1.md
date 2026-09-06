@@ -228,8 +228,8 @@ remain N/A; the §1 and §8.4 zero-consumer carve-outs remain inapplicable.
 | Field      | Value |
 |------------|-------|
 | Filename   | `c64-polyval-v0.10.1.tar.gz` |
-| **Size**   | SIZE_PLACEHOLDER bytes |
-| **SHA256** | `SHA256_PLACEHOLDER` |
+| **Size**   | 136073 bytes |
+| **SHA256** | `37c7a3f1fc2ebb44b22afb3817fc602440851c1d48125e9faed97e97e34d9da4` |
 
 Re-running `make dist VERSION=v0.10.1` against this source tree must
 reproduce the recorded SHA256 byte-for-byte: every staged file's mtime
