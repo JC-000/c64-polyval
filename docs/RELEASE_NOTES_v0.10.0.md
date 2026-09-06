@@ -379,8 +379,8 @@ now false.
 | Field      | Value |
 |------------|-------|
 | Filename   | `c64-polyval-v0.10.0.tar.gz` |
-| **Size**   | SIZE_PLACEHOLDER bytes |
-| **SHA256** | `SHA256_PLACEHOLDER` |
+| **Size**   | 133195 bytes |
+| **SHA256** | `98ec4c61cb4e9cd485ded9b5fa76ff168aa8dbbf7f30edd427e2652605789f6b` |
 
 Re-running `make dist VERSION=v0.10.0` against this source tree must
 reproduce the recorded SHA256 byte-for-byte: every staged file's mtime
