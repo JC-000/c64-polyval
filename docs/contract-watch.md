@@ -13,9 +13,32 @@ watch has lapsed — bring it current before doing anything else.
 
 ---
 
+## 0. STATUS: SETTLED — watch closed 2026-09-06
+
+**The scope was reduced to S1–S4 by JC-000's ruling; §11 consumers are out
+of scope. All four hold, so this watch is complete and the loop is stopped.**
+
+| | State at close |
+|---|---|
+| **S1** | c64-polyval: 0 open issues, clean tree |
+| **S2** | `v0.11.0`, verified conformant against SPEC **v1.2.2** |
+| **S3** | contract frozen clean at v1.2.2 — 0 open issues, 0 open PRs; in-flight register empty |
+| **S4** | all five adopters tagged and verified **at the tag**: polyval `v0.11.0`, nist-curves `v0.14.0`, x25519 `v0.16.0`, chacha `v0.11.0`, mlkem `v0.5.0` |
+| **S5** | **out of scope by ruling** — handed off, see §5a |
+
+**What S4 closing does and does not claim.** It claims each library's tag is
+true about itself. It does **not** claim the fleet is correct in practice:
+the adopter work does not reach anyone until the consumer pins move, and
+they have not. That distinction is the whole reason S5 was written as a
+separate condition rather than folded into S4.
+
+To reopen: re-read §7, refresh the ledger and the fleet table, and treat
+§5a as the starting facts rather than rediscovering them.
+
 ## 1. The settle condition
 
 The watch **ends** when all five hold at the same time. Not four.
+*(Superseded at close: scope reduced to S1–S4 by ruling — see §0.)*
 
 | # | Condition | How to check |
 |---|---|---|
@@ -225,6 +248,41 @@ Cleared as it lands; empty means S1/S2 are met for the current contract tag.
    `.md`/`.s`/`.inc`/`.cfg`/`Makefile`, because the phrases wrap.
 
    Historical release notes stay as written (they were true at their tag).
+
+---
+
+## 5a. Consumer handoff — measured state at close
+
+S5 was ruled out of scope, not completed. These are the facts as measured
+**from the remotes** (§6h) on 2026-09-06, so whoever picks consumer
+alignment up starts from them rather than re-deriving them.
+
+| Consumer | Tag | Pin, from `origin/master` gitlinks | Needs |
+|---|---|---|---|
+| c64-https | `v0.4.3` | `libs/nistcurves` **v0.11.2**, `libs/x25519` **v0.13.0** | v0.14.0, v0.16.0 |
+| c64-wireguard | `v2.0.0-ca65` | `libs/chacha20poly1305` **v0.9.0**, `libs/x25519` **v0.11.2** | v0.11.0, v0.16.0 |
+| c64-aes256-ecdsa | **never tagged** | **none — not an archive consumer** | n/a |
+
+**Four stale pins across two repos**, not five across three. The
+c64-aes256-ecdsa row is the one to get right, because it was reported wrong
+twice — once by this watch and once by the contract session, both times
+from `git submodule status` on a dirty local clone. On `origin/master` that
+repo has no `.gitmodules`, no `libs/` tree, and builds its own
+`src/polyval.s` as a `MODULES` entry. Its `libs/polyval` exists only as
+uncommitted local work in this workspace.
+
+Two known items, neither live:
+
+- **c64-aes256-ecdsa#28** — its `src/precalc_manifest.s` emits **bare-only**
+  `LIB_PRECALC_*` triples (no library-prefix argument) for five tables,
+  three overlapping ours: `aes_sbox`, `aes_inv_sbox`, `polyval_htable`.
+  **Latent** — it arms only if that repo ever links a c64-polyval archive,
+  which on `master` it does not. Do not record it as a live exposure.
+- **c64-wireguard** carries a `v2.0.0-ca65` MAJOR whose scope is
+  unestablished; the pin bumps may already be inside it.
+
+Scale, for whoever scopes it: 38 open issues across the consumer repos at
+close, against a handful across the adopters.
 
 ---
 
