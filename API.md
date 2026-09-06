@@ -726,8 +726,8 @@ v0.7.0:
 | Symbol (prefixed, permanent) | Deprecated bare alias | Value | Meaning |
 |---|---|---:|---|
 | `LIB_POLYVAL_VERSION_MAJOR` | `LIB_VERSION_MAJOR` | `0` | Semver major. |
-| `LIB_POLYVAL_VERSION_MINOR` | `LIB_VERSION_MINOR` | `10` | Semver minor. |
-| `LIB_POLYVAL_VERSION_PATCH` | `LIB_VERSION_PATCH` | `1` | Semver patch. |
+| `LIB_POLYVAL_VERSION_MINOR` | `LIB_VERSION_MINOR` | `11` | Semver minor. |
+| `LIB_POLYVAL_VERSION_PATCH` | `LIB_VERSION_PATCH` | `0` | Semver patch. |
 | `LIB_POLYVAL_ABI_VERSION`   | `LIB_ABI_VERSION`   | `1` | Generation counter for the exported surface (§7). Independent of MAJOR. |
 
 The bare names are identical across every contract adopter, so a
@@ -1008,22 +1008,33 @@ directly without rebuilding `.o` files:
 | `make lib-polyval-gcmsiv-short` | `build/lib/polyval-gcmsiv-short.a` | Full AEAD bundle, **SHORT** profile — the RFC 8452 per-message-`H` configuration. |
 | `make lib-polyval-gcmsiv-compact` | `build/lib/polyval-gcmsiv-compact.a` | Full AEAD bundle, **COMPACT** profile. |
 
-**Every one of those targets also stages the two non-archive
-deliverables §6.1 requires** — "producing `build/lib/<shortname>.a`
-**plus the consumer-facing `.inc` header and an example `.cfg`**":
+**Every one of those targets also stages two non-archive deliverables.**
+No contract clause requires this. v0.10.0 added it to satisfy what
+SPEC v1.1.0 §6.1 stated as a MUST — "producing
+`build/lib/<shortname>.a` plus the consumer-facing `.inc` header and an
+example `.cfg`" — and **contract v1.1.1 withdrew that requirement**
+(contract#178) as an unannounced artifact of the 1.0.0 text cut: never
+proposed, naming neither path, and failing the contract's own scope rule
+on both prongs. v1.2.0 §6.1 asks for the archive and nothing more.
+
+We keep shipping them, as a deliberate local choice:
 
 | Shipped file | Copied from | What it is |
 |---|---|---|
 | `build/lib/polyval.inc` | `src/polyval_api.inc` | The consumer-facing header: public entry points, calling conventions, buffer surface and the profile-selector equates. `.include` it; it emits no code and no memory. |
 | `build/lib/polyval-example.cfg` | `src/polyval-example.cfg` | The example ld65 config: a `$0801` consumer memory map plus the full `SEGMENTS{}` block mapping every `LIB_POLYVAL_*` segment, carrying the §4 load-bearing attribute declarations (`type = ro` on the AES rodata, `align = $100` on the three table segments) annotated in place with the consequence of dropping each. Ends with the recommended §1/§5 link-time asserts. |
 
-Shipping them is not decorative. A consumer who fetches only the `.a`
-has no declaration of the public symbols and no statement of the
-placement attributes §4 obliges this library to declare — both of
-whose omissions are silent (§9.8) — so they would have to read `src/`
-to link, which is the mid-build source-poking §6.1 exists to forbid.
+The reasoning that made it worth doing never actually depended on the
+clause. A consumer who fetches only the `.a` has no declaration of the
+public symbols and no statement of the placement attributes §4 obliges
+this library to declare — both of whose omissions are silent (§9.8) — so
+their only recourse is to read `src/`, which the surviving §6.1 language
+about consuming an archive as shipped exists to make unnecessary.
 `build/lib/` was archive-only through v0.9.0; the two files land there
 from v0.10.0 (they are §6.5 name surface from that release on).
+
+**Do not re-describe this as conformance.** It is a service to consumers
+that this library chooses to provide.
 
 **The example cfg is purpose-built, not one of the two configs this
 repo builds itself with.** `src/c64.cfg` carries app-layer segments a
@@ -1050,8 +1061,9 @@ that matter — remove `polyval.inc` from the staged set and it stops at
 'polyval.inc'`; add a `.include "constants_lib.inc"` (a file a consumer
 never receives) and it stops at that line instead.
 
-Each archive bundles the SPEC §1 / §2 / §5 core (`lib_version.o`,
-`zp_config.o`, `lib_manifest.o`) plus the variant-specific .o set;
+Each archive bundles the SPEC §1 / §2 / §5 / §8.4 core (`lib_version.o`,
+`zp_config.o`, `lib_manifest.o`, `precalc_manifest.o`) plus the
+variant-specific .o set;
 see the `LIB_*_OBJS` blocks in the top-level `Makefile` for the
 exact composition. The basenames are already canonical
 `<shortname>[-<variant>].a` with `<shortname>` = `polyval` — no
@@ -1144,7 +1156,7 @@ deprecation of mangled names requires nothing here.
 
 **§6.5 — Name surface.** Known future-MAJOR item, recorded, not
 actioned: archive **member** basenames (`lib_version.o`,
-`zp_config.o`, `lib_manifest.o`, …) must take the `polyval_` prefix
+`zp_config.o`, `lib_manifest.o`, `precalc_manifest.o`, …) must take the `polyval_` prefix
 (`polyval_lib_version.o`, …) at this repo's next MAJOR. Members
 cannot carry two names at once, so this cannot ride a dual-name
 window — it changes only at MAJOR, together with the `lib-verify`
@@ -1254,7 +1266,7 @@ variant ever introduces an equate-reserved region (e.g. an
 REU-staging window), it must ship the §6.7 guard in a TU that is a
 member of no archive, with a non-weak import.
 
-### 9.6 §8.4 — Precalc-table enumeration (`src/lib_manifest.s`, `docs/precalc-tables.md`)
+### 9.6 §8.4 — Precalc-table enumeration (`src/precalc_manifest.s`, `docs/precalc-tables.md`)
 
 Added in v0.4.0, against what was then SPEC §8.0; contract v0.10.3
 promoted the catch-loop to its own `### 8.4` heading, which is where it
@@ -1265,7 +1277,7 @@ precalculated table meeting the floor (≥ 256 B AND one of:
 REU-resident, hot-loop-read, or page-aligned for fetch alignment) —
 regardless of whether the library consumes any §8.1–§8.3 shared
 primitive. `src/precalc_table.inc` is the canonical `LIB_PRECALC_TABLE`
-macro copied verbatim from the contract repo; `src/lib_manifest.s`
+macro copied verbatim from the contract repo; `src/precalc_manifest.s`
 invokes it once per enumerated table with `"POLYVAL"` as the SPEC
 v0.7.0 library-prefix argument, exporting
 `LIB_POLYVAL_PRECALC_<name>_{SIZE,REGION,SHARED}` plus the deprecated
@@ -1294,10 +1306,36 @@ the full rationale per table, including the below-floor exempt list
 (`aes_rcon`, key-schedule/GCM-SIV scratch buffers) and the
 future-audit note flagging `aes_sbox` / `aes_inv_sbox` as the first
 candidate if an AES-consuming library ever joins the contract.
-Cross-adopter audit: `od65 --dump-exports build/lib_manifest.o | grep _PRECALC_`
+Cross-adopter audit: `od65 --dump-exports build/precalc_manifest.o | grep _PRECALC_`
 (the `_PRECALC_` pattern matches both the prefixed and bare forms; a
 shipped `.a` must have its members extracted with `ar65 x` first —
 `od65` reads objects only and silently reports nothing on archives).
+The object name changed at the SPEC v1.2.0 §6.1 member-isolation split;
+these exports lived in `lib_manifest.o` up to and including v0.10.1.
+
+**Member isolation (SPEC §6.1, added v1.2.0, carve-out v1.2.1, rationale
+corrected v1.2.2).** The bare `LIB_PRECALC_<name>_*`
+triple is a *displaceable* name — unprefixed, spelled identically in
+every §8.4 adopter, and suppressed by a composing consumer with
+`LIB_NO_BARE_EXPORTS` — so §6.1 requires it to live in a translation
+unit exporting nothing else a consumer may import. It used to share
+`src/lib_manifest.s` with the §5 aggregates of §9.4, which §5 expects a
+consumer to import for its footprint asserts; because ld65 links whole
+archive members, importing `LIB_POLYVAL_RESIDENT_BYTES` dragged fifteen
+bare `LIB_PRECALC_*` names into the link, colliding with any other
+adopter's. Measured on the pre-split tree with a stub importing one §5
+equate and owning one bare name:
+`ld65: Error: Duplicate external identifier: 'LIB_PRECALC_polyval_htable_SHARED'`.
+`src/precalc_manifest.s` is now that isolated TU, and it is a member of
+every archive `lib_manifest.o` is a member of — the split moves names
+between members, never between archives. Bare and prefixed forms stay
+together there: they come from one macro invocation, and a library's own
+prefixed counterparts are not the collision class — SPEC **v1.2.1** added
+"their own prefixed counterparts excepted" to §6.1 for exactly this, since
+v1.2.0's wording made §8.4 unsatisfiable by construction. The §5
+aggregates remain forbidden company: they are counterparts of nothing
+displaceable, which is why this split was owed under v1.2.0 and stays owed
+under v1.2.1.
 
 ### 9.7 Consumer example
 

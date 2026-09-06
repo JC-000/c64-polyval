@@ -78,8 +78,13 @@ $MAKE_Q lib >/dev/null 2>&1 || fail "warm build with knobs removed failed"
 # --- no member silently dropped ---------------------------------------------
 # The failure mode of the rejected delete-from-a-rule-prerequisite mechanism:
 # an object deleted and then not rebuilt, silently missing from the archive.
+# The count is LIB_AEAD_OBJS: lib_version, zp_config, lib_manifest,
+# precalc_manifest, data, tables, aes_encrypt, aes_decrypt, gcm_siv,
+# polyval_long. It moved 9 -> 10 when the SPEC v1.2.0 §6.1 member-isolation
+# split gave the §8.0 precalc enumeration its own TU; bump it with the member
+# set, never to make a failure go away.
 n=$(ls "$SCRATCH"/*.o 2>/dev/null | wc -l | tr -d ' ')
-[ "$n" = "9" ] || fail "expected 9 objects after knob transitions, found $n"
+[ "$n" = "10" ] || fail "expected 10 objects after knob transitions, found $n"
 
 # --- C1: an unchanged invocation must NOT rebuild ---------------------------
 # Guards against "unconditional rebuild wearing a stamp", which would satisfy
@@ -92,4 +97,4 @@ if $MAKE_Q lib CONTRACT_DEFINES="-D POLYVAL_PROFILE=1" >/dev/null 2>&1; then
   fail "member-set axis via CONTRACT_DEFINES was accepted; the issue #55 guard has regressed"
 fi
 
-echo "check_knob_staleness: OK (warm flip both knobs, reverse, 9 objects, 0 spurious rebuilds, #55 guard intact)"
+echo "check_knob_staleness: OK (warm flip both knobs, reverse, 10 objects, 0 spurious rebuilds, #55 guard intact)"

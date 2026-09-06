@@ -85,12 +85,15 @@ Section-by-section status (see `API.md` §9 for the full account):
   actually compares against, so a `-D` override must collide loudly rather
   than export a ceiling the code does not enforce) and is absent from the
   `LIB_POLYVAL_NO_AES` archives, which ship no `gcm_siv.o`.
-- §6.1 `make lib` + the six `lib-polyval-*` archive targets. **Every one of
-  them now also stages `build/lib/polyval.inc` and
-  `build/lib/polyval-example.cfg`** — §6.1 requires the archive "plus the
-  consumer-facing `.inc` header and an example `.cfg`", and through v0.9.0
-  `build/lib/` held the `.a` alone, so a consumer had to read `src/` to
-  link us. Added in v0.10.0; both are §6.5 name surface from that release.
+- §6.1 `make lib` + the six `lib-polyval-*` archive targets. Every one of
+  them also stages `build/lib/polyval.inc` and
+  `build/lib/polyval-example.cfg` — **a local choice, NOT a contract
+  requirement.** v0.10.0 added it against SPEC v1.1.0 §6.1's "plus the
+  consumer-facing `.inc` header and an example `.cfg`"; **v1.1.1 withdrew
+  that clause** (contract#178) as an unannounced artifact of the 1.0.0 cut.
+  We keep the artifacts because a consumer linking the archive genuinely
+  needs them and `consumer-check-shipped` guards them — but do not write
+  "§6.1 requires" anywhere again. Both are §6.5 name surface from v0.10.0.
   The cfg is `src/polyval-example.cfg`, maintained **only** for shipping —
   do not point this at `src/lib_only.cfg`, which carries `lib-verify`
   scaffolding (a mandatory `LOADADDR` segment, `LIB_POLYVAL_VERIFY_CODE`)
@@ -137,7 +140,9 @@ Section-by-section status (see `API.md` §9 for the full account):
 - §8.4 precalc-table enumeration (applies regardless of §8.1–§8.3) —
   `src/precalc_table.inc` (canonical macro, copied verbatim; refreshed
   from the v1.1.0 canonical in v0.10.0, comment-only) + `LIB_PRECALC_TABLE`
-  invocations in `src/lib_manifest.s`; rationale in `docs/precalc-tables.md`.
+  invocations in `src/precalc_manifest.s` — an ISOLATED TU per v1.2.0 §6.1
+  member isolation, never back in `lib_manifest.s`; rationale in
+  `docs/precalc-tables.md`.
   The §8.4 zero-consumer carve-out does not apply (tag-pinning consumer),
   so the bare `LIB_PRECALC_<name>_*` triple keeps shipping gated on
   `LIB_NO_BARE_EXPORTS`.
@@ -366,7 +371,10 @@ src/
   zp_config.s            # §2: .exportzp polyval_* / pv_* slots
   lib_manifest.s         # §5: LIB_POLYVAL_*_BYTES + REU_BANKS_USED +
                          #     LIB_POLYVAL_GCMSIV_MAX_PT_LEN (published
-                         #     input bound); §8.4 LIB_PRECALC_TABLE invocations
+                         #     input bound). §5 aggregates ONLY — v1.2.0 §6.1
+                         #     member isolation
+  precalc_manifest.s     # §8.4: LIB_PRECALC_TABLE invocations, isolated TU
+                         #     (holds the displaceable bare LIB_PRECALC_* triple)
   precalc_table.inc      # §8.4: canonical LIB_PRECALC_TABLE macro (copied verbatim)
   constants_lib.inc      # AES sizes, profile selectors, .include "zp_config.s"
   polyval_long.s / polyval_short.s / polyval_compact.s

@@ -90,9 +90,13 @@ POLYVAL_API_INC_ = 1
 
 
 ; -----------------------------------------------------------------------------
-; Public symbol declarations (c64-lib-contract §6.1)
+; Public symbol declarations
 ; -----------------------------------------------------------------------------
-; §6.1 ships this file as "the consumer-facing `.inc` header". Through
+; This file is shipped as build/lib/polyval.inc by every archive target --
+; a local choice, not a contract requirement: SPEC v1.1.0 §6.1 briefly
+; demanded a shipped header and v1.1.1 withdrew that as an artifact of the
+; 1.0.0 text cut. We ship it because a consumer linking the archive needs
+; it. Through
 ; v0.10.0 it declared nothing -- it was a comment block plus the three
 ; profile equates above -- so a consumer who included it still had to
 ; hand-author every `.import` from prose, which is what

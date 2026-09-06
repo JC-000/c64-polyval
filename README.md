@@ -169,8 +169,9 @@ shared 8×8 quarter-square-multiply surface are covered:
   `make lib-polyval-gcmsiv-{short,compact}` produce
   ar65 archive bundles under
   `build/lib/` (canonical `polyval[-<variant>].a` basenames).
-  Per §6.1 every one of those targets also stages the two non-archive
-  deliverables: `build/lib/polyval.inc` (the consumer-facing header)
+  Every one of those targets also stages two non-archive deliverables —
+  a **local choice**, not a contract requirement (SPEC v1.1.1 withdrew
+  the §6.1 clause that once demanded them): `build/lib/polyval.inc` (the consumer-facing header)
   and `build/lib/polyval-example.cfg` (an example ld65 config carrying
   the §4 placement declarations annotated with the consequence of
   dropping each), so a consumer never has to read `src/` to link.
@@ -188,7 +189,7 @@ shared 8×8 quarter-square-multiply surface are covered:
   primitive the elliptic-curve / ChaCha20 libraries converged on.
 - §8.4 — precalc-table enumeration (required of every
   adopter regardless of §8.1–§8.3 applicability): `src/precalc_table.inc`
-  + `LIB_PRECALC_TABLE` invocations in `src/lib_manifest.s` with the
+  + `LIB_PRECALC_TABLE` invocations in `src/precalc_manifest.s` with the
   v0.7.0 `"POLYVAL"` prefix argument, documented in
   [`docs/precalc-tables.md`](docs/precalc-tables.md). Manifest rows are
   gated so each §6 archive enumerates only the tables it actually

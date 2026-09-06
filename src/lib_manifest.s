@@ -46,6 +46,17 @@
 ; constants_lib.inc roll-up) can suppress the directives and avoid
 ; ld65 "duplicate symbol" errors.
 ;
+; MEMBER ISOLATION (SPEC v1.2.0 §6.1). This file holds the §5 aggregates
+; and NOTHING ELSE a consumer may displace. The §8.0 LIB_PRECALC_TABLE
+; invocations used to live here too; they emit the deprecated bare
+; LIB_PRECALC_<name>_* triple (suppressible under LIB_NO_BARE_EXPORTS),
+; so a consumer importing one footprint equate linked this whole member
+; and inherited fifteen unprefixed names that collide with every other
+; §8.0 adopter's. They now live in src/precalc_manifest.s, which is a
+; member of every archive this one is. Do not move them back, and do not
+; add any other displaceable name here — see that file's header for the
+; rule text and c64-lib-contract#177 for the measurement.
+;
 ; SECTION NUMBERING. Comments in this file cite SPEC §6.6, which was
 ; RETIRED at contract v1.0.0 along with §6.3, §6.7, §9, §12, §13, §14 and
 ; §15. The obligation did not go away: §5 now carries it directly
@@ -87,12 +98,6 @@ LIB_MANIFEST_S_INCLUDED = 1
 ; We need them to gate the profile-conditional RESIDENT_BYTES / COLD_BYTES
 ; values below.
 .include "constants_lib.inc"
-
-; c64-lib-contract SPEC §8.0 catch-loop: canonical LIB_PRECALC_TABLE
-; macro, copied verbatim from the contract repo. See the registrations
-; below and docs/precalc-tables.md for the full enumeration.
-.include "precalc_table.inc"
-
 
 ; -----------------------------------------------------------------------------
 ; Zero-page usage
@@ -398,54 +403,6 @@ LIB_MANIFEST_S_INCLUDED = 1
 ; -----------------------------------------------------------------------------
 .ifndef LIB_POLYVAL_NO_AES
   LIB_POLYVAL_GCMSIV_MAX_PT_LEN = gcmsiv_max_pt_len
-.endif
-
-
-; -----------------------------------------------------------------------------
-; §8.0 catch-loop: precalculated-table enumeration
-; -----------------------------------------------------------------------------
-; c64-lib-contract SPEC §8.0 requires every adopter to enumerate any
-; precalculated table meeting the floor (>= 256 B AND one of:
-; REU-resident, hot-loop-read, page-aligned for fetch alignment) via
-; the LIB_PRECALC_TABLE macro, in addition to the docs/precalc-tables.md
-; human-readable row. c64-polyval consumes none of the §8.1-§8.3 shared
-; primitives (GF(2^128) carry-less multiply has no 8x8 quarter-square
-; table), so LIB_POLYVAL_SHARED_PRIMITIVES is not emitted -- but the
-; enumeration duty applies regardless. See docs/precalc-tables.md for
-; the classification rationale behind each PRECALC_SHARED_NO below.
-;
-; The fifth macro argument is the SPEC v0.7.0 library prefix: each
-; invocation emits both LIB_POLYVAL_PRECALC_<name>_* (collision-free,
-; permanent) and the deprecated bare LIB_PRECALC_<name>_* triple, the
-; latter gated on LIB_NO_BARE_EXPORTS (removal deferred to a future
-; contract MAJOR — SPEC v1.0.0 §8.4). The
-; prefix names the declaring library, never the table -- table names
-; stay unprefixed per SPEC §8.1.
-;
-; polyval_htable is built by all three profiles; polyval_htable8 and
-; polyval_reduce8 exist only under the LONG profile (SHORT and COMPACT
-; use the 4-bit Shoup window alone instead of precomputing all 16 nibble
-; positions x 16 possible values).
-; -----------------------------------------------------------------------------
-LIB_PRECALC_TABLE "polyval_htable", 256, PRECALC_REGION_RAM, PRECALC_SHARED_NO, "POLYVAL"
-
-.if POLYVAL_PROFILE = POLYVAL_PROFILE_LONG
-LIB_PRECALC_TABLE "polyval_htable8",  4096, PRECALC_REGION_RAM, PRECALC_SHARED_NO, "POLYVAL"
-LIB_PRECALC_TABLE "polyval_reduce8",  4096, PRECALC_REGION_RAM, PRECALC_SHARED_NO, "POLYVAL"
-.endif
-
-; aes_sbox / aes_inv_sbox live in src/tables.s, which is a member of
-; the AEAD archives (polyval.a / polyval-gcmsiv.a) and the full-app /
-; lib-verify links only. The POLYVAL-only archives (polyval-long.a /
-; polyval-short.a) omit tables.o, so their manifests must not describe
-; 512 B of tables they do not ship (issue #23; same defect class as
-; c64-lib-contract#62). Archive membership is an axis POLYVAL_PROFILE
-; cannot express -- polyval-long.a and polyval-gcmsiv.a are both built
-; at PROFILE=long -- so the lib-polyval-{long,short} Makefile targets
-; pass -D LIB_POLYVAL_NO_AES=1 to suppress these two rows.
-.ifndef LIB_POLYVAL_NO_AES
-LIB_PRECALC_TABLE "aes_sbox",     256, PRECALC_REGION_RODATA, PRECALC_SHARED_NO, "POLYVAL"
-LIB_PRECALC_TABLE "aes_inv_sbox", 256, PRECALC_REGION_RODATA, PRECALC_SHARED_NO, "POLYVAL"
 .endif
 
 
