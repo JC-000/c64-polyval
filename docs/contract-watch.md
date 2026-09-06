@@ -25,13 +25,15 @@ The watch **ends** when all five hold at the same time. Not four.
 | **S4** | Every contract **adopter** has a tag conformant with the latest contract tag. | §5 fleet table |
 | **S5** | Every contract **consumer** has a tag that links only conformant adopter tags. | §5 fleet table |
 
-> **S4 is now a TAGGING gate, not a work gate** (checked 2026-09-06). Both
-> remaining member-isolation fixes — c64-ChaCha20-Poly1305 and c64-x25519 —
-> are landed on master and unreleased. The contract itself is frozen clean
-> at v1.2.2 with zero open issues and zero open PRs. What S4 is waiting for
-> is two tags, plus a ruling-deferred item (c64-nist-curves #154). Verify
-> each against the **tag**, never against master: a fix on master is not a
-> release, and a consumer pins tags.
+> **S4 is a TAGGING gate, not a work gate** (checked 2026-09-06). The
+> contract is frozen clean at v1.2.2, zero open issues, zero open PRs. S4
+> waits on **three settling tags**: c64-ChaCha20-Poly1305's (fix landed on
+> `main`, unreleased), c64-x25519 **v0.16.0** (their #128), and
+> c64-nist-curves **v0.14.0** (#153 + #154). Verify each against the
+> **tag**, never against a branch: a fix on a branch is not a release, and
+> a consumer pins tags. Equally — read the **tag**, not the latest GitHub
+> Release; they are different things and §6g is the cycle where that cost
+> three cycles of a wrong fleet row.
 
 **S4 and S5 are observed, not enforced.** This repository can only PR and tag
 in c64-polyval. For every other repo the watch's output is an issue filed
@@ -161,8 +163,8 @@ tag, and is **observed**, not asserted on someone else's behalf.
 | Repo | Role | Latest tag | Conformant? |
 |---|---|---|---|
 | c64-polyval | adopter | **v0.11.0 (tagged, released)** | verified against v1.2.2: §6.1 member isolation fixed, the withdrawn-§6.1 claims corrected, `lib_version.s` conformant outright under v1.2.1's carve-out |
-| c64-nist-curves | adopter | **v0.13.0** | member isolation fixed (split into `data_reu_wait.s` / `data_mul_stage.s` / `data_shared.s`; their contract#179 is what made the clause normative). **Not fully clean**: their own release notes record `zp_config.o` still failing §6.1, ruled at v1.2.2 as contract#188 and deferred as their #154 — no name, value, archive or ABI change. Counts as a known deferral, not as conformant |
-| c64-x25519 | adopter | v0.13.0 | **fix landed, UNTAGGED** — `src/precalc_manifest.s` present, split intended for v0.14.0; staging-buffer split still owed. S4 wants the tag |
+| c64-nist-curves | adopter | v0.13.0 | member isolation fixed (split into `data_reu_wait.s` / `data_mul_stage.s` / `data_shared.s`; their contract#179 made the clause normative). `zp_config.o` still fails §6.1 as their #154 — **scheduled, not deferred**: reported by the contract session as carried by their settling tag **v0.14.0** with #153 and nothing else. Not independently verified here (the issue has no milestone); recorded as reported |
+| c64-x25519 | adopter | **v0.15.0** | member isolation **TAGGED since v0.14.0** — verified at the tag: `src/precalc_manifest.s` present and `lib_manifest.s` has 0 macro invocations at v0.15.0, against 3 at v0.13.0. v0.15.0 also carries §8.2 `A = a` and ABI 3 → 4. Settling tag is **v0.16.0** for their #128, a third member-isolation shape found after v0.15.0 |
 | c64-ChaCha20-Poly1305 | adopter | v0.10.0 | **fix landed, UNTAGGED.** #108 closed; verified on their master — `src/lib/precalc_manifest.s` exists and `lib_manifest.s` has zero macro invocations. The fix commits are all after `v0.10.0`, so the shipped tag still carries the defect. S4 wants the tag |
 | c64-mlkem | adopter | v0.5.0 | **clean** — defines `LIB_NO_BARE_EXPORTS = 1` in its enumerating TU per §8.4's zero-consumer carve-out, so nothing displaceable is there to isolate |
 | c64-https | consumer | v0.4.3 | pins nistcurves + x25519 |
@@ -457,6 +459,63 @@ artifact as a green check that never examined the property (§6a, §6e).
 variant ever places an aligned table in a file-emitting segment, an
 object-size sum silently starts under-reporting and nothing fails.
 
+## 6g. Two ways this watch's own tooling reported a confident wrong answer
+
+Both found on 2026-09-06, both in the same family as §6a/§6e/§6f, and both
+worth keeping because the *watch* is an artifact too and nothing was
+auditing it.
+
+**1. "Latest release" is not "latest tag."** §7's refresh used
+`gh release view --json tagName`, which returns the most recent **GitHub
+Release**. `c64-x25519` had tagged `v0.14.0` and `v0.15.0` without cutting
+Releases, so this watch reported them at `v0.13.0` for **three cycles** and
+carried "fix landed, UNTAGGED" in the fleet table — while the fix had in
+fact been tagged since `v0.14.0`. Measured after the correction:
+
+```
+c64-x25519   release=v0.13.0   tag=v0.15.0     <-- MISMATCH
+(four other repos: release == tag)
+```
+
+That last line is why it survived: **the extraction was right for four of
+five repos**, so every spot-check agreed with it. A wrong method that
+coincides with the right answer most of the time is harder to catch than
+one that is always wrong, and it produced a stale fact that was then
+relayed to another session as a nudge.
+
+Verify a tag's *contents* at the tag, too, not just its name:
+`git show v0.15.0:src/lib_manifest.s | grep -c LIB_PRECALC_TABLE` returns
+0 at `v0.15.0` and 3 at `v0.13.0` — which is what actually establishes that
+the fix shipped.
+
+**2. An absence assertion satisfied by empty input** — contributed by the
+contract session against itself. Checking whether c64-ChaCha20-Poly1305 had
+fixed its manifest, they ran `git show origin/master:…` in a repo whose
+default branch is `main`. The ref does not exist, `git show` produced empty
+output, `grep -c` on empty input returned **0**, and 0 is exactly what
+"clean" looks like. They were one step from reporting "chacha is clean" as
+a finding.
+
+**The general shape: a check whose pass condition is a count of zero passes
+when its input is empty.** Nothing distinguishes "looked and found none"
+from "looked at nothing." Any absence assertion needs a positive control —
+assert the input was non-empty, or assert the same query returns non-zero
+somewhere it should:
+
+```sh
+# wrong: passes on a bad ref, a renamed file, an empty archive
+[ "$(git show "$REF:$F" | grep -c PATTERN)" = 0 ] && echo clean
+
+# right: prove the input existed before believing the zero
+git show "$REF:$F" >/dev/null 2>&1 || { echo "bad ref/path: $REF:$F"; exit 1; }
+```
+
+Both are the same disease this file keeps cataloguing: **an artifact
+reporting green about a property it never actually examined.** §6a (a sweep
+blind to macro-emitted names), §6e (a diff whose extractor drops a symbol
+from both sides), §6f (a footprint basis that happens not to be exercised),
+and now the watch's own fleet table.
+
 ## 7. Refresh one-liner
 
 ```sh
@@ -470,7 +529,9 @@ gh pr    list --repo JC-000/c64-lib-contract --state open --limit 20
 for r in c64-polyval c64-nist-curves c64-x25519 c64-ChaCha20-Poly1305 \
          c64-mlkem c64-https c64-wireguard c64-aes256-ecdsa; do
   printf '%-26s ' "$r"
+  # TAGS, not releases -- see §6g. `gh release view` answers a different
+  # question and looks right whenever the two coincide.
   echo "issues=$(gh issue list --repo JC-000/$r --state open --limit 100 | wc -l | tr -d ' ')" \
-       "tag=$(gh release view --repo JC-000/$r --json tagName -q .tagName 2>/dev/null || echo -)"
+       "tag=$(gh api "repos/JC-000/$r/tags?per_page=100" --jq '.[].name' 2>/dev/null | sort -V | tail -1)"
 done
 ```
