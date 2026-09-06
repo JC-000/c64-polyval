@@ -240,7 +240,11 @@ ships only `src/`, root docs, `docs/RELEASE_NOTES_*`, and
 `docs/precalc-tables.md`; it intentionally omits `tools/`, `test/`, `build/`,
 and `ca65/`. (`docs/precalc-tables.md` is staged by an explicit `cp` in
 `tools/build_release.sh`, not a glob — a new `docs/*.md` file doesn't ship
-automatically.)
+automatically. `src/` is fully globbed as of v0.10.0: `*.s`, `*.inc` **and
+`*.cfg`**. The cfgs were enumerated by name until then, which silently
+left `src/polyval-example.cfg` out of the tarball when it was added —
+no diagnostic from the script, from `make dist`, or from the
+reproducibility re-run.)
 
 ## Profile choice
 LONG: 3,917 cy multiply, 255,268 cy precompute, 4,160 B code + 8,448 B

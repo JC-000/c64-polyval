@@ -107,6 +107,15 @@ normative paragraph to §7 on when `LIB_<X>_ABI_VERSION` moves.
   consumer hits, so it is now documented in `API.md` §9.4, in the
   example cfg's trailing comment, and exercised in
   `test/consumer_stub_shipped.s`.
+- **`tools/build_release.sh` would have silently omitted the new example
+  cfg from the release tarball.** Its `src/` staging enumerated
+  `src/c64.cfg src/lib_only.cfg` by name while globbing `src/*.s` and
+  `src/*.inc`, so `src/polyval-example.cfg` — the file §6.1 tells
+  consumers to expect — simply would not have been in the archive, with
+  no diagnostic from the script, from `make dist`, or from the
+  reproducibility re-run. Now globs `src/*.cfg`, removing the
+  silent-omission class rather than adding one more name to remember.
+  Same shape as the `docs/*.md` trap already flagged in `CLAUDE.md`.
 - Statements that had become **false going forward**, as opposed to merely
   citing a retired section number: the bare `LIB_VERSION_*` exports were
   documented in four places as "removed at contract v1.0", which contract

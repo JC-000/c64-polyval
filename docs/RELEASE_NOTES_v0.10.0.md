@@ -108,6 +108,28 @@ those recommendations are exercised rather than merely written down. The
 zero-warning property is deliberate: a warning from this target in
 future is signal, not noise.
 
+The target itself runs against `polyval.a`, the default LONG AEAD
+archive, to stay fast. The example cfg was separately verified by hand
+against **all seven** shipped archives, since the POLYVAL-only ones omit
+the AES and GCM-SIV segments entirely and a cfg that only worked for the
+AEAD shape would be a real gap:
+
+| Archive | Stub | Result |
+|---|---|---|
+| `polyval.a` | full AEAD surface | links, 0 warnings |
+| `polyval-gcmsiv.a` | full AEAD surface | links, 0 warnings |
+| `polyval-gcmsiv-short.a` | full AEAD surface | links, 0 warnings |
+| `polyval-gcmsiv-compact.a` | full AEAD surface | links, 0 warnings |
+| `polyval-long.a` | POLYVAL-only surface | links, 0 warnings |
+| `polyval-short.a` | POLYVAL-only surface | links, 0 warnings |
+| `polyval-compact.a` | POLYVAL-only surface | links, 0 warnings |
+
+This is what every `optional = yes` in the cfg's `SEGMENTS{}` block is
+for, and the row that matters most is `polyval-compact.a`: it ships
+neither `LIB_POLYVAL_AES_*` nor `LIB_POLYVAL_GCMSIV_*` nor the two 4 KB
+LONG table segments, so it exercises the largest set of absent
+segments.
+
 ### §5 — the 64-byte ceiling was not referenceable ([#80](https://github.com/JC-000/c64-polyval/issues/80))
 
 > Where a library's real input restriction is a bound a consumer must
