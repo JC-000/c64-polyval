@@ -27,9 +27,10 @@ The watch **ends** when all five hold at the same time. Not four.
 
 > **S4 is a TAGGING gate, not a work gate** (checked 2026-09-06). The
 > contract is frozen clean at v1.2.2, zero open issues, zero open PRs. S4
-> waits on **two settling tags**: c64-ChaCha20-Poly1305's (fix landed on
-> `main`, unreleased) and c64-nist-curves **v0.14.0** (#153 + #154).
-> c64-x25519 settled at **v0.16.0**, verified at the tag. Verify each against the
+> waits on **one settling tag**: c64-nist-curves **v0.14.0** (#153 + #154).
+> c64-x25519 settled at **v0.16.0** and c64-ChaCha20-Poly1305 at
+> **v0.11.0**, both verified at the tag. After that, S5 is the consumers
+> re-pinning to conformant adopter tags. Verify each against the
 > **tag**, never against a branch: a fix on a branch is not a release, and
 > a consumer pins tags. Equally — read the **tag**, not the latest GitHub
 > Release; they are different things and §6g is the cycle where that cost
@@ -165,7 +166,7 @@ tag, and is **observed**, not asserted on someone else's behalf.
 | c64-polyval | adopter | **v0.11.0 (tagged, released)** | verified against v1.2.2: §6.1 member isolation fixed, the withdrawn-§6.1 claims corrected, `lib_version.s` conformant outright under v1.2.1's carve-out |
 | c64-nist-curves | adopter | v0.13.0 | member isolation fixed (split into `data_reu_wait.s` / `data_mul_stage.s` / `data_shared.s`; their contract#179 made the clause normative). `zp_config.o` still fails §6.1 as their #154 — **scheduled, not deferred**: reported by the contract session as carried by their settling tag **v0.14.0** with #153 and nothing else. Not independently verified here (the issue has no milestone); recorded as reported |
 | c64-x25519 | adopter | **v0.16.0 — SETTLED** | their settling tag, verified at the tag with a §6g positive control: `src/precalc_manifest.s` present, `lib_manifest.s` 0 macro invocations (3 at v0.13.0), ref+path confirmed to exist so the zero is a real zero. Member isolation shipped at v0.14.0; v0.15.0 added §8.2 `A = a` and ABI 3 → 4; v0.16.0 closes their #128 |
-| c64-ChaCha20-Poly1305 | adopter | v0.10.0 | **fix landed, UNTAGGED.** #108 closed; verified on their master — `src/lib/precalc_manifest.s` exists and `lib_manifest.s` has zero macro invocations. The fix commits are all after `v0.10.0`, so the shipped tag still carries the defect. S4 wants the tag |
+| c64-ChaCha20-Poly1305 | adopter | **v0.11.0 — SETTLED** | verified at the tag with a §6g positive control. `lib_manifest.s` 5 macro invocations at v0.10.0 → **0** at v0.11.0, `src/lib/precalc_manifest.s` present. Both #108 members done: `poly1305_lib.s` went 11 `.export` lines → 2, moving out the 8 `APP_OWNED` §8.1/§8.3 names. Their release also corrects the five under-reporting footprint equates from #113 |
 | c64-mlkem | adopter | v0.5.0 | **clean** — defines `LIB_NO_BARE_EXPORTS = 1` in its enumerating TU per §8.4's zero-consumer carve-out, so nothing displaceable is there to isolate |
 | c64-https | consumer | v0.4.3 | pins nistcurves + x25519 |
 | c64-wireguard | consumer | v1.1.0 | pins x25519 + chacha20poly1305 |
@@ -252,6 +253,14 @@ polyval filed chacha#110 forty-four minutes after chacha#108 already
 covered it more broadly; closed as duplicate with the corroboration left
 attached, since a second measurement by a different route was the one part
 worth keeping.
+
+**"Unprefixed" is not "displaceable."** A crude grep for names lacking the
+library prefix over-reports: `poly1305_lib.s` at chacha v0.11.0 still
+exports `poly1305_init`, `poly1305_clamp` and `shoup_init`, and they are
+fine. Displaceable means a consumer can *suppress* it
+(`LIB_NO_BARE_EXPORTS`) or *define* it itself (`APP_OWNED`) — an ordinary
+unprefixed entry point is neither. Check what the name IS, not how it is
+spelled, before filing against another repo.
 
 Do not let the check become a blocker. If the coordinating session does not
 answer, search the tracker yourself and file with a line saying you could
