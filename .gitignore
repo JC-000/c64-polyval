@@ -3,3 +3,11 @@ __pycache__/
 *.pyc
 .serena/
 build-knobcheck/
+
+# ca65 language-server index cache (Serena / ca65-ls). Machine-local,
+# regenerated on demand.
+.ca65-ls/
+
+# Per-developer Claude Code settings. settings.local.json in particular is
+# explicitly personal.
+.claude/
