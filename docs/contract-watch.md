@@ -25,6 +25,13 @@ The watch **ends** when all five hold at the same time. Not four.
 | **S4** | Every contract **adopter** has a tag conformant with the latest contract tag. | §5 fleet table |
 | **S5** | Every contract **consumer** has a tag that links only conformant adopter tags. | §5 fleet table |
 
+> **S5 is much further out than S4, measured 2026-09-06.** S4 is one tag
+> away. S5 needs **five stale submodule pins bumped across three consumer
+> repos, then three consumer tags** — every consumer is behind on every
+> pin it holds. Do not read "S4 nearly closed" as "settlement nearly
+> reached": they are different orders of work, and the second is in repos
+> this watch can only observe.
+
 > **S4 is a TAGGING gate, not a work gate** (checked 2026-09-06). The
 > contract is frozen clean at v1.2.2, zero open issues, zero open PRs. S4
 > waits on **one settling tag**: c64-nist-curves **v0.14.0** (#153 + #154).
@@ -168,9 +175,9 @@ tag, and is **observed**, not asserted on someone else's behalf.
 | c64-x25519 | adopter | **v0.16.0 — SETTLED** | their settling tag, verified at the tag with a §6g positive control: `src/precalc_manifest.s` present, `lib_manifest.s` 0 macro invocations (3 at v0.13.0), ref+path confirmed to exist so the zero is a real zero. Member isolation shipped at v0.14.0; v0.15.0 added §8.2 `A = a` and ABI 3 → 4; v0.16.0 closes their #128 |
 | c64-ChaCha20-Poly1305 | adopter | **v0.11.0 — SETTLED** | verified at the tag with a §6g positive control. `lib_manifest.s` 5 macro invocations at v0.10.0 → **0** at v0.11.0, `src/lib/precalc_manifest.s` present. Both #108 members done: `poly1305_lib.s` went 11 `.export` lines → 2, moving out the 8 `APP_OWNED` §8.1/§8.3 names. Their release also corrects the five under-reporting footprint equates from #113 |
 | c64-mlkem | adopter | v0.5.0 | **clean** — defines `LIB_NO_BARE_EXPORTS = 1` in its enumerating TU per §8.4's zero-consumer carve-out, so nothing displaceable is there to isolate |
-| c64-https | consumer | v0.4.3 | pins nistcurves + x25519 |
-| c64-wireguard | consumer | v1.1.0 | pins x25519 + chacha20poly1305 |
-| c64-aes256-ecdsa | consumer | (none) | pins c64-polyval at **v0.7.1** (four releases behind). **Enumerates `aes_sbox` + `aes_inv_sbox` with no library-prefix argument**, so it emits bare-only triples that collide with ours on any AEAD archive — dormant while it links `polyval-short.a` (NO_AES). See §6c |
+| c64-https | consumer | v0.4.3 | pins `libs/nistcurves` **v0.11.2** and `libs/x25519` **v0.13.0** — both stale; needs nistcurves v0.14.0 and x25519 v0.16.0 |
+| c64-wireguard | consumer | v2.0.0-ca65 | pins `libs/chacha20poly1305` **v0.9.0** and `libs/x25519` **v0.11.2** — both stale; needs chacha v0.11.0 and x25519 v0.16.0 |
+| c64-aes256-ecdsa | consumer | (none) | pins `libs/polyval` at **v0.7.1** — five releases behind, needs v0.11.0. **Enumerates `aes_sbox` + `aes_inv_sbox` with no library-prefix argument**, so it emits bare-only triples that collide with ours on any AEAD archive — dormant while it links `polyval-short.a` (NO_AES). See §6c |
 
 ---
 
