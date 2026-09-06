@@ -1,5 +1,5 @@
 ; =============================================================================
-; consumer_stub_shipped.s — the c64-lib-contract §6.1 shipped-surface guard.
+; consumer_stub_shipped.s — the shipped-surface guard.
 ;
 ; This stub simulates a consumer who has ONLY what `make lib` puts in
 ; build/lib/:
@@ -17,9 +17,13 @@
 ; surface. Only a link performed without src/ can.
 ;
 ; It exists because build/lib/ held the archive ALONE from the first
-; archive target through v0.9.0 (issue #79) — §6.1 requires the header and
-; the example cfg too, and nothing in the build could see they were
-; missing. This target is what makes that regression visible.
+; archive target through v0.9.0 (issue #79). Note the justification has
+; since changed and the guard has not: #79 was filed against SPEC v1.1.0
+; §6.1, which required the header and example cfg; contract v1.1.1
+; WITHDREW that requirement as an artifact of the 1.0.0 text cut. We still
+; ship both, as a local choice, because a consumer linking the archive
+; needs them -- so this guard still earns its place. It just is not
+; enforcing a contract clause.
 ;
 ; Deliberately NOT `.include`d: src/constants_lib.inc. A consumer who links
 ; the archive does not vendor our source, and does not need it — the ZP

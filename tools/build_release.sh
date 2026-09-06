@@ -148,6 +148,15 @@ cp "$NOTES_REL" "$STAGE_ROOT/$NOTES_REL"
 # --- Precalc-table enumeration (c64-lib-contract SPEC §8.0) --------------
 cp docs/precalc-tables.md "$STAGE_ROOT/docs/precalc-tables.md"
 
+# docs/contract-watch.md is DELIBERATELY NOT staged. Recording the decision
+# because docs/ is copied by explicit name rather than a glob, so an omission
+# here is indistinguishable from an oversight -- the trap CLAUDE.md flags.
+# It is internal process state: a live ledger of contract tags, an in-flight
+# register of other repos' open issues, and a fleet status table. Frozen into
+# a tarball it would be stale on arrival and would assert things about OTHER
+# repositories that a consumer might read as current. It is on master for
+# anyone who wants it.
+
 # --- src/ : *.s, *.inc, linker configs, include/ ------------------------
 # `src/*.cfg` is a GLOB, not the enumeration `src/c64.cfg src/lib_only.cfg`
 # it replaced. That enumeration was a silent-omission trap of exactly the

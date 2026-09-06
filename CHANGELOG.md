@@ -9,6 +9,125 @@ Releases: https://github.com/JC-000/c64-polyval/releases — tagged releases
 track `MAJOR.MINOR.PATCH` and are the supported consumption points for
 downstream projects (see `API.md` §8 for the integration contract).
 
+## v0.11.0 — 2026-09-06
+
+Contract-alignment **MINOR**, current against c64-lib-contract
+**v1.2.2** (the fix is owed by v1.2.0 §6.1; v1.2.1 and v1.2.2 landed
+mid-release and neither changed it). One
+conformance fix that removes a real, reproducible consumer link failure,
+and one correction to a justification the contract withdrew under us.
+
+**No behavioural change.** PRGs byte-identical to v0.9.0 through v0.10.1
+on all three profiles. `LIB_POLYVAL_ABI_VERSION` stays **1**: no exported
+name is added, removed or renamed — 162 exported names in `polyval.a`
+before and after, per-archive.
+
+### Fixed — §6.1 member isolation (contract v1.2.0)
+
+v1.2.0 added to §6.1:
+
+> **Member isolation.** ld65 links whole archive members. A symbol a
+> consumer may displace — suppress under `LIB_NO_BARE_EXPORTS`, or define
+> itself under `APP_OWNED` (§8.0) — MUST live in a translation unit that
+> exports nothing else a consumer may import — other displaceable names
+> included — and defines nothing else the library's own code references.
+
+`src/lib_manifest.s` violated it: it carried the §5 aggregates a consumer
+imports *and* the `LIB_PRECALC_TABLE` invocations emitting the
+**displaceable** bare `LIB_PRECALC_<name>_{SIZE,REGION,SHARED}` triple. So
+importing `LIB_POLYVAL_RESIDENT_BYTES` pulled the whole member in and the
+bare names arrived uninvited. This is contract #177's exact shape, and the
+consumer cannot repair it — `ar65` member surgery is banned two paragraphs
+above.
+
+**The link failure is real and reproducible**, though be precise about
+which of §6.1's two collision directions bites here: the library-versus-
+library one is *latent* (no sibling adopter enumerates any of our five
+table names — the shared ones are `sqtab` and `reu_mul`, neither of which
+we consume), and the consumer-definition one is reachable but contrived.
+The clause is unconditional regardless, and §8.4's rule that table names
+are never library-prefixed puts every bare name in one flat namespace, so
+one future adopter enumerating `aes_sbox` makes the latent direction live
+against released archives on both sides. A consumer importing a §5
+aggregate while owning a bare precalc name fails against v0.10.1:
+
+```
+ld65: Error: Duplicate external identifier: 'LIB_PRECALC_polyval_htable_SHARED'
+```
+
+and links clean after the fix. Red/green verified against the v0.10.1 tag
+in a worktree.
+
+The §8.4 invocations now live in **`src/precalc_manifest.s`**, a TU that
+exports the 30 precalc names and nothing else; `lib_manifest.o` exports the §5 surface and nothing else — five names on
+the AEAD archives, four on the NO_AES ones, where
+`LIB_POLYVAL_GCMSIV_MAX_PT_LEN` is correctly absent. Both forms — bare and prefixed — moved
+together, which contract v1.2.1 (PR #187, merged mid-release) explicitly blesses and
+which matches `c64-x25519`'s fix for the same finding. Profile and
+`LIB_POLYVAL_NO_AES` gating preserved exactly: `htable8`/`reduce8` only on
+LONG, `aes_sbox`/`aes_inv_sbox` only in the AEAD archives (issue #23, §6.4).
+
+Verified by **per-archive export-set equality** across all seven archives —
+`ar65 t` + `ar65 x` + `od65 --dump-exports` over every member, sorted and
+diffed against the same from a `master` worktree. Zero names added, zero
+dropped, in any archive; member lists differ by exactly
+`+precalc_manifest.o`.
+
+`tools/check_knob_staleness.sh`'s member count moved 9 → 10, because the
+member set genuinely grew. Its comment now names the members and says to
+bump it with the member set and never to make a failure go away.
+`--selftest` still passes, so the pin is still shown capable of failing.
+
+### Fixed — a justification the contract withdrew
+
+**Contract v1.1.1 withdrew the §6.1 requirement that `make lib` also
+produce a `.inc` header and an example `.cfg`** (contract#178). It was an
+unannounced artifact of the 1.0.0 text cut — never proposed, naming neither
+path, and failing the contract's own scope rule on both prongs. v0.10.0 had
+built its whole §6.1 story on that clause and closed issue #79 against it.
+
+**The artifacts stay; the claim goes.** `build/lib/polyval.inc` and
+`build/lib/polyval-example.cfg` are still staged by all seven targets and
+still guarded by `make consumer-check-shipped`, because the reasoning that
+made them worth shipping never actually depended on the clause: a consumer
+who fetches only the `.a` has no declaration of the public symbols and no
+statement of the §4 placement attributes, both silent at link. What is
+corrected is every place that called this **conformance** —
+`Makefile`, `API.md` §9.5, `CLAUDE.md`, `test/consumer_stub_shipped.s`.
+Same class as v0.10.1's "removed at contract v1.0": a statement that was
+true when written and is now false.
+
+### Also
+
+- The **seven-row RESIDENT/COLD footprint table** is restored to the release
+  notes. It was absent from v0.10.1 and from this release's first draft —
+  two consecutive misses of a gate `CLAUDE.md` still declares in force.
+  Values are unchanged since v0.8.0 (no code moves here) but are read back
+  from each configuration's built `lib_manifest.o` rather than copied
+  forward. Both drafts did carry a seven-row table — of export counts —
+  which is why a careless row count passed it.
+
+### Added
+
+- **`docs/contract-watch.md`** — the alignment watch's charter and state:
+  the settle condition, the gating rules that decide what earns action, a
+  per-contract-tag ledger, an in-flight register for open contract issues
+  and PRs, and the fleet table. It exists because the pre-1.0 contract
+  shipped several releases a day and chasing every one of them was the
+  fleet's dominant cost. Its first real use is recorded in it: v1.2.0 §6.1
+  made us non-conformant, PR #187 looked like a reason to wait, and reading
+  #187 showed it preserves our case verbatim — so the fix was owed under
+  both texts and waiting would have been pure delay.
+
+### Not changed, deliberately
+
+- **`src/lib_version.s`.** v1.2.0 §6.1 as published forbids its bare and
+  prefixed version equates sharing a TU. **Contract v1.2.1 repaired that**
+  mid-release — §1 prescribes the pattern in a worked code block, four of
+  five adopters ship it, and the release states no adopter moves. Verified:
+  `lib_version.o` exports exactly the four bare forms and the four prefixed
+  forms they alias, nothing else importable.
+
 ## v0.10.1 — 2026-09-06
 
 Corrective **PATCH**. v0.10.0 shipped four hours earlier with four real

@@ -36,7 +36,7 @@
 #                        library to prove the public ABI is callable from a
 #                        clean consumer. Output build/consumer_stub.prg.
 #   consumer-check-shipped
-#                        SPEC §6.1 shipped-surface guard (issue #79): copy
+#                        shipped-surface guard (issue #79): copy
 #                        ONLY build/lib/{polyval.a,polyval.inc,
 #                        polyval-example.cfg} + test/consumer_stub_shipped.s
 #                        into an empty scratch dir and assemble there with
@@ -173,7 +173,7 @@ CA65FLAGS += $(CONTRACT_DEFINES) $(CONTRACT_ZP_DEFINES)
 # profile-selected polyval implementation last.
 APP_MODULES = main zp boot main_loop disk_io display gcm_siv_ui strings data_app
 
-LIB_MODULES = lib_version zp_config lib_manifest tables data aes_encrypt aes_decrypt gcm_siv $(POLYVAL_PROFILE_OBJ)
+LIB_MODULES = lib_version zp_config lib_manifest precalc_manifest tables data aes_encrypt aes_decrypt gcm_siv $(POLYVAL_PROFILE_OBJ)
 
 MODULES = $(APP_MODULES) $(LIB_MODULES)
 
@@ -186,13 +186,22 @@ LIB_OBJECTS = $(addprefix $(BUILD_DIR)/,$(addsuffix .o,$(LIB_MODULES)))
 # inventory is self-describing.
 #
 # LIB_CORE_OBJS is the shared baseline: every archive carries the SPEC §1
-# version equates, the SPEC §2 ZP inventory, and the SPEC §5 aggregate
-# manifest equates. None of these emit segment data, so adding them to any
-# archive does not grow consumer-side link size — they only contribute
-# import-time equates.
+# version equates, the SPEC §2 ZP inventory, the SPEC §5 aggregate
+# manifest equates, and the SPEC §8.0 precalc-table enumeration. None of
+# these emit segment data, so adding them to any archive does not grow
+# consumer-side link size — they only contribute import-time equates.
+#
+# precalc_manifest.o is a separate member from lib_manifest.o on purpose
+# (SPEC v1.2.0 §6.1 member isolation): the §8.0 macro emits the bare,
+# unprefixed LIB_PRECALC_<name>_* triple that a composing consumer
+# suppresses with LIB_NO_BARE_EXPORTS, and ld65 links whole members, so
+# those names must not ride along with the §5 equates a consumer imports
+# for its footprint asserts. Both members go into every archive — the
+# split changes which member a name lives in, never which archive.
 LIB_CORE_OBJS = $(BUILD_DIR)/lib_version.o \
                 $(BUILD_DIR)/zp_config.o \
-                $(BUILD_DIR)/lib_manifest.o
+                $(BUILD_DIR)/lib_manifest.o \
+                $(BUILD_DIR)/precalc_manifest.o
 
 # POLYVAL-only variants: just the chosen polyval primitive plus data.o
 # (which provides polyval_h / polyval_temp / polyval_htable[8] / polyval_
@@ -465,14 +474,27 @@ $(LIB_PRG) $(LIB_LBL_RAW): $(LIB_OBJECTS) $(BUILD_DIR)/lib_main.o $(LIB_CFG) | $
 $(LIB_LABELS): $(LIB_LBL_RAW) $(TOOLS_DIR)/vice_label_shim.py
 	$(PYTHON) $(TOOLS_DIR)/vice_label_shim.py $(LIB_LBL_RAW) $(LIB_LABELS)
 
-# --- Consumer-facing shipped surface (c64-lib-contract SPEC §6.1) ---------
-# §6.1: "Every library MUST provide `make lib`, producing
-# build/lib/<shortname>.a PLUS the consumer-facing `.inc` header and an
-# example `.cfg`." The archive alone is not the deliverable -- a consumer
-# that fetches only the .a has no declaration of the public symbols and no
-# statement of the load-bearing segment attributes §4 obliges us to declare,
-# so it would have to read our src/ to link us, which is the mid-build
-# source-poking §6.1 exists to forbid.
+# --- Consumer-facing shipped surface (a LOCAL choice, not a contract MUST) -
+# HISTORY, because the justification changed under us and the artifacts did
+# not. c64-polyval v0.10.0 added this staging to satisfy what SPEC v1.1.0
+# §6.1 stated as a MUST: "producing build/lib/<shortname>.a plus the
+# consumer-facing `.inc` header and an example `.cfg`". **Contract v1.1.1
+# WITHDREW that requirement** (contract#178): it was an unannounced artifact
+# of the 1.0.0 text cut, had never been proposed, named neither path, and
+# failed the contract's own scope rule on both prongs. v1.2.0 §6.1 requires
+# the archive and nothing else.
+#
+# We keep shipping both files anyway, deliberately. The reasoning that made
+# it worth doing is unchanged and was never really about conformance: a
+# consumer who fetches only the .a has no declaration of the public symbols
+# and no statement of the load-bearing §4 segment attributes -- both of whose
+# omissions are silent at link -- so their only recourse is to read our src/,
+# which §6.1's surviving `ar65`-surgery/no-source-poking language exists to
+# make unnecessary. `make consumer-check-shipped` proves the shipped set is
+# sufficient.
+#
+# What is NOT true, and must not be written down again: that any contract
+# clause requires this. It does not.
 #
 # Staged by copy rather than generated: both files are hand-maintained
 # sources that a consumer copies into their own tree, and a generator would
@@ -492,8 +514,8 @@ $(LIB_LABELS): $(LIB_LBL_RAW) $(TOOLS_DIR)/vice_label_shim.py
 # stub against polyval.a with it gets `ld65: Warning: Segment 'LOADADDR'
 # does not exist`, because only our verify stub emits that segment. Handing
 # a consumer a file whose own first line says it is for our internal
-# verification build, and which warns on their very first link, is not what
-# §6.1 means by "an example .cfg". src/polyval-example.cfg is maintained as
+# verification build, and which warns on their very first link, is not a
+# usable example cfg. src/polyval-example.cfg is maintained as
 # the consumer-facing one; `make consumer-check-shipped` links against it so
 # it cannot rot. These are §6.5 name surface from this release on.
 #
@@ -600,7 +622,7 @@ $(LIB_DIR)/polyval-gcmsiv-compact.a: $(LIB_AEAD_OBJS) | $(LIB_DIR) $(LIB_SHIPPED
 	rm -f $@
 	$(AR65) a $@ $(LIB_AEAD_OBJS)
 
-# --- Shipped-surface guard (SPEC §6.1; issue #79) --------------------------
+# --- Shipped-surface guard (issue #79) -------------------------------------
 # Proves the three files `make lib` puts in build/lib/ are a COMPLETE and
 # SUFFICIENT consumer surface, by assembling and linking a stub that has
 # access to nothing else.
