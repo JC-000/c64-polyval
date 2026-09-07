@@ -523,6 +523,30 @@ Cleared as it lands; empty means S1/S2 are met for the current contract tag.
    break column assumptions when a segment name is long. Count the rows
    before believing an absence. Same shape as #86, fifth instance today.)*
 
+   **The immunity is by COMPOSITION, not construction — and that turned into
+   our #95.** The contract session's observation, which is right and is the
+   most useful thing to come out of the exchange: our `ro` segments carry no
+   `align` attribute only because the three `$100`-aligned tables happen to be
+   `type = bss`. **That stops holding the moment an aligned table moves into a
+   file-emitting segment**, a shape this fleet has already been bitten by, and
+   nothing here would notice — because **nothing verifies the declared §5
+   values against a measurement at all.** `test/consumer_stub_shipped.s:57-58`
+   imports them and `:97` asserts `COLD < RESIDENT`, which proves ordering,
+   not bounding; `tools/` and the `Makefile` do not mention them. The
+   manifest's own comment shows the check being done by hand after the
+   #69/#70 fixes grew `gcm_siv.o` by 42 B. Filed as **#95** with the six
+   measured pairs as its expected-value table; worst slack is 210 B, which one
+   routine of moderate size would consume.
+
+   Also recorded from that exchange, since it settles a question rather than
+   opening one: **the clause reads inter-segment gaps as *placement*, not
+   footprint** — the gap depends on the order a consumer places segments in
+   and vanishes if the aligned segment goes first, so making it footprint
+   would make the figure a function of the consumer's cfg. A consumer
+   reserving one contiguous region adds that padding itself from §4's declared
+   alignments. **No action here; our declared values stay correct under that
+   reading.**
+
    **Two items filed separately upstream, both JC-000's call, neither
    actionable by this watch.** (1) *Cold-split verifiability*, now
    **contract#201**, whose table names us correctly: our COLD is not
