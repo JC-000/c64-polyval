@@ -13,27 +13,43 @@ watch has lapsed — bring it current before doing anything else.
 
 ---
 
-## 0. STATUS: SETTLED — watch closed 2026-09-06
+## 0. STATUS: REOPENED 2026-09-07 — S4 broke after close
 
-**The scope was reduced to S1–S4 by JC-000's ruling; §11 consumers are out
-of scope. All four hold, so this watch is complete and the loop is stopped.**
+**The watch was closed 2026-09-06 with S1–S4 met (scope reduced to adopters
+by JC-000's ruling; §11 consumers out of scope, handed off in §5a). It is
+reopened because S4 no longer holds: the contract session RETRACTED
+c64-x25519's settled status the next day (contract#193), so one of the five
+adopters is now "tagged with open findings", not settled. Reopening at the
+ruled scope — S1–S4. S5 stays out of scope; §5a remains the handoff, not a
+condition.**
 
-| | State at close |
-|---|---|
-| **S1** | c64-polyval: 0 open issues, clean tree |
-| **S2** | `v0.11.0`, verified conformant against SPEC **v1.2.2** |
-| **S3** | contract frozen clean at v1.2.2 — 0 open issues, 0 open PRs; in-flight register empty |
-| **S4** | all five adopters tagged and verified **at the tag**: polyval `v0.11.0`, nist-curves `v0.14.0`, x25519 `v0.16.0`, chacha `v0.11.0`, mlkem `v0.5.0` |
-| **S5** | **out of scope by ruling** — handed off, see §5a |
+| | State at reopen, 2026-09-07 | vs. close |
+|---|---|---|
+| **S1** | c64-polyval: 0 open issues, clean tree | holds |
+| **S2** | `v0.11.0`, verified conformant against SPEC **v1.2.2** (still the latest tag) | holds |
+| **S3** | three open contract items as of 07:05: **#193** (x25519 retraction), **#194** (their `verify-addrsize` passes with no `od65` at all), **PR #195** (records adversarial review + red/green as *their repo's* standards, explicitly **not** contract text). Each read; **none changes a c64-polyval conformance answer** | was 0/0 |
+| **S4** | **NOT MET.** x25519 `v0.16.0` retracted by #193 — four reproduced conformance gaps (§8.2, §8.4, §2/§5, §4) plus an evidence defect. polyval `v0.11.0`, nist-curves `v0.14.0`, chacha `v0.11.0`, mlkem `v0.5.0` unchanged, but nist-curves carries **#155 [HIGH] §6.1** filed 2026-09-06, which is the same shape and wants the same "tagged with open findings" reading | **broke** |
+| **S5** | out of scope by ruling — see §5a; pins unchanged | unchanged |
 
-**What S4 closing does and does not claim.** It claims each library's tag is
-true about itself. It does **not** claim the fleet is correct in practice:
-the adopter work does not reach anyone until the consumer pins move, and
-they have not. That distinction is the whole reason S5 was written as a
-separate condition rather than folded into S4.
+**The reopening reason is the one this file already warned about.** §0's
+close said S4 "claims each library's tag is true about itself" — and that
+claim was false for x25519 within a day, on evidence that existed at the
+time but had not been read. Two commissioned adversarial reviews arrived
+after the settle call was published.
 
-To reopen: re-read §7, refresh the ledger and the fleet table, and treat
-§5a as the starting facts rather than rediscovering them.
+**Carry contract#193's lesson into this repo's own practice** (it is why the
+adversarial-review + red/green standard is now written into `CLAUDE.md`):
+its three `-negative` verification legs were *structurally incapable of
+failing* — `X || (echo FAIL; exit 1)` mid-`;`-chain does not propagate, so
+each printed FAIL and then exited 0. Every claim those legs backed was
+unverified when made. A check that has never been observed to fail has not
+been shown to check anything. Its taxonomy also adds a fourth form worth
+holding onto: **a gate whose fixture encodes the defect it should catch.**
+
+To close again: S4 needs x25519 back to settled (their #130/#132 and the
+four #193 gaps) and nist-curves#155 resolved or ruled non-settling, with
+each verified **at the tag**. Treat §5a as starting facts, not something to
+rediscover.
 
 ## 1. The settle condition
 
@@ -137,7 +153,10 @@ across line breaks (`tr '\n' ' '` before grep) — a line-at-a-time grep missed
 two sites in v0.10.0, one of which shipped in the tarball.
 
 **G7 — Every release goes through the gate in `CLAUDE.md`, and the
-adversarial review is not optional.** If the reviewer has not reported, the
+adversarial review is not optional.** Since 2026-09-07 this is the wider repo
+standard, not a release-only rule: `CLAUDE.md` §"Working standard" requires a
+commissioned adversarial review and a red-first check on every feature and
+issue, with the positive-control step contract#193 shows the cost of skipping. If the reviewer has not reported, the
 release is **held**. v0.10.0 was self-certified when the reviewers went silent
 and shipped four real defects that their late reports then found, two of them
 introduced by that release. A silent reviewer is a reason to wait.
@@ -177,10 +196,15 @@ verdict, and do not re-read it every cycle unless it changes.
 
 | Ref | What | Changes our answer? |
 |---|---|---|
-**As of 2026-09-06 the contract has ZERO open issues and ZERO open PRs, at
-v1.2.2.** The register is empty; S3 is met with nothing pending. Re-check
-before trusting this — that repo has shipped several releases a day.
+**As of 2026-09-07 07:05 the contract has TWO open issues (#193, #194) and ONE
+open PR (#195), at v1.2.2** (was 0/0 at close the previous day). Re-check before trusting
+this — that repo has shipped several releases a day.
 
+| Ref | What | Changes our answer? |
+|---|---|---|
+| **#193** | Retraction of c64-x25519's settled status at v0.16.0: four reproduced conformance gaps (§8.2 provider surface, §8.4 2048 B unenumerated, §2/§5 `fe_wide` ZP, §4 RAM-backed declaration) plus an evidence defect — three `-negative` legs that could not fail | **No conformance answer changes here.** No clause text moved; the contract is still v1.2.2 and §8.x is N/A to us (G3). Two effects that are not conformance: it **breaks S4** (§0), and its check-taxonomy fourth form — *a gate whose fixture encodes the defect it should catch* — is adopted into this repo's working standard (`CLAUDE.md`) |
+| **#194** | Their `make verify-addrsize` is a zero-count absence check with no positive control: `OD65=/bin/false make verify-addrsize` prints `ok` and exits 0. A `dump=$(... | awk)` assignment takes awk's status, so a missing dumper yields an empty string, both loops iterate zero times, and `bad=0` prints success | **No.** Their Makefile, not ours (G3/G1 — untagged, and not a clause). Kept for the **form**: an absence assertion that cannot tell "looked and found none" from "looked at nothing". `CLAUDE.md`'s positive-control rule already covers it; the local audit it implies is recorded in §6 |
+| **PR #195** | Records adversarial review + red/green as standards **in the contract repo's own `CLAUDE.md`**. States in its own text that it is not contract text and fails prong 2 of the scope rule, and that it is **not** grounds to un-retire §15 | **No — and no obligation lands on adopters, by its own terms.** Convergent with what this repo adopted the same morning. Two of its ideas are worth taking locally and have been (§6 item 3): the **churn test** and the **citation duty** |
 | Ref | What | Changes our answer? |
 |---|---|---|
 | ~~PR #187~~ | merged as **v1.2.1**, verbatim as read; the G2 call it justified was correct | resolved |
@@ -201,10 +225,10 @@ tag, and is **observed**, not asserted on someone else's behalf.
 | Repo | Role | Latest tag | Conformant? |
 |---|---|---|---|
 | c64-polyval | adopter | **v0.11.0 (tagged, released)** | verified against v1.2.2: §6.1 member isolation fixed, the withdrawn-§6.1 claims corrected, `lib_version.s` conformant outright under v1.2.1's carve-out |
-| c64-nist-curves | adopter | **v0.14.0 — SETTLED** | #153 and #154 both closed. #154 verified at the tag with a §6g positive control: bare `zp_*` aliases in `zp_config.s` went **4 → 0**, and `src/zp_aliases.s` (104 lines) plus `src/mul_aliases.s` appeared as the separate archived TUs. #153 is §8.2 REU — **N/A to this library** and their domain to certify; recorded as closed by them, not audited here |
-| c64-x25519 | adopter | **v0.16.0 — SETTLED** | their settling tag, verified at the tag with a §6g positive control: `src/precalc_manifest.s` present, `lib_manifest.s` 0 macro invocations (3 at v0.13.0), ref+path confirmed to exist so the zero is a real zero. Member isolation shipped at v0.14.0; v0.15.0 added §8.2 `A = a` and ABI 3 → 4; v0.16.0 closes their #128 |
-| c64-ChaCha20-Poly1305 | adopter | **v0.11.0 — SETTLED** | verified at the tag with a §6g positive control. `lib_manifest.s` 5 macro invocations at v0.10.0 → **0** at v0.11.0, `src/lib/precalc_manifest.s` present. Both #108 members done: `poly1305_lib.s` went 11 `.export` lines → 2, moving out the 8 `APP_OWNED` §8.1/§8.3 names. Their release also corrects the five under-reporting footprint equates from #113 |
-| c64-mlkem | adopter | v0.5.0 | **clean** — defines `LIB_NO_BARE_EXPORTS = 1` in its enumerating TU per §8.4's zero-consumer carve-out, so nothing displaceable is there to isolate |
+| c64-nist-curves | adopter | **v0.14.0 — tagged with open findings** (#155 [HIGH] §6.1 `mul_8x8.o` exports §8.1/§8.2/§8.3 from one TU, filed 2026-09-06; #142 ratchet-leg audit) | #153 and #154 both closed. #154 verified at the tag with a §6g positive control: bare `zp_*` aliases in `zp_config.s` went **4 → 0**, and `src/zp_aliases.s` (104 lines) plus `src/mul_aliases.s` appeared as the separate archived TUs. #153 is §8.2 REU — **N/A to this library** and their domain to certify; recorded as closed by them, not audited here |
+| c64-x25519 | adopter | **v0.16.0 — RETRACTED 2026-09-07, tagged with open findings** (contract#193; their #130, #132 open) | their settling tag, verified at the tag with a §6g positive control: `src/precalc_manifest.s` present, `lib_manifest.s` 0 macro invocations (3 at v0.13.0), ref+path confirmed to exist so the zero is a real zero. Member isolation shipped at v0.14.0; v0.15.0 added §8.2 `A = a` and ABI 3 → 4; v0.16.0 closes their #128 |
+| c64-ChaCha20-Poly1305 | adopter | **v0.11.0 — settled; one post-tag issue** (#117, `.local` macro label leak — consumer-visible, not a settling clause) | verified at the tag with a §6g positive control. `lib_manifest.s` 5 macro invocations at v0.10.0 → **0** at v0.11.0, `src/lib/precalc_manifest.s` present. Both #108 members done: `poly1305_lib.s` went 11 `.export` lines → 2, moving out the 8 `APP_OWNED` §8.1/§8.3 names. Their release also corrects the five under-reporting footprint equates from #113 |
+| c64-mlkem | adopter | v0.5.0 (open: #3 stale contract version in their CLAUDE.md, #1 §6.3 warm-tree define drop) | **clean on §8.4** — defines `LIB_NO_BARE_EXPORTS = 1` in its enumerating TU per §8.4's zero-consumer carve-out, so nothing displaceable is there to isolate |
 | c64-https | consumer | v0.4.3 | pins `libs/nistcurves` **v0.11.2** and `libs/x25519` **v0.13.0** — both stale; needs nistcurves v0.14.0 and x25519 v0.16.0 |
 | c64-wireguard | consumer | v2.0.0-ca65 | pins `libs/chacha20poly1305` **v0.9.0** and `libs/x25519` **v0.11.2** — both stale; needs chacha v0.11.0 and x25519 v0.16.0 |
 | c64-aes256-ecdsa | consumer | (none) | **Not an archive consumer on `master`.** Verified from `origin/master`: no `.gitmodules`, no `libs/` tree, and `src/polyval.s` is built as its own `MODULES` entry. The v0.7.1 submodule pin recorded here earlier came from a **locally modified clone**, not the repo — see §6h. Its `src/precalc_manifest.s` does emit bare-only triples overlapping three of our names (`aes_sbox`, `aes_inv_sbox`, `polyval_htable`), latent until it links one of our archives — their #28. **Enumerates `aes_sbox` + `aes_inv_sbox` with no library-prefix argument**, so it emits bare-only triples that collide with ours on any AEAD archive — dormant while it links `polyval-short.a` (NO_AES). See §6c |
@@ -248,6 +272,27 @@ Cleared as it lands; empty means S1/S2 are met for the current contract tag.
    `.md`/`.s`/`.inc`/`.cfg`/`Makefile`, because the phrases wrap.
 
    Historical release notes stay as written (they were true at their tag).
+
+3. **Audit this repo's own checks for the #194 form — OPEN, not yet done.**
+   Filed here 2026-09-07 off contract#194 and nist-curves#142. The question
+   is not "do our checks pass" but **"has each one ever been observed to
+   fail?"** Candidates, in rough order of exposure: `make
+   consumer-check-shipped` (issue #79 guard — does it still fail if a shipped
+   file is removed?), `make consumer-check-noaes` (#47 guard),
+   `tools/check_knob_staleness.sh`, the `build/.ca65flags` parse-time stamp,
+   and the `make dist` reproducibility re-run. Any that is an **absence**
+   assertion, or whose pass condition is a zero, needs a positive control:
+   sabotage the input, confirm red, restore, confirm green — and record both
+   directions. Also sweep for the non-propagating
+   `X || (echo FAIL; exit 1)` shell form in `Makefile` and `tools/*.sh`.
+
+   Adopted from PR #195 into `CLAUDE.md` at the same time, as local practice:
+   the **churn test** (compliance work must deliver easier consumer
+   integration, a new capability, or a measurable improvement — work whose
+   only product is closing its own loop does not get commissioned) and the
+   **citation duty** (grep every quote and `file:line` a review agent hands
+   you; fabricated verbatim quotes have been produced in this fleet attached
+   to otherwise-sound substance).
 
 ---
 

@@ -98,6 +98,103 @@ fi
 OUT="c64-polyval-${TAG}.tar.gz"
 PREFIX="c64-polyval-${TAG}"
 
+# --- Tag-drift guard (issue #85) -----------------------------------------
+# If refs/tags/$TAG already exists, this is a RE-RUN against a released tag,
+# and the only honest thing to rebuild is the tree that tag names. On a tree
+# that has moved past it, the old behaviour rebuilt from HEAD, overwrote the
+# tracked c64-polyval-$TAG.tar.gz, and rewrote the released notes'
+# Attestation to a size + SHA256 that no longer describes the artifact on the
+# release page -- exit 0, no diagnostic. A consumer verifies the download
+# against exactly those two values, so that is a consumer-visible corruption
+# one `git commit -a` away. Measured on master at dd081a3 with v0.11.0:
+# 142336 -> 143194 bytes, hash bd566d1c... -> 91b30596..., because three
+# post-tag commits touched API.md, CHANGELOG.md and src/precalc_manifest.s.
+#
+# Determinism itself was never the defect -- two runs on one unchanged tree
+# reproduce byte-for-byte. What was missing is the check that the tree is
+# still the tag's.
+#
+# Set ALLOW_TAG_DRIFT=1 to override, for the deliberate case of re-cutting
+# notes for a tag you are about to move. It prints what it is overriding.
+ALLOW_TAG_DRIFT="${ALLOW_TAG_DRIFT:-0}"
+
+# The staged set as GIT PATHSPECS, not shell globs. `:(glob)` is load-bearing
+# twice over: it makes `*` stop at `/` (a shell `case` glob does not, so
+# src/sub/foo.s -- never staged -- used to abort the release), and it hands
+# git a PATTERN rather than a list of names that exist right now. Globbing the
+# working tree instead meant a file present at the tag and DELETED since was
+# never passed to `git diff` at all, so the guard slept through exactly the
+# corruption it exists to stop: `rm src/polyval_compact.s` + `make dist
+# VERSION=v0.11.0` rebuilt the released tarball without that file, exit 0.
+# Found by adversarial review of the first version of this guard.
+STAGED_PATHSPECS=(README.md API.md CHANGELOG.md LICENSE VERSION
+                  docs/precalc-tables.md "$NOTES_REL"
+                  ':(glob)src/*.s' ':(glob)src/*.inc' ':(glob)src/*.cfg'
+                  ':(glob)src/include/*.inc')
+
+# git must be able to answer, or the guard says so. `2>/dev/null || true` here
+# made the whole check structurally incapable of reporting a git failure: its
+# pass condition is an EMPTY result, which is also what a broken git produces.
+# Measured with a corrupted index -- `git diff` exited 128, the guard printed
+# nothing, exited 0, and built a drifted tarball. That is the shape CLAUDE.md's
+# Working standard §1 names, in the very change that cites it.
+if ! command -v git >/dev/null 2>&1; then
+  echo "warning: git not on PATH -- the tag-drift guard (#85) is INACTIVE." >&2
+elif ! git rev-parse --git-dir >/dev/null 2>&1; then
+  # Legitimate: building from an extracted tarball with no .git. Still said
+  # out loud, because a silently absent guard is the failure being fixed.
+  echo "note: not a git repository -- tag-drift guard (#85) not applicable." >&2
+elif git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+  git_st=0
+  DRIFTED="$(git diff --name-only "$TAG" -- "${STAGED_PATHSPECS[@]}")" || git_st=$?
+  if [[ "$git_st" -ne 0 ]]; then
+    echo "error: 'git diff' against tag '$TAG' failed (exit $git_st)." >&2
+    echo "       Refusing to build: the tag-drift guard (#85) could not run," >&2
+    echo "       and a guard that cannot run must not pass silently." >&2
+    exit 1
+  fi
+
+  # A file ADDED under src/ after the tag is drift too, and `git diff` against
+  # the tag cannot see it while it is untracked.
+  git_st=0
+  UNTRACKED="$(git ls-files --others --exclude-standard -- \
+                 ':(glob)src/*.s' ':(glob)src/*.inc' ':(glob)src/*.cfg' \
+                 ':(glob)src/include/*.inc')" || git_st=$?
+  if [[ "$git_st" -ne 0 ]]; then
+    echo "error: 'git ls-files' failed (exit $git_st); guard cannot run." >&2
+    exit 1
+  fi
+
+  if [[ -n "$DRIFTED" || -n "$UNTRACKED" ]]; then
+    if [[ "$ALLOW_TAG_DRIFT" == "1" ]]; then
+      echo "warning: ALLOW_TAG_DRIFT=1 -- rebuilding $TAG from a tree that has" >&2
+      echo "         moved past the tag. The tarball and the Attestation block" >&2
+      echo "         in $NOTES_REL will NOT describe the released artifact." >&2
+    else
+      echo "error: tag '$TAG' exists, but staged files differ from it." >&2
+      [[ -n "$DRIFTED" ]]   && { echo "       changed since the tag:" >&2; \
+                                 echo "$DRIFTED" | sed 's/^/         /' >&2; }
+      [[ -n "$UNTRACKED" ]] && { echo "       untracked, would be staged:" >&2; \
+                                 echo "$UNTRACKED" | sed 's/^/         /' >&2; }
+      echo "       Rebuilding here would overwrite the released $OUT and rewrite" >&2
+      echo "       the Attestation in $NOTES_REL to values that do not match the" >&2
+      echo "       published release (issue #85)." >&2
+      echo "       To verify a released tag, build from a worktree of it:" >&2
+      echo "         git worktree add /tmp/verify-$TAG $TAG && cd /tmp/verify-$TAG && make dist VERSION=$TAG" >&2
+      echo "       To override deliberately: ALLOW_TAG_DRIFT=1 make dist VERSION=$TAG" >&2
+      exit 1
+    fi
+  fi
+else
+  # No such tag locally. Normal for a first cut -- but a shallow or --no-tags
+  # clone reaches here too, with no protection and nothing to say so.
+  if [[ "$(git rev-parse --is-shallow-repository 2>/dev/null)" == "true" ]]; then
+    echo "warning: shallow clone -- tag '$TAG' may exist upstream and not here," >&2
+    echo "         so the tag-drift guard (#85) cannot vouch for this build." >&2
+  fi
+fi
+
+
 # Parse the release date from the notes front matter so the tarball
 # timestamps track the documented release rather than the build clock.
 # Convention: first line is "# c64-polyval vX.Y.Z -- YYYY-MM-DD".

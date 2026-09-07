@@ -18,6 +18,87 @@ Companion docs (read alongside this file):
 - `docs/RELEASE_NOTES_v0.10.1.md` — current release attestation (size + SHA256).
 - `docs/precalc-tables.md` — c64-lib-contract §8.4 precalc-table enumeration.
 
+## Working standard — adversarial review + red/green (MANDATORY)
+
+**Applies to every feature, issue, bugfix and release in this repo.** Not a
+release-only gate: it governs the work while it is being done. The two halves
+exist because this fleet has repeatedly shipped a *claim* that nobody had
+tried to falsify.
+
+### 1. Red/green — the test fails first, for the right reason
+
+For any change with observable behaviour (a defect fix, a new entry point, a
+bound, a build guard, a conformance property):
+
+1. **Write the check first and run it against the UNFIXED tree.** Record the
+   failure text in the PR/commit body. A check that has never been observed
+   to fail has not been shown to check anything.
+2. **Read the failure.** It must fail for the reason under test, not because
+   the fixture is broken, a path is wrong, or the tool exited non-zero for an
+   unrelated cause. This is the step that catches a gate whose *fixture
+   encodes the defect it should catch* — the check passes by construction.
+3. **Then fix, and observe green.** Both directions get recorded; "it passes
+   now" alone is not evidence.
+4. **Never weaken a red test to make it green.** `tools/test_gcmsiv_bounds.py`
+   is the precedent: 8 of its 15 checks were written RED against issues
+   #69/#70 and stayed red until the code was fixed.
+
+**Positive control for anything that is not a plain unit test.** When the
+check is a build probe, an export-set comparison, a link probe or a grep over
+artifacts, prove the probe can see: make the expected condition false on
+purpose (an old tag, a stub, a renamed symbol) and confirm the check goes
+red. `docs/contract-watch.md` §6e/§6g are the two cases where this repo's own
+tooling returned a confident wrong answer without one; the v1.2.0 member-
+isolation verdict in the §3 ledger is what a red/green link probe looks like
+when it is done right.
+
+**Shell checks: `||` in a `;`-chain does not propagate.**
+`X || (echo "FAIL"; exit 1)` inside a longer chain prints FAIL and exits 0 —
+the leg is structurally incapable of failing. Write
+`if ! X; then echo "FAIL: ..."; exit 1; fi`, and then drive it red once to
+prove it. Four sibling repos shipped this bug; contract#193 is the writeup.
+
+### 2. Adversarial review — commissioned, and waited for
+
+Every PR, and every release, gets an **adversarial review agent** before it
+merges or tags.
+
+- **Brief it to falsify a specific claim**, not to "look for bugs". Hand it
+  the claim in the commit/PR/release notes — "the sweep found every site",
+  "the footprints are safe-direction", "byte-identical to the baseline tag",
+  "the counter holds at 1" — and ask it to break that. Include the evidence
+  the claim rests on so it can attack the evidence, not just the conclusion.
+- **Review the evidence, not only the code.** The recurring defect in this
+  fleet is a green report about a property that was never examined: the
+  v0.10.0 self-certification, the §6.1 sweep that fixed the sites it
+  remembered, contract#193's three legs that could not fail. Ask of every
+  check: *if the thing it tests were broken right now, would this have gone
+  red?*
+- **A silent reviewer is a HOLD, not a pass** (contract-watch G7). v0.10.0
+  was tagged when reviewers went quiet; their late reports found four real
+  defects, two introduced by that release, and forced v0.10.1.
+- **Record the outcome** in the PR: what was attacked, what was found, what
+  was dismissed and why. A review that found nothing still says what it
+  looked at.
+
+- **Check the agent's citations.** Grep every quote and every `file:line` a
+  review agent hands you before acting on it. Fabricated verbatim quotes have
+  been produced in this fleet attached to otherwise-sound substance, and an
+  unchecked one becomes a false claim in a commit message.
+- **The churn test — what gets commissioned at all.** Work that drives this
+  repo through compliance effort must deliver one of: easier integration for
+  a consumer, a new capability, or a measurable improvement. Work whose only
+  product is closing its own loop does not get commissioned. A clause never
+  has to demonstrate it caused anything, so the reviewer is the one who has
+  to ask. (Adopted from c64-lib-contract PR #195, which is that repo's own
+  local standard and explicitly **not** contract text — no obligation lands
+  on adopters from it.)
+
+`/code-review` is the usual vehicle; a task-specific brief to a subagent is
+fine when the claim is not diff-shaped (a footprint table, a fleet row, a
+reproducibility receipt). Either way the reviewer is a **different** agent
+from the one that wrote the change.
+
 ## c64-lib-contract adoption (current as of v0.10.0)
 This library implements the [c64-lib-contract](https://github.com/JC-000/c64-lib-contract),
 **SPEC v1.1.0** (tagged 2026-09-03). Re-check the tag before trusting this
@@ -420,7 +501,8 @@ as historical reference and must not be edited. The active ABI is now
 
 ## Release flow
 0. **Release-PR review gate (fleet standing process, adopted after issue
-   #37):** stage every release as a PR (version bumps + CHANGELOG +
+   #37; see also the MANDATORY working standard above — the adversarial
+   review is commissioned per-PR, not only per-release):** stage every release as a PR (version bumps + CHANGELOG +
    stamped notes + tarball) and WAIT for the review comment before
    tagging — do not tag directly on master. Two of this cycle's four
    fleet releases needed pre-tag amendments; tags are immutable here, so
