@@ -437,6 +437,42 @@ Cleared as it lands; empty means S1/S2 are met for the current contract tag.
    separation did work here. Whether to add the stronger one is JC-000's call,
    not a gap to close quietly.
 
+   **§5 rounding-limit draft — answered for the record, 2026-09-07.** The
+   contract session (`c64-lib-contract-11`) measured our `polyval.a` as
+   declaring **6656** against **14943**, an apparent 8287 B UNDER-declaration,
+   and asked us to check before it calibrated a clause. **Their arithmetic was
+   right and their classification was wrong:** `LIB_POLYVAL_HTABLE` (256),
+   `LIB_POLYVAL_LONG_HTABLE8` (4096) and `LIB_POLYVAL_LONG_REDUCE8` (4096)
+   are `type = bss` in `src/lib_only.cfg:90-92` — runtime-computed tables, not
+   shipped bytes. 14943 − 8448 = **6495**, under a declared 6656. Safe
+   direction, 161 B of slack. Answers sent; the numbers are here so the next
+   session does not re-derive them.
+
+   | archive | measured | declared | slack | % |
+   |---|---|---|---|---|
+   | `polyval.a` / `-gcmsiv.a` | 6495 | 6656 | 161 | 2.5% |
+   | `-gcmsiv-short.a` | 16063 | 16128 | 65 | 0.4% |
+   | `-gcmsiv-compact.a` | 2774 | 2816 | 42 | 1.5% |
+   | `-long.a` | 4160 | 4352 | 192 | 4.6% |
+   | `-short.a` | 13614 | 13824 | 210 | 1.5% |
+   | `-compact.a` | 325 | 512 | 187 | **57.5%** |
+
+   Conformant against the draft's `max(1024 B, 10%)` in all six — but only
+   because of the absolute floor. **A percentage-only limit would fail
+   `-compact.a`**, not for any defect but because rounding UP to a 256-byte
+   boundary is inherently up to 78% slack on a 325 B archive. If that draft
+   ever loses its floor, say so before it merges.
+
+   **Two things conceded to them, because they are true.** (1) A third party
+   cannot derive our RESIDENT/COLD split from the artifact: COLD is a *subset*
+   of the resident span measured by label delta, not a segment of its own.
+   x25519's `LIB_X25519_INIT_CODE` is the better shape, and this is worth an
+   issue here if the draft does not force it. (2) §5's "code+rodata" renders
+   **9625 B** invisible — 1177 B of named BSS plus 8448 B of page-aligned
+   tables — which a consumer must still place, and which on a stock C64 is the
+   difference between fitting under $A000 and not. Told them the measurand is
+   the clause worth having, not the slack.
+
    **Score for this audit so far: eight issues, five of them found by asking
    another repo's question here rather than by reading our own code.** #85,
    #87 (adversarial review of #85's fix), #91 (review of #86/#90's fix) came
