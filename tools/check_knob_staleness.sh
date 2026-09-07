@@ -46,6 +46,10 @@ trap cleanup EXIT
 dump_to() {   # $1 = object, $2 = destination file
   if [ ! -f "$1" ]; then return 3; fi
   if ! od65 --dump-exports "$1" >"$2" 2>"$2.err"; then return 4; fi
+  # od65 exits 0 on a file that is not an object at all, saying so on stdout.
+  # Without this it fell through to "could not read an export Count", which is
+  # true but points at the parser instead of at the file.
+  if grep -q '(no xo65 object file)' "$2"; then return 7; fi
   # od65 states its own export count. If our parse disagrees with it, the
   # parse is wrong and every count derived from it is untrustworthy.
   declared=$(sed -n 's/^ *Count: *\([0-9][0-9]*\).*/\1/p' "$2" | head -1)
@@ -67,6 +71,7 @@ dump_or_fail() {  # $1 = object, $2 = label
     3) fail "$2: object '$1' does not exist -- a member was dropped or the build did not run (this is NOT 'zero exports')" ;;
     4) fail "$2: od65 failed on '$1' -- $(head -1 "$SCRATCH/dump.$2.txt.err" 2>/dev/null)" ;;
     5) fail "$2: could not read an export Count from od65's dump of '$1'" ;;
+    7) fail "$2: '$1' is not an xo65 object file (od65 exits 0 and says so on stdout, which is why this needs its own branch)" ;;
     6) fail "$2: parsed $parsed export names but od65 declared $declared for '$1' -- the extractor is wrong, so no count below can be trusted" ;;
     *) fail "$2: dump of '$1' failed with status $st" ;;
   esac
@@ -77,6 +82,16 @@ dump_or_fail() {  # $1 = object, $2 = label
 dump_all() {
   dump_or_fail "$SCRATCH/zp_config.o"   zp_config
   dump_or_fail "$SCRATCH/lib_version.o" lib_version
+  # polyval_long.o is dumped for its RECONCILIATION alone -- no count below
+  # reads it. It is the object that carries `Name:"polyval_precompute_table"`
+  # with NO separating space: od65 pads the Name field by |24 - namelen|, so a
+  # long enough name butts against the colon. docs/contract-watch.md §6e
+  # records that an `awk '/Name:/{print $2}'` extractor silently DROPS that
+  # name. Our sed form handles it (` *` matches zero spaces) -- and dumping
+  # this object makes that a checked property rather than a lucky one: any
+  # future "simplification" of the extractor fails the declared-vs-parsed
+  # reconciliation here instead of quietly under-counting somewhere else.
+  dump_or_fail "$SCRATCH/polyval_long.o" polyval_long
 }
 
 # Counts, taken from an already-reconciled dump file.
