@@ -25,7 +25,7 @@ condition.**
 
 | | State at reopen, 2026-09-07 | vs. close |
 |---|---|---|
-| **S1** | c64-polyval: 0 open issues, clean tree | holds |
+| **S1** | **NOT MET as of 2026-09-07 ~13:30 — 8 open issues, every one filed by this session's own check audit** (#85 fixed in PR#88; #86/#90/#91 fixed in PR#92; #87, #89, #93, #94 filed with reproductions, unfixed). Tree clean. This is S1 doing its job, not a regression: the issues describe defects that were already there and unmeasured, and closing them is now the S1 work | **broke** — was 0 open at reopen |
 | **S2** | `v0.11.0`, verified conformant against SPEC **v1.2.2** (still the latest tag) | holds |
 | **S3** | three open contract items as of 07:05: **#193** (x25519 retraction), **#194** (their `verify-addrsize` passes with no `od65` at all), **PR #195** (records adversarial review + red/green as *their repo's* standards, explicitly **not** contract text). Each read; **none changes a c64-polyval conformance answer** | was 0/0 |
 | **S4** | **NOT MET.** x25519 `v0.16.0` retracted by #193 — four reproduced conformance gaps (§8.2, §8.4, §2/§5, §4) plus an evidence defect. polyval `v0.11.0`, nist-curves `v0.14.0`, chacha `v0.11.0`, mlkem `v0.5.0` unchanged, but nist-curves carries **#155 [HIGH] §6.1** filed 2026-09-06, which is the same shape and wants the same "tagged with open findings" reading | **broke** |
@@ -46,7 +46,9 @@ unverified when made. A check that has never been observed to fail has not
 been shown to check anything. Its taxonomy also adds a fourth form worth
 holding onto: **a gate whose fixture encodes the defect it should catch.**
 
-To close again: S4 needs x25519 back to settled (their #130/#132 and the
+To close again: **S1** needs the eight open issues resolved (two are in
+review as PR#88 and PR#92; #87, #89, #93 and #94 have reproductions and no
+fix), and S4 needs x25519 back to settled (their #130/#132 and the
 four #193 gaps) and nist-curves#155 resolved or ruled non-settling, with
 each verified **at the tag**. Treat §5a as starting facts, not something to
 rediscover.
@@ -420,7 +422,10 @@ Two known items, neither live:
   unestablished; the pin bumps may already be inside it.
 
 Scale, for whoever scopes it: 38 open issues across the consumer repos at
-close, against a handful across the adopters.
+close, against a handful across the adopters. **Re-measured 2026-09-07
+~13:30: 45** (c64-https 25, c64-wireguard 20). Still out of scope by the
+ruling — recorded so the handoff figure is not stale, not as an argument to
+reopen S5.
 
 ---
 
