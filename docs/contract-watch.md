@@ -451,11 +451,31 @@ Cleared as it lands; empty means S1/S2 are met for the current contract tag.
    | archive | measured | declared | slack | % |
    |---|---|---|---|---|
    | `polyval.a` / `-gcmsiv.a` | 6495 | 6656 | 161 | 2.5% |
-   | `-gcmsiv-short.a` | 16063 | 16128 | 65 | 0.4% |
-   | `-gcmsiv-compact.a` | 2774 | 2816 | 42 | 1.5% |
+   | `-gcmsiv-short.a` | 15949 | 16128 | 179 | 1.1% |
+   | `-gcmsiv-compact.a` | 2660 | 2816 | 156 | 5.9% |
    | `-long.a` | 4160 | 4352 | 192 | 4.6% |
    | `-short.a` | 13614 | 13824 | 210 | 1.5% |
    | `-compact.a` | 325 | 512 | 187 | **57.5%** |
+
+   *(Corrected. The version first sent upstream had SHORT at 16063 and
+   COMPACT at 2774 — those were spans **including** the 114 B `lib_main.o`
+   verify stub, which is not an archive member, while LONG was members-only:
+   mixed bases in one table. The error understated slack, so it was safe in
+   their direction, but they were calibrating a clause against it. Corrected
+   to them the same session; all six rows are now members-only.)*
+
+   **Alignment-gap under-declaration (x25519#142, chacha#126) — measured here,
+   zero in all six arms, and structurally so.** Both siblings found RESIDENT
+   under-declared in the **unsafe** direction (59 B and 60 B) by inter-segment
+   alignment fill their object-size sums could not see. Ours cannot, for two
+   independent reasons: **no `ro` segment carries an `align` attribute** (the
+   three `$100`-aligned segments are all `type = bss`, outside RESIDENT), and
+   **the measurand is a placed span, so any fill would already be inside the
+   number.** Measured: the three AEAD arms have five contiguous `ro` segments,
+   internal fill 0; the three NO_AES arms have exactly **one** `ro` segment
+   each, where inter-segment fill is impossible. That is PR#200's basis
+   argument from the other side — a span charges fill automatically, an
+   object-size sum cannot see it.
 
    Conformant against the draft's `max(1024 B, 10%)` in all six — but only
    because of the absolute floor. **A percentage-only limit would fail
@@ -504,9 +524,14 @@ Cleared as it lands; empty means S1/S2 are met for the current contract tag.
    before believing an absence. Same shape as #86, fifth instance today.)*
 
    **Two items filed separately upstream, both JC-000's call, neither
-   actionable by this watch.** (1) *Cold-split verifiability* — for us this is
-   a segment restructure, not wording: COLD is an address delta inside a span,
-   and the fix is an `LIB_POLYVAL_INIT_CODE`-shaped segment on x25519's model.
+   actionable by this watch.** (1) *Cold-split verifiability*, now
+   **contract#201**, whose table names us correctly: our COLD is not
+   third-party derivable, and that is not disputed. For us it is a segment
+   restructure, not wording — COLD is an address delta inside a span, and the
+   fix is an `LIB_POLYVAL_INIT_CODE`-shaped segment on x25519's model.
+   **Scoping note: the COMPACT arm is the awkward one**, its cold code placed
+   last in-segment on purpose and measured to segment end from the `-m` map,
+   so a split there revisits a placement decision rather than renaming.
    (2) *The 9,625 B the equates render invisible.* **Record the §7 reading
    now, because this repo has re-derived ABI arguments badly before:**
    changing what `LIB_POLYVAL_RESIDENT_BYTES` / `_COLD_BYTES` *cover* is a
