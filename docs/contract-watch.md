@@ -334,6 +334,15 @@ Cleared as it lands; empty means S1/S2 are met for the current contract tag.
    `consumer-check`, `consumer-check-shipped` and `consumer-check-noaes` run
    only when a human types them. Raise with the owner before filing; an
    umbrella `verify` target is the cheap half and CI is a policy call.
+   **Resolved 2026-09-07 by chacha PR#128**, which fixed their side and made
+   the sharper question askable: their *release script* carried a hand-copied
+   gate list that had drifted, so every tarball shipped checked with four of
+   six. Asked here, the answer was worse — **`make dist` has no prerequisites
+   and `tools/build_release.sh` invokes no gate at all, so our releases run
+   zero.** Filed as **#96**. The cost objection died on measurement: all four
+   gates from a cold tree take **~1 second** (verified they actually ran, not
+   short-circuited — `consumer-check-noaes` emitted its three archive builds).
+   CI still deliberately not filed.
 
    **Third pass, from nist-curves#158 — and this one found a live gap in a
    check we already had.** Their framing: *the gate is checked only for what
@@ -590,12 +599,13 @@ Cleared as it lands; empty means S1/S2 are met for the current contract tag.
    being broken, so it moves `LIB_POLYVAL_ABI_VERSION`. New symbols alongside
    the existing ones would not.
 
-   **Score for this audit so far: eight issues, five of them found by asking
+   **Score for this audit so far: ten issues, six of them found by asking
    another repo's question here rather than by reading our own code.** #85,
    #87 (adversarial review of #85's fix), #91 (review of #86/#90's fix) came
    from review; #86 from contract#194, #89 from contract#198, #90 from
-   nist-curves#158, #93 from x25519#140. The fleet's findings port across
-   repos far better than any of them ports a fix.
+   nist-curves#158, #93 from x25519#140, #94 from chacha#122, #96 from chacha#128; #95 came
+   from the contract session's own observation on our answer. The fleet's
+   findings port across repos far better than any of them ports a fix.
 
    Adopted from PR #195 into `CLAUDE.md` at the same time, as local practice:
    the **churn test** (compliance work must deliver easier consumer
