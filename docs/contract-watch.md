@@ -198,8 +198,12 @@ verdict, and do not re-read it every cycle unless it changes.
 
 | Ref | What | Changes our answer? |
 |---|---|---|
-**As of 2026-09-07 ~19:15 the contract has TWO open issues (#198, #199) and
-ZERO open PRs, at v1.2.2.** #193 and #194 closed COMPLETED; PRs #195, #196
+**As of 2026-09-07 ~20:10 the contract has FIVE open issues (#198, #199,
+#201, #202, #203) and ONE open PR (#200 — SPEC v1.2.3, §5 footprint basis),
+at v1.2.2.** #202 is the scope problem (a figure does not say which
+configuration it describes) and **#203 is our own 9,625 B finding, filed
+upstream as promised** — the §7 reading for it is pre-recorded in §6 item 3.
+Earlier state: **TWO open issues (#198, #199) and ZERO open PRs at ~19:15.** #193 and #194 closed COMPLETED; PRs #195, #196
 and #197 all merged within 27 seconds of each other. **None of the three
 touched `SPEC.md`** — they changed `CLAUDE.md`, `adopters.md` and `Makefile`
 respectively — and no new tag was cut. So the conformance surface is
@@ -546,6 +550,26 @@ Cleared as it lands; empty means S1/S2 are met for the current contract tag.
    reserving one contiguous region adds that padding itself from §4's declared
    alignments. **No action here; our declared values stay correct under that
    reading.**
+
+   **PR#200 revisited — the "no-op" was wrong, and I tested my objection
+   before making it.** The contract session corrected itself: the clause now
+   says a figure is the **sum of its segments' placed spans**, while ours is a
+   **contiguous extent**, so we are in the moving set on basis even though no
+   number changes. I was going to argue their sentence *"reordering relocates
+   such padding rather than removing it"* is conditional — an aligned segment
+   placed first at an already-aligned start has no pad. **Built it first, and
+   it failed:** moving `LIB_POLYVAL_HTABLE` (`align = $100`) ahead of the
+   three unaligned BSS segments in our own cfg moved the pad from `005F00`
+   (150 B) to `005A00` (**47 B**) — smaller, relocated, not removed, because
+   the boundary it lands on is not itself aligned. That measurement is better
+   evidence for their ruling than for my objection, so I dropped it and said
+   so on the PR.
+
+   What was posted instead is a **wording request: make the clause a floor,
+   not an equality.** A contiguous extent is always ≥ the sum of spans, so it
+   is always safe; but read as a definition of the measurand, a library
+   measuring conservatively would have to *loosen a tighter number* to
+   conform. That is the only thing in PR#200 that could force a change here.
 
    **Two items filed separately upstream, both JC-000's call, neither
    actionable by this watch.** (1) *Cold-split verifiability*, now
