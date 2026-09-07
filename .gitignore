@@ -1,8 +1,12 @@
-build/
+# Pattern, not a list. `build/` and `build-knobcheck/` were enumerated by
+# name and `build-short/` was not, so six build artifacts sat TRACKED in git
+# for a release cycle (issue #99) -- including a polyval-short.a predating the
+# v0.11.0 member-isolation fix. c64-x25519#145 is the same drift in a sibling
+# repo, three times over. A pattern needs no third edit.
+/build*/
 __pycache__/
 *.pyc
 .serena/
-build-knobcheck/
 
 # ca65 language-server index cache (Serena / ca65-ls). Machine-local,
 # regenerated on demand.

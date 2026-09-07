@@ -349,7 +349,8 @@ endif
 .PHONY: all lib lib-verify lib-polyval-long lib-polyval-short \
         lib-polyval-compact lib-polyval-gcmsiv lib-polyval-gcmsiv-short \
         lib-polyval-gcmsiv-compact consumer-check \
-        consumer-check-noaes consumer-check-shipped run clean dist verify
+        consumer-check-noaes consumer-check-shipped run clean dist verify \
+        check-no-tracked-artifacts
 .DEFAULT_GOAL := all
 
 all: $(PRG) $(LABELS)
@@ -698,8 +699,81 @@ run: all
 	x64sc -moncommands $(LABELS) $(PRG)
 
 # --- Clean ----------------------------------------------------------------
+# Deletion stays an explicit list even though .gitignore now uses a pattern.
+# The asymmetry is deliberate: a wrong ignore rule hides a file, a wrong
+# `rm -rf` glob deletes someone's directory. SCRATCH_TREES are the trees this
+# repo's own tooling creates outside $(BUILD_DIR); check_knob_staleness.sh
+# also removes its own on exit, so this is belt-and-braces.
+SCRATCH_TREES = build-knobcheck
+
 clean:
-	rm -rf $(BUILD_DIR)
+	rm -rf $(BUILD_DIR) $(SCRATCH_TREES)
+
+# --- No build artifacts in git (issue #99) ---------------------------------
+# build-short/ sat TRACKED for two tags -- six artifacts from an unattributed
+# configuration, which a submodule-pinning consumer could have linked without
+# being able to tell them from the shipped ones. Neither `clean` nor
+# .gitignore covered it, because both were hand-maintained lists.
+#
+# THREE rules, and they are NOT a complete partition -- the residual gap is
+# stated below rather than papered over:
+#   * by extension, anywhere. This is the guard for an arbitrary BUILD_DIR
+#     override: `make BUILD_DIR=outtree lib` produces a tree no ignore
+#     pattern can predict, and a plain `git add -A` stages it -- no `-f`
+#     needed, because nothing ignores it. Nothing sits upstream of this rule
+#     in that case.
+#   * by path under build*, which additionally catches generated files whose
+#     extensions can never join the alternation because src/ tracks the same
+#     suffixes: build/lib/polyval.inc, build/lib/polyval-example.cfg.
+#   * by name for .ca65flags, which is generated and can never legitimately
+#     be tracked at any path.
+#
+# RESIDUAL GAP, measured: under a BUILD_DIR override, generated .inc and
+# .cfg copies (outtree/lib/polyval.inc, outtree/lib/polyval-example.cfg)
+# match none of the three -- the extension rule structurally cannot take
+# .inc/.cfg because src/polyval-example.cfg and src/*.inc are legitimately
+# tracked, and the path rule keys on `build`. Closing it would need a fourth
+# hand-maintained list of generated basenames, which is the drift that
+# produced #99 in the first place. Documented instead: if you override
+# BUILD_DIR, do not `git add -A`.
+#
+# `.lib` is deliberately NOT in the alternation: ca65/release/v0.1.0/
+# polyval_short.lib is a real ar65 archive, tracked on purpose as a frozen
+# historical artifact, hashed in its MANIFEST.txt and marked DO NOT MODIFY in
+# CLAUDE.md. Adding `lib` here would turn a clean tree red and the only fix
+# would be editing that subtree.
+#
+# grep's exit status is checked, not swallowed: 0 is a match, 1 is no match,
+# and anything above 1 is an ERROR -- a missing or broken grep otherwise
+# yields the same empty result as a clean tree. `git ls-files` is checked
+# separately for the same reason. Both are issue #86's shape, and adversarial
+# review caught this recipe reintroducing it in the very comment that claimed
+# it would not.
+check-no-tracked-artifacts:
+	@files=$$(git ls-files) || { \
+	  echo "check-no-tracked-artifacts: 'git ls-files' failed" >&2; exit 1; }; \
+	if [ -z "$$files" ]; then \
+	  echo "check-no-tracked-artifacts: 'git ls-files' returned nothing -- not a repo?" >&2; \
+	  exit 1; \
+	fi; \
+	bad=$$(printf '%s\n' "$$files" | grep -E '\.(o|a|prg|lbl)$$'); st=$$?; \
+	if [ $$st -gt 1 ]; then \
+	  echo "check-no-tracked-artifacts: grep failed (exit $$st) -- the check could not run" >&2; \
+	  exit 1; \
+	fi; \
+	inbuild=$$(printf '%s\n' "$$files" | grep -E '^build|(^|/)\.ca65flags$$'); st2=$$?; \
+	if [ $$st2 -gt 1 ]; then \
+	  echo "check-no-tracked-artifacts: grep failed (exit $$st2) -- the check could not run" >&2; \
+	  exit 1; \
+	fi; \
+	if [ -n "$$bad" ] || [ -n "$$inbuild" ]; then \
+	  echo "check-no-tracked-artifacts: build output is tracked in git:" >&2; \
+	  printf '%s\n' "$$bad" "$$inbuild" | grep -v '^$$' | sort -u | sed 's/^/  /' >&2; \
+	  echo "  (see issue #99; run 'git rm -r --cached <path>')" >&2; \
+	  exit 1; \
+	fi; \
+	echo "check-no-tracked-artifacts: nothing under build*, no .ca65flags, no .o/.a/.prg/.lbl anywhere"
+
 
 # --- Umbrella verification target (issue #96) ------------------------------
 # ONE list. Before this, nothing invoked the gates as a set: `make dist` had
