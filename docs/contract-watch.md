@@ -196,8 +196,10 @@ verdict, and do not re-read it every cycle unless it changes.
 
 | Ref | What | Changes our answer? |
 |---|---|---|
-**As of 2026-09-07 07:05 the contract has TWO open issues (#193, #194) and ONE
-open PR (#195), at v1.2.2** (was 0/0 at close the previous day). Re-check before trusting
+**As of 2026-09-07 12:20 the contract has TWO open issues (#193, #194) and
+THREE open PRs (#195, #196, #197), at v1.2.2** (was 0/0 at close the previous
+day). None changes a c64-polyval conformance answer; #196 and #197 close the
+two issues when they merge. Re-check before trusting
 this — that repo has shipped several releases a day.
 
 | Ref | What | Changes our answer? |
@@ -205,7 +207,8 @@ this — that repo has shipped several releases a day.
 | **#193** | Retraction of c64-x25519's settled status at v0.16.0: four reproduced conformance gaps (§8.2 provider surface, §8.4 2048 B unenumerated, §2/§5 `fe_wide` ZP, §4 RAM-backed declaration) plus an evidence defect — three `-negative` legs that could not fail | **No conformance answer changes here.** No clause text moved; the contract is still v1.2.2 and §8.x is N/A to us (G3). Two effects that are not conformance: it **breaks S4** (§0), and its check-taxonomy fourth form — *a gate whose fixture encodes the defect it should catch* — is adopted into this repo's working standard (`CLAUDE.md`) |
 | **#194** | Their `make verify-addrsize` is a zero-count absence check with no positive control: `OD65=/bin/false make verify-addrsize` prints `ok` and exits 0. A `dump=$(... | awk)` assignment takes awk's status, so a missing dumper yields an empty string, both loops iterate zero times, and `bad=0` prints success | **No.** Their Makefile, not ours (G3/G1 — untagged, and not a clause). Kept for the **form**: an absence assertion that cannot tell "looked and found none" from "looked at nothing". `CLAUDE.md`'s positive-control rule already covers it; the local audit it implies is recorded in §6 |
 | **PR #195** | Records adversarial review + red/green as standards **in the contract repo's own `CLAUDE.md`**. States in its own text that it is not contract text and fails prong 2 of the scope rule, and that it is **not** grounds to un-retire §15 | **No — and no obligation lands on adopters, by its own terms.** Convergent with what this repo adopted the same morning. Two of its ideas are worth taking locally and have been (§6 item 3): the **churn test** and the **citation duty** |
-| Ref | What | Changes our answer? |
+| **PR #196** | Records c64-x25519 as *tagged with open findings*, not settled; closes #193. Its own adversarial review rejected two of the four verdicts and it revised them — all four gaps stand, §4 confirmed on the declaration (not the attribute), §2's parenthetical withdrawn, §8.2 rescoped with a positive-controlled `git grep` in place of a GitHub code search | **No.** Confirms the S4 reading already recorded in §0. The eight x25519 issues (#130, #132–#138) are the gaps filed out; observed, not audited here |
+| **PR #197** | Fixes their #194: three gates — od65 actually ran, the extractor saw every export the dumper declared, and the population reconciles — replacing the zero-count absence check. Also drops the `awk $2` extraction whose padding is `|24 - namelen|` | **No** (their Makefile). Worth reading as prior art when fixing **our #86**, which is the same class || Ref | What | Changes our answer? |
 |---|---|---|
 | ~~PR #187~~ | merged as **v1.2.1**, verbatim as read; the G2 call it justified was correct | resolved |
 | ~~#186~~ | closed by v1.2.1 | resolved |
@@ -226,8 +229,8 @@ tag, and is **observed**, not asserted on someone else's behalf.
 |---|---|---|---|
 | c64-polyval | adopter | **v0.11.0 (tagged, released)** | verified against v1.2.2: §6.1 member isolation fixed, the withdrawn-§6.1 claims corrected, `lib_version.s` conformant outright under v1.2.1's carve-out |
 | c64-nist-curves | adopter | **v0.14.0 — tagged with open findings** (#155 [HIGH] §6.1 `mul_8x8.o` exports §8.1/§8.2/§8.3 from one TU, filed 2026-09-06; #142 ratchet-leg audit) | #153 and #154 both closed. #154 verified at the tag with a §6g positive control: bare `zp_*` aliases in `zp_config.s` went **4 → 0**, and `src/zp_aliases.s` (104 lines) plus `src/mul_aliases.s` appeared as the separate archived TUs. #153 is §8.2 REU — **N/A to this library** and their domain to certify; recorded as closed by them, not audited here |
-| c64-x25519 | adopter | **v0.16.0 — RETRACTED 2026-09-07, tagged with open findings** (contract#193; their #130, #132 open) | their settling tag, verified at the tag with a §6g positive control: `src/precalc_manifest.s` present, `lib_manifest.s` 0 macro invocations (3 at v0.13.0), ref+path confirmed to exist so the zero is a real zero. Member isolation shipped at v0.14.0; v0.15.0 added §8.2 `A = a` and ABI 3 → 4; v0.16.0 closes their #128 |
-| c64-ChaCha20-Poly1305 | adopter | **v0.11.0 — settled; one post-tag issue** (#117, `.local` macro label leak — consumer-visible, not a settling clause) | verified at the tag with a §6g positive control. `lib_manifest.s` 5 macro invocations at v0.10.0 → **0** at v0.11.0, `src/lib/precalc_manifest.s` present. Both #108 members done: `poly1305_lib.s` went 11 `.export` lines → 2, moving out the 8 `APP_OWNED` §8.1/§8.3 names. Their release also corrects the five under-reporting footprint equates from #113 |
+| c64-x25519 | adopter | **v0.16.0 — RETRACTED 2026-09-07, tagged with open findings** (contract#193, recorded by contract PR#196; **eight** open: #130, #132–#138) | their settling tag, verified at the tag with a §6g positive control: `src/precalc_manifest.s` present, `lib_manifest.s` 0 macro invocations (3 at v0.13.0), ref+path confirmed to exist so the zero is a real zero. Member isolation shipped at v0.14.0; v0.15.0 added §8.2 `A = a` and ABI 3 → 4; v0.16.0 closes their #128 |
+| c64-ChaCha20-Poly1305 | adopter | **v0.11.0 — settled; two post-tag issues** (#117 `.local` macro label leak; #118 CHANGELOG holds the v0.11.0 draft under `[Unreleased]` — neither a settling clause) | verified at the tag with a §6g positive control. `lib_manifest.s` 5 macro invocations at v0.10.0 → **0** at v0.11.0, `src/lib/precalc_manifest.s` present. Both #108 members done: `poly1305_lib.s` went 11 `.export` lines → 2, moving out the 8 `APP_OWNED` §8.1/§8.3 names. Their release also corrects the five under-reporting footprint equates from #113 |
 | c64-mlkem | adopter | v0.5.0 (open: #3 stale contract version in their CLAUDE.md, #1 §6.3 warm-tree define drop) | **clean on §8.4** — defines `LIB_NO_BARE_EXPORTS = 1` in its enumerating TU per §8.4's zero-consumer carve-out, so nothing displaceable is there to isolate |
 | c64-https | consumer | v0.4.3 | pins `libs/nistcurves` **v0.11.2** and `libs/x25519` **v0.13.0** — both stale; needs nistcurves v0.14.0 and x25519 v0.16.0 |
 | c64-wireguard | consumer | v2.0.0-ca65 | pins `libs/chacha20poly1305` **v0.9.0** and `libs/x25519` **v0.11.2** — both stale; needs chacha v0.11.0 and x25519 v0.16.0 |
@@ -285,6 +288,22 @@ Cleared as it lands; empty means S1/S2 are met for the current contract tag.
    sabotage the input, confirm red, restore, confirm green — and record both
    directions. Also sweep for the non-propagating
    `X || (echo FAIL; exit 1)` shell form in `Makefile` and `tools/*.sh`.
+
+   **First pass done 2026-09-07.** Four guards driven red, each with a
+   deliberate defect: `consumer-check-shipped` (a reachback added to the
+   shipped `.inc` → `Cannot open include file`), `consumer-check-noaes` (the
+   NO_AES stub linked against the AEAD archive → `Duplicate external
+   identifier: 'gcmsiv_tag'`), the `.ca65flags` stamp (warm LONG→SHORT switch
+   with the stamp disabled → PRG byte-identical, i.e. the #58 defect
+   reproduced), and `check_knob_staleness.sh --selftest` (reports 13, not 0).
+   All four can fail. Two defects fell out and are filed: **#85** (`make dist`
+   overwrites a released tarball and rewrites its Attestation when the tree
+   has moved past the tag — fixed in PR #88, whose *first* version was itself
+   broken by adversarial review in two places) and **#86** (export counters
+   cannot tell 0 from a missing object). **#87** came from the same review.
+   c64-x25519#133, filed the same day, is #86's exact twin in another repo,
+   and contract PR#197 is the fix for the same class — read both before
+   fixing ours.
 
    Adopted from PR #195 into `CLAUDE.md` at the same time, as local practice:
    the **churn test** (compliance work must deliver easier consumer
