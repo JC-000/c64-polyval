@@ -43,6 +43,22 @@ bound, a build guard, a conformance property):
    is the precedent: 8 of its 15 checks were written RED against issues
    #69/#70 and stayed red until the code was fixed.
 
+**Verify the fixture before you believe the result — red OR green.** A
+sabotage test has two subjects: the code under test and the harness. If the
+harness never reached the code, the run tells you nothing, and it fails in
+*both* directions — a green that means "the mutation was not applied" and a
+red that means "the harness broke". Three instances in one session, all
+self-inflicted: a reset that ran `git checkout -- .` between cases and
+reverted the script under test (all-green, nothing tested); a sabotaged copy
+run from a scratch directory, where `ROOT=$(cd "$(dirname "$0")/.." ...)`
+resolved outside the repo (all-red, still nothing tested); and an
+extracted-function harness that an adversarial reviewer declined to trust and
+re-derived against the real script instead. So: assert the mutation is
+present before each case, prefer sabotaging the real script over a copy, and
+when a copy is unavoidable, keep it where its own path assumptions still
+hold. **An A/B beats an assertion** — show the check failing WITH your change
+and passing WITHOUT it, which proves your change is what does the work.
+
 **Positive control for anything that is not a plain unit test.** When the
 check is a build probe, an export-set comparison, a link probe or a grep over
 artifacts, prove the probe can see: make the expected condition false on
