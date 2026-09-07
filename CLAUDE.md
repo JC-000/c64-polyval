@@ -110,6 +110,15 @@ merges or tags.
   local standard and explicitly **not** contract text — no obligation lands
   on adopters from it.)
 
+**The reviewer is checked in.** `.claude/agents/adversarial-reviewer.md` is
+the definition this section names — the brief, the failure shapes to hunt,
+the citation duty, and the rules of engagement (scratch/worktree only,
+restore tracked files from a copy, never a broad process kill). It is the one
+file under `.claude/` that ships; everything else there stays local. Use it
+rather than re-improvising a brief, and extend it when a review finds a shape
+it did not list. Prior art: c64-nist-curves PR#160, which checked in the same
+pair the same day.
+
 `/code-review` is the usual vehicle; a task-specific brief to a subagent is
 fine when the claim is not diff-shaped (a footprint table, a fleet row, a
 reproducibility receipt). Either way the reviewer is a **different** agent

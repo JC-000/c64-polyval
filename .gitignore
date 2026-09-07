@@ -10,4 +10,11 @@ build-knobcheck/
 
 # Per-developer Claude Code settings. settings.local.json in particular is
 # explicitly personal.
-.claude/
+# Everything under .claude/ is local EXCEPT the reviewer definition that
+# CLAUDE.md's Working standard names. Note the shape: an excluded DIRECTORY is
+# never descended into, so `.claude/` + `!.claude/agents/**` does not work --
+# the contents must be excluded instead, then re-included level by level.
+.claude/*
+!.claude/agents/
+.claude/agents/*
+!.claude/agents/adversarial-reviewer.md
