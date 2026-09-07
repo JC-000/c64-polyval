@@ -230,7 +230,7 @@ tag, and is **observed**, not asserted on someone else's behalf.
 | c64-polyval | adopter | **v0.11.0 (tagged, released)** | verified against v1.2.2: §6.1 member isolation fixed, the withdrawn-§6.1 claims corrected, `lib_version.s` conformant outright under v1.2.1's carve-out |
 | c64-nist-curves | adopter | **v0.14.0 — tagged with open findings** (#155 [HIGH] §6.1 `mul_8x8.o` exports §8.1/§8.2/§8.3 from one TU; #142 ratchet-leg audit; #158 [MEDIUM] the NO_BARE gate checked only for what it removes — reproduced here as our **#90**) | #153 and #154 both closed. #154 verified at the tag with a §6g positive control: bare `zp_*` aliases in `zp_config.s` went **4 → 0**, and `src/zp_aliases.s` (104 lines) plus `src/mul_aliases.s` appeared as the separate archived TUs. #153 is §8.2 REU — **N/A to this library** and their domain to certify; recorded as closed by them, not audited here |
 | c64-x25519 | adopter | **v0.16.0 — RETRACTED 2026-09-07, tagged with open findings** (contract#193, recorded by contract PR#196; **ten** open: #130, #132–#140 — #139 is the composing-mode gap (our #89), #140 the fixed-name scratch race (our #93)) | their settling tag, verified at the tag with a §6g positive control: `src/precalc_manifest.s` present, `lib_manifest.s` 0 macro invocations (3 at v0.13.0), ref+path confirmed to exist so the zero is a real zero. Member isolation shipped at v0.14.0; v0.15.0 added §8.2 `A = a` and ABI 3 → 4; v0.16.0 closes their #128 |
-| c64-ChaCha20-Poly1305 | adopter | **v0.11.0 — settled; #117 CLOSED, two open** (#118 closed; #119 open — nothing invokes their seven verification gates, no CI, no umbrella target. Not a settling clause) | verified at the tag with a §6g positive control. `lib_manifest.s` 5 macro invocations at v0.10.0 → **0** at v0.11.0, `src/lib/precalc_manifest.s` present. Both #108 members done: `poly1305_lib.s` went 11 `.export` lines → 2, moving out the 8 `APP_OWNED` §8.1/§8.3 names. Their release also corrects the five under-reporting footprint equates from #113 |
+| c64-ChaCha20-Poly1305 | adopter | **v0.11.0 — settled; #117 CLOSED, two open** (#118 closed; #119 open — nothing invokes their seven verification gates; #122 no gate builds the configuration c64-wireguard actually builds. Neither a settling clause; #122's question reproduced here as our **#94**) | verified at the tag with a §6g positive control. `lib_manifest.s` 5 macro invocations at v0.10.0 → **0** at v0.11.0, `src/lib/precalc_manifest.s` present. Both #108 members done: `poly1305_lib.s` went 11 `.export` lines → 2, moving out the 8 `APP_OWNED` §8.1/§8.3 names. Their release also corrects the five under-reporting footprint equates from #113 |
 | c64-mlkem | adopter | v0.5.0 (open: #3 stale contract version in their CLAUDE.md, #1 §6.3 warm-tree define drop) | **clean on §8.4** — defines `LIB_NO_BARE_EXPORTS = 1` in its enumerating TU per §8.4's zero-consumer carve-out, so nothing displaceable is there to isolate |
 | c64-https | consumer | v0.4.3 | pins `libs/nistcurves` **v0.11.2** and `libs/x25519` **v0.13.0** — both stale; needs nistcurves v0.14.0 and x25519 v0.16.0 |
 | c64-wireguard | consumer | v2.0.0-ca65 | pins `libs/chacha20poly1305` **v0.9.0** and `libs/x25519` **v0.11.2** — both stale; needs chacha v0.11.0 and x25519 v0.16.0 |
@@ -347,7 +347,17 @@ Cleared as it lands; empty means S1/S2 are met for the current contract tag.
    raced `od65` on a half-deleted tree used to report `0`, which every
    assertion whose pass condition is a zero would have accepted.
 
-   **Score for this audit so far: seven issues, five of them found by asking
+   **Fifth pass, from chacha#122 — *does any gate build what a real consumer
+   builds?*** Measured: **no guard here links a consumer against an archive
+   built with `-D LIB_NO_BARE_EXPORTS=1`.** `consumer-check-shipped`
+   assembles with a bare `$(CA65)` and links the default archive;
+   `consumer-check-noaes` passes profile and NO_AES defines only;
+   `check_knob_staleness.sh` builds with the define but never links. The
+   configuration does work by hand (archive built nobare, stub links, 6543 B)
+   — it is simply unexercised, in the one mode a composing consumer must use
+   and that c64-aes256-ecdsa#28's collision forces. Filed as **#94**.
+
+   **Score for this audit so far: eight issues, five of them found by asking
    another repo's question here rather than by reading our own code.** #85,
    #87 (adversarial review of #85's fix), #91 (review of #86/#90's fix) came
    from review; #86 from contract#194, #89 from contract#198, #90 from
