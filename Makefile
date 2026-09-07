@@ -349,7 +349,7 @@ endif
 .PHONY: all lib lib-verify lib-polyval-long lib-polyval-short \
         lib-polyval-compact lib-polyval-gcmsiv lib-polyval-gcmsiv-short \
         lib-polyval-gcmsiv-compact consumer-check \
-        consumer-check-noaes consumer-check-shipped run clean dist
+        consumer-check-noaes consumer-check-shipped run clean dist verify
 .DEFAULT_GOAL := all
 
 all: $(PRG) $(LABELS)
@@ -701,6 +701,60 @@ run: all
 clean:
 	rm -rf $(BUILD_DIR)
 
+# --- Umbrella verification target (issue #96) ------------------------------
+# ONE list. Before this, nothing invoked the gates as a set: `make dist` had
+# no prerequisites at all and tools/build_release.sh called none of them, so a
+# release could be minted from a tree where every guard failed. The sibling
+# case that prompted the check is c64-ChaCha20-Poly1305#119/PR#128, where a
+# release script carried its own hand-copied gate list that had drifted and
+# shipped tarballs verified with four of six gates. Their conclusion is the
+# reason this is a variable and not a second list in the script: "a second
+# list is a second thing to forget."
+#
+# The VICE suite is deliberately NOT here. It needs x64sc and ~3.5 minutes,
+# and this machine is shared with other agents' emulator instances (see the
+# process-hygiene section in CLAUDE.md). These are build-and-link gates only:
+# whole set measured at ~1 second from a cold tree.
+#
+# The list covers EVERY shipped configuration plus the demo app, not just the
+# four consumer gates. The first cut had only the gates, and adversarial
+# review broke it in one move: an undefined symbol appended to
+# src/main_loop.s left `make` failing while `make verify` printed "all 4
+# gates pass" and `make dist` minted a tarball containing source that does
+# not assemble. The tarball ships source, so the consumer receives a tree
+# that cannot build. A gate set that does not build what ships is not a gate
+# set.
+#
+# Covered here and nowhere else: `all` (the app PRG -- main.s, boot.s,
+# main_loop.s, display.s, disk_io.s, gcm_siv_ui.s, strings.s, data_app.s and
+# src/c64.cfg are in no other target) and the three AEAD archive variants.
+# consumer-check-shipped builds polyval.a, and consumer-check-noaes builds
+# the three NO_AES archives, so those six were already reachable.
+#
+# Order matters twice. The profile-pinned lib-polyval-* targets and
+# consumer-check-noaes each run `make clean` first, so they go after the
+# gates that would otherwise be rebuilt for nothing. And because the last of
+# them leaves BUILD_DIR holding COMPACT/NO_AES objects, the recipe ends by
+# rebuilding the default tree -- otherwise `make verify` (or a release, which
+# depends on it) would silently hand the caller back a non-default build/.
+VERIFY_TARGETS = all lib-verify consumer-check consumer-check-shipped \
+                 lib-polyval-gcmsiv lib-polyval-gcmsiv-short \
+                 lib-polyval-gcmsiv-compact consumer-check-noaes
+
+verify:
+	@for t in $(VERIFY_TARGETS); do \
+	  echo "verify: $$t"; \
+	  $(MAKE) --no-print-directory $$t >/dev/null || { \
+	    echo "verify: FAILED at $$t -- re-run \`make $$t\` to see why" >&2; \
+	    exit 1; \
+	  }; \
+	done
+	@$(MAKE) --no-print-directory all >/dev/null || { \
+	  echo "verify: FAILED restoring the default build after the pinned targets" >&2; \
+	  exit 1; \
+	}
+	@echo "verify: all $(words $(VERIFY_TARGETS)) targets pass; default build restored"
+
 # --- Reproducible release tarball -----------------------------------------
 # `make dist VERSION=vX.Y.Z` produces c64-polyval-<VERSION>.tar.gz at the
 # repo root by invoking tools/build_release.sh. The script enforces the
@@ -709,7 +763,13 @@ clean:
 # tarball's own size + SHA256 (two-pass fixed-point). Determinism: fixed
 # mtime + owner/group + gzip -n so the same source tree always produces
 # a byte-identical tarball.
-dist:
+# `dist` depends on `verify`: a release cannot be minted from a tree where a
+# gate fails (issue #96). The gates run before build_release.sh, so a refusal
+# costs a second and touches nothing. They build into $(BUILD_DIR), which the
+# tarball does not stage, so the artifact is unaffected -- the red/green for
+# this change asserts that the tarball hash is byte-identical with and
+# without the prerequisite.
+dist: verify
 	@if [ -z "$(VERSION)" ]; then \
 	  echo "usage: make dist VERSION=vX.Y.Z" >&2; \
 	  exit 1; \
