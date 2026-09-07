@@ -228,7 +228,7 @@ tag, and is **observed**, not asserted on someone else's behalf.
 | Repo | Role | Latest tag | Conformant? |
 |---|---|---|---|
 | c64-polyval | adopter | **v0.11.0 (tagged, released)** | verified against v1.2.2: §6.1 member isolation fixed, the withdrawn-§6.1 claims corrected, `lib_version.s` conformant outright under v1.2.1's carve-out |
-| c64-nist-curves | adopter | **v0.14.0 — tagged with open findings** (#155 [HIGH] §6.1 `mul_8x8.o` exports §8.1/§8.2/§8.3 from one TU, filed 2026-09-06; #142 ratchet-leg audit) | #153 and #154 both closed. #154 verified at the tag with a §6g positive control: bare `zp_*` aliases in `zp_config.s` went **4 → 0**, and `src/zp_aliases.s` (104 lines) plus `src/mul_aliases.s` appeared as the separate archived TUs. #153 is §8.2 REU — **N/A to this library** and their domain to certify; recorded as closed by them, not audited here |
+| c64-nist-curves | adopter | **v0.14.0 — tagged with open findings** (#155 [HIGH] §6.1 `mul_8x8.o` exports §8.1/§8.2/§8.3 from one TU; #142 ratchet-leg audit; #158 [MEDIUM] the NO_BARE gate checked only for what it removes — reproduced here as our **#90**) | #153 and #154 both closed. #154 verified at the tag with a §6g positive control: bare `zp_*` aliases in `zp_config.s` went **4 → 0**, and `src/zp_aliases.s` (104 lines) plus `src/mul_aliases.s` appeared as the separate archived TUs. #153 is §8.2 REU — **N/A to this library** and their domain to certify; recorded as closed by them, not audited here |
 | c64-x25519 | adopter | **v0.16.0 — RETRACTED 2026-09-07, tagged with open findings** (contract#193, recorded by contract PR#196; **nine** open: #130, #132–#139 — #139 is the same composing-mode gap as contract#198 and our #89) | their settling tag, verified at the tag with a §6g positive control: `src/precalc_manifest.s` present, `lib_manifest.s` 0 macro invocations (3 at v0.13.0), ref+path confirmed to exist so the zero is a real zero. Member isolation shipped at v0.14.0; v0.15.0 added §8.2 `A = a` and ABI 3 → 4; v0.16.0 closes their #128 |
 | c64-ChaCha20-Poly1305 | adopter | **v0.11.0 — settled; #117 CLOSED, two open** (#118 CHANGELOG holds the v0.11.0 draft under `[Unreleased]`; #119 nothing invokes their seven verification gates — no CI, no umbrella target. Neither a settling clause) | verified at the tag with a §6g positive control. `lib_manifest.s` 5 macro invocations at v0.10.0 → **0** at v0.11.0, `src/lib/precalc_manifest.s` present. Both #108 members done: `poly1305_lib.s` went 11 `.export` lines → 2, moving out the 8 `APP_OWNED` §8.1/§8.3 names. Their release also corrects the five under-reporting footprint equates from #113 |
 | c64-mlkem | adopter | v0.5.0 (open: #3 stale contract version in their CLAUDE.md, #1 §6.3 warm-tree define drop) | **clean on §8.4** — defines `LIB_NO_BARE_EXPORTS = 1` in its enumerating TU per §8.4's zero-consumer carve-out, so nothing displaceable is there to isolate |
@@ -320,6 +320,22 @@ Cleared as it lands; empty means S1/S2 are met for the current contract tag.
    `consumer-check`, `consumer-check-shipped` and `consumer-check-noaes` run
    only when a human types them. Raise with the owner before filing; an
    umbrella `verify` target is the cheap half and CI is a policy call.
+
+   **Third pass, from nist-curves#158 — and this one found a live gap in a
+   check we already had.** Their framing: *the gate is checked only for what
+   it must remove, never for what it must keep.* Reproduced here by mutation:
+   move `.export LIB_POLYVAL_VERSION_PATCH: abs` into the
+   `.ifndef LIB_NO_BARE_EXPORTS` block, and the prefixed export vanishes from
+   the composing mode while `check_knob_staleness.sh` **and**
+   `consumer-check-shipped` both stay green. A consumer building with
+   `-D LIB_NO_BARE_EXPORTS=1` — the whole point of the switch — would get an
+   undefined symbol from a library whose gates are green. Filed as **#90**.
+   Source restored from a pre-mutation copy, not `git checkout`, and `build/`
+   rebuilt after.
+
+   **#86, #90, #89 are one job in that order:** rewrite the export-counting
+   helpers to reconcile instead of counting to zero (#86), then use them to
+   assert the kept surface for §1 (#90) and §8.4 (#89).
 
    Adopted from PR #195 into `CLAUDE.md` at the same time, as local practice:
    the **churn test** (compliance work must deliver easier consumer
