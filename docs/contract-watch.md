@@ -612,13 +612,21 @@ Cleared as it lands; empty means S1/S2 are met for the current contract tag.
    drifted: `make clean` removes only `$(BUILD_DIR)` and `.gitignore` lists
    `build/` and `build-knobcheck/` but not `build-short/` — which is
    **tracked in git**, six build artifacts committed by `ec66030` as
-   collateral. They are not merely stale: the tracked `lib_manifest.o`
-   exports `LIB_POLYVAL_PRECALC_polyval_htable_{REGION,SHARED,SIZE}` and the
-   tracked archive has no `precalc_manifest.o` member, so it is a
-   `polyval-short.a` from **before the v1.2.0 §6.1 member-isolation fix that
-   v0.11.0 shipped** — non-conformant against the contract this repo claims
-   conformance to, carrying the very `LIB_PRECALC_*` surface
-   c64-aes256-ecdsa#28 collides with. Not in the tarball (0 entries), so the
+   collateral. They are stale and **unattributed**: 5 members against a
+   current 6, 155,005 B against 156,705 B, built in a configuration the
+   artifact does not record.
+
+   **~~Non-conformant against §6.1, carrying c64-aes256-ecdsa#28's collision
+   surface~~ — RETRACTED, both halves, by adversarial review of the fix.**
+   Re-measured from git: the tracked `lib_manifest.o` exports **0** bare
+   `LIB_PRECALC_*` (3 prefixed) and the tracked `lib_version.o` **0** bare
+   `LIB_(VERSION|ABI)` (4 prefixed) — that build used
+   `-D LIB_NO_BARE_EXPORTS=1`. §6.1 governs **displaceable** names and this
+   member has none co-resident, so it is not a member-isolation violation;
+   and #28's collision class is the bare triple the artifact does not carry.
+   *Stale and unattributed* was always the sufficient claim. Recorded because
+   the escalation would have been quoted back as fact — the same failure as
+   the v0.10.0 ABI argument this file already documents. Not in the tarball (0 entries), so the
    exposure is git consumers: a clone, a `git archive`, or a submodule pin,
    which is how c64-https and c64-wireguard consume libraries. Filed as
    **#99**.
