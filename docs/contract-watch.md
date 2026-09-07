@@ -393,6 +393,21 @@ Cleared as it lands; empty means S1/S2 are met for the current contract tag.
    number was absurd. Pair each `Name:` with the `Value:` that follows it, and
    look at the raw blocks before trusting any derived table.
 
+   **And the watch's own monitor had the defect too, found 2026-09-07 by it
+   firing.** The poller reported the entire fleet's tags, issues and PRs
+   vanishing at once — six repos, one poll. That is not a fleet event, it is
+   a failed query: it captured `gh` output with `2>/dev/null` and never
+   checked the exit status, so a transient failure produced empty fields that
+   compared as a real CHANGE. Confirmed within a minute by re-querying by
+   hand (`core: 5000/5000`, every answer correct). Rewritten to check every
+   query's status, to HOLD the previous snapshot on a failed poll — an
+   unanswered poll is *unknown*, not *changed* — and to say "BLIND, not
+   quiet" after four consecutive failures, with a recovery line when it
+   clears. **Empty is a legitimate answer here** (a repo with no tags, a repo
+   with no open issues); only the status distinguishes it from a failure,
+   which is the whole of #86 restated. Written by the session that had filed
+   #86, #91 and #94 about this shape.
+
    **Score for this audit so far: eight issues, five of them found by asking
    another repo's question here rather than by reading our own code.** #85,
    #87 (adversarial review of #85's fix), #91 (review of #86/#90's fix) came
