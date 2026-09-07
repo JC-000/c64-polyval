@@ -98,6 +98,70 @@ fi
 OUT="c64-polyval-${TAG}.tar.gz"
 PREFIX="c64-polyval-${TAG}"
 
+# --- Tag-drift guard (issue #85) -----------------------------------------
+# If refs/tags/$TAG already exists, this is a RE-RUN against a released tag,
+# and the only honest thing to rebuild is the tree that tag names. On a tree
+# that has moved past it, the old behaviour rebuilt from HEAD, overwrote the
+# tracked c64-polyval-$TAG.tar.gz, and rewrote the released notes'
+# Attestation to a size + SHA256 that no longer describes the artifact on the
+# release page -- exit 0, no diagnostic. A consumer verifies the download
+# against exactly those two values, so that is a consumer-visible corruption
+# one `git commit -a` away. Measured on master at dd081a3 with v0.11.0:
+# 142336 -> 143194 bytes, hash bd566d1c... -> 91b30596..., because three
+# post-tag commits touched API.md, CHANGELOG.md and src/precalc_manifest.s.
+#
+# Determinism itself was never the defect -- two runs on one unchanged tree
+# reproduce byte-for-byte. What was missing is the check that the tree is
+# still the tag's.
+#
+# Set ALLOW_TAG_DRIFT=1 to override, for the deliberate case of re-cutting
+# notes for a tag you are about to move. It prints what it is overriding.
+ALLOW_TAG_DRIFT="${ALLOW_TAG_DRIFT:-0}"
+if git rev-parse --git-dir >/dev/null 2>&1 && \
+   git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+  # Exactly the staged set, so an unstaged file (contract-watch.md, tools/,
+  # test/) never trips this. Globs are expanded here, not passed to git.
+  STAGED_PATHS=(README.md API.md CHANGELOG.md LICENSE VERSION \
+                docs/precalc-tables.md "$NOTES_REL")
+  for f in src/*.s src/*.inc src/*.cfg src/include/*.inc; do
+    [[ -e "$f" ]] && STAGED_PATHS+=("$f")
+  done
+
+  DRIFTED="$(git diff --name-only "$TAG" -- "${STAGED_PATHS[@]}" 2>/dev/null || true)"
+
+  # A file added to src/ after the tag is drift too, and `git diff` against
+  # the tag cannot see it if it was never committed.
+  UNTRACKED=""
+  while IFS= read -r f; do
+    [[ -z "$f" ]] && continue
+    case "$f" in
+      src/*.s|src/*.inc|src/*.cfg|src/include/*.inc) UNTRACKED="$UNTRACKED$f"$'\n' ;;
+    esac
+  done < <(git ls-files --others --exclude-standard -- src 2>/dev/null || true)
+
+  if [[ -n "$DRIFTED" || -n "$UNTRACKED" ]]; then
+    if [[ "$ALLOW_TAG_DRIFT" == "1" ]]; then
+      echo "warning: ALLOW_TAG_DRIFT=1 -- rebuilding $TAG from a tree that has" >&2
+      echo "         moved past the tag. The tarball and the Attestation block" >&2
+      echo "         in $NOTES_REL will NOT describe the released artifact." >&2
+    else
+      echo "error: tag '$TAG' exists, but staged files differ from it." >&2
+      [[ -n "$DRIFTED" ]]   && { echo "       changed since the tag:" >&2; \
+                                 echo "$DRIFTED" | sed 's/^/         /' >&2; }
+      [[ -n "$UNTRACKED" ]] && { echo "       untracked, would be staged:" >&2; \
+                                 printf '%s' "$UNTRACKED" | sed 's/^/         /' >&2; }
+      echo "       Rebuilding here would overwrite the released $OUT and rewrite" >&2
+      echo "       the Attestation in $NOTES_REL to values that do not match the" >&2
+      echo "       published release (issue #85)." >&2
+      echo "       To verify a released tag, build from a worktree of it:" >&2
+      echo "         git worktree add /tmp/verify-$TAG $TAG && cd /tmp/verify-$TAG && make dist VERSION=$TAG" >&2
+      echo "       To override deliberately: ALLOW_TAG_DRIFT=1 make dist VERSION=$TAG" >&2
+      exit 1
+    fi
+  fi
+fi
+
+
 # Parse the release date from the notes front matter so the tarball
 # timestamps track the documented release rather than the build clock.
 # Convention: first line is "# c64-polyval vX.Y.Z -- YYYY-MM-DD".
