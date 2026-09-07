@@ -231,7 +231,7 @@ tag, and is **observed**, not asserted on someone else's behalf.
 |---|---|---|---|
 | c64-polyval | adopter | **v0.11.0 (tagged, released)** | verified against v1.2.2: §6.1 member isolation fixed, the withdrawn-§6.1 claims corrected, `lib_version.s` conformant outright under v1.2.1's carve-out |
 | c64-nist-curves | adopter | **v0.14.0 — tagged with open findings** (#155 [HIGH] §6.1 `mul_8x8.o` exports §8.1/§8.2/§8.3 from one TU; #142 ratchet-leg audit; #158 the NO_BARE gate checked only for what it removes (our **#90**); #159 the gated-surface leg reads only the default variant arm (folded into our **#89**); PR#160 checks in their red/green + adversarial-review standard and a reviewer agent definition) | #153 and #154 both closed. #154 verified at the tag with a §6g positive control: bare `zp_*` aliases in `zp_config.s` went **4 → 0**, and `src/zp_aliases.s` (104 lines) plus `src/mul_aliases.s` appeared as the separate archived TUs. #153 is §8.2 REU — **N/A to this library** and their domain to certify; recorded as closed by them, not audited here |
-| c64-x25519 | adopter | **v0.16.0 — RETRACTED 2026-09-07, tagged with open findings** (contract#193, recorded by contract PR#196; **ten** open: #130, #132–#140 — #139 is the composing-mode gap (our #89), #140 the fixed-name scratch race (our #93)) | their settling tag, verified at the tag with a §6g positive control: `src/precalc_manifest.s` present, `lib_manifest.s` 0 macro invocations (3 at v0.13.0), ref+path confirmed to exist so the zero is a real zero. Member isolation shipped at v0.14.0; v0.15.0 added §8.2 `A = a` and ABI 3 → 4; v0.16.0 closes their #128 |
+| c64-x25519 | adopter | **v0.16.0 — RETRACTED 2026-09-07, tagged with open findings** (contract#193, recorded by contract PR#196; **ten** open: #130, #132–#140 — #139 is the composing-mode gap (our #89), #140 the fixed-name scratch race (our #93); **PR#141** fixes their #133, our #86's twin, across **16 arms** and checks in the same standard pair) | their settling tag, verified at the tag with a §6g positive control: `src/precalc_manifest.s` present, `lib_manifest.s` 0 macro invocations (3 at v0.13.0), ref+path confirmed to exist so the zero is a real zero. Member isolation shipped at v0.14.0; v0.15.0 added §8.2 `A = a` and ABI 3 → 4; v0.16.0 closes their #128 |
 | c64-ChaCha20-Poly1305 | adopter | **v0.11.0 — settled; #117 CLOSED, two open** (#118 closed; #119 open — nothing invokes their seven verification gates; #122 no gate builds the configuration c64-wireguard actually builds. Neither a settling clause; #122's question reproduced here as our **#94**) | verified at the tag with a §6g positive control. `lib_manifest.s` 5 macro invocations at v0.10.0 → **0** at v0.11.0, `src/lib/precalc_manifest.s` present. Both #108 members done: `poly1305_lib.s` went 11 `.export` lines → 2, moving out the 8 `APP_OWNED` §8.1/§8.3 names. Their release also corrects the five under-reporting footprint equates from #113 |
 | c64-mlkem | adopter | v0.5.0 (open: #3 stale contract version in their CLAUDE.md, #1 §6.3 warm-tree define drop) | **clean on §8.4** — defines `LIB_NO_BARE_EXPORTS = 1` in its enumerating TU per §8.4's zero-consumer carve-out, so nothing displaceable is there to isolate |
 | c64-https | consumer | v0.4.3 | pins `libs/nistcurves` **v0.11.2** and `libs/x25519` **v0.13.0** — both stale; needs nistcurves v0.14.0 and x25519 v0.16.0 |
@@ -407,6 +407,25 @@ Cleared as it lands; empty means S1/S2 are met for the current contract tag.
    with no open issues); only the status distinguishes it from a failure,
    which is the whole of #86 restated. Written by the session that had filed
    #86, #91 and #94 about this shape.
+
+   **Convergence worth recording, x25519 PR#141 (2026-09-07).** Their fix for
+   #133 — our #86's twin — lands on the same two design choices our PR#92
+   made independently: **reconcile a population instead of passing at zero**,
+   and make the positive control *structural* (check the return code, name the
+   object, require `Count >= 1`) rather than trusting an absence. Two repos,
+   same defect, same remedy, no coordination. That is decent evidence the
+   remedy is right rather than merely ours.
+   
+   They parametrise over **16 arms**; our #89 needs 6 (three profiles ×
+   NO_AES). Their PR is prior art for that work — read it before writing ours.
+
+   One practice difference, noted and NOT adopted unilaterally: their standard
+   has the supervisor hold the gate and *not implement*, with a separate
+   implementer agent writing the change and its red/green. Ours requires only
+   that the reviewer be a different agent from the author, which this session
+   has honoured — and the review caught real defects twice, so the weaker
+   separation did work here. Whether to add the stronger one is JC-000's call,
+   not a gap to close quietly.
 
    **Score for this audit so far: eight issues, five of them found by asking
    another repo's question here rather than by reading our own code.** #85,
