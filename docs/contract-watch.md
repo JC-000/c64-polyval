@@ -243,7 +243,7 @@ tag, and is **observed**, not asserted on someone else's behalf.
 |---|---|---|---|
 | c64-polyval | adopter | **v0.11.0 (tagged, released)** | verified against v1.2.2: §6.1 member isolation fixed, the withdrawn-§6.1 claims corrected, `lib_version.s` conformant outright under v1.2.1's carve-out |
 | c64-nist-curves | adopter | **v0.14.0 — tagged with open findings; four open** (#142, #155 [HIGH] §6.1, #159 variant-arm gap, #161 pre-segment fill). PR#160 merged 2026-09-07 closing #158 (our #90's twin); **PR#162 open** against #155 — isolating the bare `sqtab_lo`/`sqtab_hi` exports | #153 and #154 both closed. #154 verified at the tag with a §6g positive control: bare `zp_*` aliases in `zp_config.s` went **4 → 0**, and `src/zp_aliases.s` (104 lines) plus `src/mul_aliases.s` appeared as the separate archived TUs. #153 is §8.2 REU — **N/A to this library** and their domain to certify; recorded as closed by them, not audited here |
-| c64-x25519 | adopter | **v0.16.0 — RETRACTED (contract#193), ten open** (#130, #132, #134–#140, #142). **PR#141 merged 2026-09-07**, closing #133 — the count-to-zero fix, our #86's twin, across 16 arms | their settling tag, verified at the tag with a §6g positive control: `src/precalc_manifest.s` present, `lib_manifest.s` 0 macro invocations (3 at v0.13.0), ref+path confirmed to exist so the zero is a real zero. Member isolation shipped at v0.14.0; v0.15.0 added §8.2 `A = a` and ABI 3 → 4; v0.16.0 closes their #128 |
+| c64-x25519 | adopter | **v0.16.0 — RETRACTED (contract#193), twelve open** (#130, #132, #134–#140, #142–#144). PR#141 merged 2026-09-07 closing #133 (our #86's twin, 16 arms). #143/#144 are two more of their own "the mode is never exercised" class | their settling tag, verified at the tag with a §6g positive control: `src/precalc_manifest.s` present, `lib_manifest.s` 0 macro invocations (3 at v0.13.0), ref+path confirmed to exist so the zero is a real zero. Member isolation shipped at v0.14.0; v0.15.0 added §8.2 `A = a` and ABI 3 → 4; v0.16.0 closes their #128 |
 | c64-ChaCha20-Poly1305 | adopter | **v0.11.0 — SETTLED and tracker CLEAN as of 2026-09-07 ~21:00: zero open issues, zero open PRs.** #117, #118, #119, #122 and #126 all closed; PR#128 merged (umbrella `verify` target + release enforcement). The #119 fix is post-tag work on `main`, not a conformance change, so the settling tag stands | verified at the tag with a §6g positive control. `lib_manifest.s` 5 macro invocations at v0.10.0 → **0** at v0.11.0, `src/lib/precalc_manifest.s` present. Both #108 members done: `poly1305_lib.s` went 11 `.export` lines → 2, moving out the 8 `APP_OWNED` §8.1/§8.3 names. Their release also corrects the five under-reporting footprint equates from #113 |
 | c64-mlkem | adopter | v0.5.0 (open: #3 stale contract version in their CLAUDE.md, #1 §6.3 warm-tree define drop) | **clean on §8.4** — defines `LIB_NO_BARE_EXPORTS = 1` in its enumerating TU per §8.4's zero-consumer carve-out, so nothing displaceable is there to isolate |
 | c64-https | consumer | v0.4.3 | pins `libs/nistcurves` **v0.11.2** and `libs/x25519` **v0.13.0** — both stale; needs nistcurves v0.14.0 and x25519 v0.16.0 |
@@ -606,6 +606,25 @@ Cleared as it lands; empty means S1/S2 are met for the current contract tag.
    (#133, 16 arms), c64-nist-curves PR#160 (#158), c64-ChaCha20-Poly1305
    PR#128 (#119) plus their earlier #126. Nobody coordinated the remedy; the
    findings propagated as *questions* and each repo measured its own answer.
+
+   **x25519#143 asked here and answered N/A — recorded so it is not filed by
+   mistake later.** Their finding is that `tests/lib_linkage` cannot link
+   under `-D ZP_CONFIG_NO_EXPORTS=1`, the ZP mode their consumer actually
+   ships in. Reproduced verbatim here: build the archive with that define and
+   the shipped stub fails with `Unresolved external 'polyval_acc'`. **That is
+   correct behaviour, not a defect, because the flag is not a consumer mode
+   here.** `src/zp_config.s:79-84` states its purpose: a TU that transitively
+   `.include`s `zp_config.s` via `constants_lib.inc` must not re-emit the
+   `.exportzp` directives, since ld65 errors on a symbol exported from two
+   objects — so `constants_lib.inc` sets it, and only `zp_config.s` compiled
+   as its own object emits them. Passing it globally suppresses the exports in
+   `zp_config.o` itself, which is not what the flag is for;
+   `check_knob_staleness.sh` does exactly that deliberately, as a lever to
+   make the artifact flip observably. No consumer ships in that mode, and
+   `c64-aes256-ecdsa` is not an archive consumer at all. **G3: applicability
+   before conformance — no issue.** Their #144 (a check hard-coding
+   bare-mode counts) is also N/A: our counts are hard-coded, but the script
+   sets each knob itself and asserts the value appropriate to that mode.
 
    **A second pattern, and the one that says the standard is doing work:
    adversarial review broke the headline claim of the first cut in every
