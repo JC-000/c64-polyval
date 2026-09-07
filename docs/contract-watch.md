@@ -243,7 +243,7 @@ tag, and is **observed**, not asserted on someone else's behalf.
 |---|---|---|---|
 | c64-polyval | adopter | **v0.11.0 (tagged, released)** | verified against v1.2.2: §6.1 member isolation fixed, the withdrawn-§6.1 claims corrected, `lib_version.s` conformant outright under v1.2.1's carve-out |
 | c64-nist-curves | adopter | **v0.14.0 — tagged with open findings; four open** (#142, #155 [HIGH] §6.1, #159 variant-arm gap, #161 pre-segment fill). PR#160 merged 2026-09-07 closing #158 (our #90's twin); **PR#162 open** against #155 — isolating the bare `sqtab_lo`/`sqtab_hi` exports | #153 and #154 both closed. #154 verified at the tag with a §6g positive control: bare `zp_*` aliases in `zp_config.s` went **4 → 0**, and `src/zp_aliases.s` (104 lines) plus `src/mul_aliases.s` appeared as the separate archived TUs. #153 is §8.2 REU — **N/A to this library** and their domain to certify; recorded as closed by them, not audited here |
-| c64-x25519 | adopter | **v0.16.0 — RETRACTED (contract#193), twelve open** (#130, #132, #134–#140, #142–#144). PR#141 merged 2026-09-07 closing #133 (our #86's twin, 16 arms). #143/#144 are two more of their own "the mode is never exercised" class | their settling tag, verified at the tag with a §6g positive control: `src/precalc_manifest.s` present, `lib_manifest.s` 0 macro invocations (3 at v0.13.0), ref+path confirmed to exist so the zero is a real zero. Member isolation shipped at v0.14.0; v0.15.0 added §8.2 `A = a` and ABI 3 → 4; v0.16.0 closes their #128 |
+| c64-x25519 | adopter | **v0.16.0 — RETRACTED (contract#193), thirteen open** (#130, #132, #134–#140, #142–#145); **PR#146 open** against #139 — no target ever built `LIB_NO_BARE_EXPORTS`, our **#94**'s twin and prior art for it. PR#141 merged closing #133 (our #86's twin) | their settling tag, verified at the tag with a §6g positive control: `src/precalc_manifest.s` present, `lib_manifest.s` 0 macro invocations (3 at v0.13.0), ref+path confirmed to exist so the zero is a real zero. Member isolation shipped at v0.14.0; v0.15.0 added §8.2 `A = a` and ABI 3 → 4; v0.16.0 closes their #128 |
 | c64-ChaCha20-Poly1305 | adopter | **v0.11.0 — SETTLED and tracker CLEAN as of 2026-09-07 ~21:00: zero open issues, zero open PRs.** #117, #118, #119, #122 and #126 all closed; PR#128 merged (umbrella `verify` target + release enforcement). The #119 fix is post-tag work on `main`, not a conformance change, so the settling tag stands | verified at the tag with a §6g positive control. `lib_manifest.s` 5 macro invocations at v0.10.0 → **0** at v0.11.0, `src/lib/precalc_manifest.s` present. Both #108 members done: `poly1305_lib.s` went 11 `.export` lines → 2, moving out the 8 `APP_OWNED` §8.1/§8.3 names. Their release also corrects the five under-reporting footprint equates from #113 |
 | c64-mlkem | adopter | v0.5.0 (open: #3 stale contract version in their CLAUDE.md, #1 §6.3 warm-tree define drop) | **clean on §8.4** — defines `LIB_NO_BARE_EXPORTS = 1` in its enumerating TU per §8.4's zero-consumer carve-out, so nothing displaceable is there to isolate |
 | c64-https | consumer | v0.4.3 | pins `libs/nistcurves` **v0.11.2** and `libs/x25519` **v0.13.0** — both stale; needs nistcurves v0.14.0 and x25519 v0.16.0 |
@@ -606,6 +606,26 @@ Cleared as it lands; empty means S1/S2 are met for the current contract tag.
    (#133, 16 arms), c64-nist-curves PR#160 (#158), c64-ChaCha20-Poly1305
    PR#128 (#119) plus their earlier #126. Nobody coordinated the remedy; the
    findings propagated as *questions* and each repo measured its own answer.
+
+   **x25519#145 — *has the hand-maintained sweep list drifted?* — found the
+   worst thing in this repo all day, and it was not a check.** Ours had
+   drifted: `make clean` removes only `$(BUILD_DIR)` and `.gitignore` lists
+   `build/` and `build-knobcheck/` but not `build-short/` — which is
+   **tracked in git**, six build artifacts committed by `ec66030` as
+   collateral. They are not merely stale: the tracked `lib_manifest.o`
+   exports `LIB_POLYVAL_PRECALC_polyval_htable_{REGION,SHARED,SIZE}` and the
+   tracked archive has no `precalc_manifest.o` member, so it is a
+   `polyval-short.a` from **before the v1.2.0 §6.1 member-isolation fix that
+   v0.11.0 shipped** — non-conformant against the contract this repo claims
+   conformance to, carrying the very `LIB_PRECALC_*` surface
+   c64-aes256-ecdsa#28 collides with. Not in the tarball (0 entries), so the
+   exposure is git consumers: a clone, a `git archive`, or a submodule pin,
+   which is how c64-https and c64-wireguard consume libraries. Filed as
+   **#99**.
+
+   Worth noting what found it: not a code review, and not a check. A sibling
+   repo asked whether a *hand-maintained list* was complete, and ours had two
+   — `clean` and `.gitignore` — neither of which anything verifies.
 
    **x25519#143 asked here and answered N/A — recorded so it is not filed by
    mistake later.** Their finding is that `tests/lib_linkage` cannot link
