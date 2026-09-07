@@ -473,6 +473,50 @@ Cleared as it lands; empty means S1/S2 are met for the current contract tag.
    difference between fitting under $A000 and not. Told them the measurand is
    the clause worth having, not the slack.
 
+   **PR#200 outcome, and we are already on its basis — verified.** The cap was
+   dropped and the under-declaration claim against us withdrawn; what lands is
+   the *basis*: placed span including fill, not object-size sums. Ours has
+   always been the placed span (`ld65 -m`, $4000 to the first BSS-area segment
+   start), so the change is a no-op here. Measured on the real map at
+   `3d7fc7b`, 12 segment rows:
+
+   ```
+   LIB_POLYVAL_AES_CODE     004000 0043C5   3C6
+   LIB_POLYVAL_GCMSIV_CODE  0043C6 004714   34F
+   LIB_POLYVAL_LONG_CODE    004715 005754  1040
+   LIB_POLYVAL_VERIFY_CODE  005755 0057C6    72   <- lib_main.o, NOT an archive member
+   LIB_POLYVAL_AES_RODATA   0057C7 0059D0   20A
+   LIB_POLYVAL_BSS          0059D1 ...            <- first BSS start
+   ```
+
+   Span = `$59D1 − $4000` = **6609**; minus the 114 B verify stub =
+   **6495** for the archive members alone, which is the §6.4 per-archive
+   measurand and the number given to the contract session. **Zero fill in the
+   resident span** — the five ro segments are contiguous, and the only
+   alignment gap in the whole link is 150 B between `GCMSIV_BSS` and the
+   `$100`-aligned `HTABLE`, which is in BSS and outside RESIDENT. So
+   span-basis and object-sum basis agree here; adopters whose ro segments are
+   aligned will see the two diverge, which is the point of the clause.
+
+   *(Method note: the first attempt to check for fill printed "no fill"
+   from an `awk` that had parsed **zero** rows — the placed-segment lines
+   break column assumptions when a segment name is long. Count the rows
+   before believing an absence. Same shape as #86, fifth instance today.)*
+
+   **Two items filed separately upstream, both JC-000's call, neither
+   actionable by this watch.** (1) *Cold-split verifiability* — for us this is
+   a segment restructure, not wording: COLD is an address delta inside a span,
+   and the fix is an `LIB_POLYVAL_INIT_CODE`-shaped segment on x25519's model.
+   (2) *The 9,625 B the equates render invisible.* **Record the §7 reading
+   now, because this repo has re-derived ABI arguments badly before:**
+   changing what `LIB_POLYVAL_RESIDENT_BYTES` / `_COLD_BYTES` *cover* is a
+   semantic change to released symbols. A consumer asserting
+   `RESIDENT + COLD <= budget` — which `c64-https` does on its own libraries at
+   `src/contract_footprint_asserts.s:127,130` — breaks when the value silently
+   grows by 9,625 B. That is a consumer conforming to the documented contract
+   being broken, so it moves `LIB_POLYVAL_ABI_VERSION`. New symbols alongside
+   the existing ones would not.
+
    **Score for this audit so far: eight issues, five of them found by asking
    another repo's question here rather than by reading our own code.** #85,
    #87 (adversarial review of #85's fix), #91 (review of #86/#90's fix) came
