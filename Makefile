@@ -716,10 +716,30 @@ clean:
 # process-hygiene section in CLAUDE.md). These are build-and-link gates only:
 # whole set measured at ~1 second from a cold tree.
 #
-# Order matters: consumer-check-noaes runs `make clean` between profiles, so
-# it goes LAST -- anything after it would rebuild from scratch for nothing.
-VERIFY_TARGETS = lib-verify consumer-check consumer-check-shipped \
-                 consumer-check-noaes
+# The list covers EVERY shipped configuration plus the demo app, not just the
+# four consumer gates. The first cut had only the gates, and adversarial
+# review broke it in one move: an undefined symbol appended to
+# src/main_loop.s left `make` failing while `make verify` printed "all 4
+# gates pass" and `make dist` minted a tarball containing source that does
+# not assemble. The tarball ships source, so the consumer receives a tree
+# that cannot build. A gate set that does not build what ships is not a gate
+# set.
+#
+# Covered here and nowhere else: `all` (the app PRG -- main.s, boot.s,
+# main_loop.s, display.s, disk_io.s, gcm_siv_ui.s, strings.s, data_app.s and
+# src/c64.cfg are in no other target) and the three AEAD archive variants.
+# consumer-check-shipped builds polyval.a, and consumer-check-noaes builds
+# the three NO_AES archives, so those six were already reachable.
+#
+# Order matters twice. The profile-pinned lib-polyval-* targets and
+# consumer-check-noaes each run `make clean` first, so they go after the
+# gates that would otherwise be rebuilt for nothing. And because the last of
+# them leaves BUILD_DIR holding COMPACT/NO_AES objects, the recipe ends by
+# rebuilding the default tree -- otherwise `make verify` (or a release, which
+# depends on it) would silently hand the caller back a non-default build/.
+VERIFY_TARGETS = all lib-verify consumer-check consumer-check-shipped \
+                 lib-polyval-gcmsiv lib-polyval-gcmsiv-short \
+                 lib-polyval-gcmsiv-compact consumer-check-noaes
 
 verify:
 	@for t in $(VERIFY_TARGETS); do \
@@ -729,7 +749,11 @@ verify:
 	    exit 1; \
 	  }; \
 	done
-	@echo "verify: all $(words $(VERIFY_TARGETS)) gates pass"
+	@$(MAKE) --no-print-directory all >/dev/null || { \
+	  echo "verify: FAILED restoring the default build after the pinned targets" >&2; \
+	  exit 1; \
+	}
+	@echo "verify: all $(words $(VERIFY_TARGETS)) targets pass; default build restored"
 
 # --- Reproducible release tarball -----------------------------------------
 # `make dist VERSION=vX.Y.Z` produces c64-polyval-<VERSION>.tar.gz at the
