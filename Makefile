@@ -350,7 +350,7 @@ endif
         lib-polyval-compact lib-polyval-gcmsiv lib-polyval-gcmsiv-short \
         lib-polyval-gcmsiv-compact consumer-check \
         consumer-check-noaes consumer-check-shipped run clean dist verify \
-        check-no-tracked-artifacts
+        check-no-tracked-artifacts check-footprints
 .DEFAULT_GOAL := all
 
 all: $(PRG) $(LABELS)
@@ -749,6 +749,16 @@ clean:
 # separately for the same reason. Both are issue #86's shape, and adversarial
 # review caught this recipe reintroducing it in the very comment that claimed
 # it would not.
+# --- §5 footprint equates still bound reality (issue #95) ------------------
+# LIB_POLYVAL_RESIDENT_BYTES / _COLD_BYTES are hand-maintained constants,
+# refreshed by a human at release, and nothing checked them against a
+# measurement -- consumer_stub_shipped.s asserts COLD < RESIDENT, which is
+# ordering, not bounding. c64-x25519#142 and c64-ChaCha20-Poly1305#126 both
+# shipped this defect in the UNSAFE direction on one day. Placed LAST because
+# it rebuilds all six configurations; ~6 s against ~1 s for everything above.
+check-footprints:
+	@python3.13 $(TOOLS_DIR)/check_footprints.py
+
 check-no-tracked-artifacts:
 	@files=$$(git ls-files) || { \
 	  echo "check-no-tracked-artifacts: 'git ls-files' failed" >&2; exit 1; }; \
@@ -820,7 +830,7 @@ check-no-tracked-artifacts:
 VERIFY_TARGETS = check-no-tracked-artifacts all lib-verify consumer-check \
                  consumer-check-shipped lib-polyval-gcmsiv \
                  lib-polyval-gcmsiv-short lib-polyval-gcmsiv-compact \
-                 consumer-check-noaes
+                 consumer-check-noaes check-footprints
 
 verify:
 	@for t in $(VERIFY_TARGETS); do \
