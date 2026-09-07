@@ -805,15 +805,22 @@ check-no-tracked-artifacts:
 # consumer-check-shipped builds polyval.a, and consumer-check-noaes builds
 # the three NO_AES archives, so those six were already reachable.
 #
+# check-no-tracked-artifacts goes FIRST: it costs one `git ls-files`, needs no
+# build, and its failure mode -- generated files committed to the repo -- is
+# one a consumer sees in a clone whether or not anything compiles. Deferred
+# out of PR #100 only to avoid stacking it on this target's own PR; wired in
+# once that merged.
+#
 # Order matters twice. The profile-pinned lib-polyval-* targets and
 # consumer-check-noaes each run `make clean` first, so they go after the
 # gates that would otherwise be rebuilt for nothing. And because the last of
 # them leaves BUILD_DIR holding COMPACT/NO_AES objects, the recipe ends by
 # rebuilding the default tree -- otherwise `make verify` (or a release, which
 # depends on it) would silently hand the caller back a non-default build/.
-VERIFY_TARGETS = all lib-verify consumer-check consumer-check-shipped \
-                 lib-polyval-gcmsiv lib-polyval-gcmsiv-short \
-                 lib-polyval-gcmsiv-compact consumer-check-noaes
+VERIFY_TARGETS = check-no-tracked-artifacts all lib-verify consumer-check \
+                 consumer-check-shipped lib-polyval-gcmsiv \
+                 lib-polyval-gcmsiv-short lib-polyval-gcmsiv-compact \
+                 consumer-check-noaes
 
 verify:
 	@for t in $(VERIFY_TARGETS); do \
