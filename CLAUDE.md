@@ -81,6 +81,19 @@ merges or tags.
   was dismissed and why. A review that found nothing still says what it
   looked at.
 
+- **Check the agent's citations.** Grep every quote and every `file:line` a
+  review agent hands you before acting on it. Fabricated verbatim quotes have
+  been produced in this fleet attached to otherwise-sound substance, and an
+  unchecked one becomes a false claim in a commit message.
+- **The churn test — what gets commissioned at all.** Work that drives this
+  repo through compliance effort must deliver one of: easier integration for
+  a consumer, a new capability, or a measurable improvement. Work whose only
+  product is closing its own loop does not get commissioned. A clause never
+  has to demonstrate it caused anything, so the reviewer is the one who has
+  to ask. (Adopted from c64-lib-contract PR #195, which is that repo's own
+  local standard and explicitly **not** contract text — no obligation lands
+  on adopters from it.)
+
 `/code-review` is the usual vehicle; a task-specific brief to a subagent is
 fine when the claim is not diff-shaped (a footprint table, a fleet row, a
 reproducibility receipt). Either way the reviewer is a **different** agent

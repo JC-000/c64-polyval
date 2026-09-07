@@ -27,7 +27,7 @@ condition.**
 |---|---|---|
 | **S1** | c64-polyval: 0 open issues, clean tree | holds |
 | **S2** | `v0.11.0`, verified conformant against SPEC **v1.2.2** (still the latest tag) | holds |
-| **S3** | one open contract issue: **#193** (x25519 retraction). Read; it changes **no** c64-polyval conformance answer — it is a status retraction plus a check-taxonomy addition. 0 open PRs | was 0/0 |
+| **S3** | three open contract items as of 07:05: **#193** (x25519 retraction), **#194** (their `verify-addrsize` passes with no `od65` at all), **PR #195** (records adversarial review + red/green as *their repo's* standards, explicitly **not** contract text). Each read; **none changes a c64-polyval conformance answer** | was 0/0 |
 | **S4** | **NOT MET.** x25519 `v0.16.0` retracted by #193 — four reproduced conformance gaps (§8.2, §8.4, §2/§5, §4) plus an evidence defect. polyval `v0.11.0`, nist-curves `v0.14.0`, chacha `v0.11.0`, mlkem `v0.5.0` unchanged, but nist-curves carries **#155 [HIGH] §6.1** filed 2026-09-06, which is the same shape and wants the same "tagged with open findings" reading | **broke** |
 | **S5** | out of scope by ruling — see §5a; pins unchanged | unchanged |
 
@@ -196,14 +196,15 @@ verdict, and do not re-read it every cycle unless it changes.
 
 | Ref | What | Changes our answer? |
 |---|---|---|
-**As of 2026-09-07 the contract has ONE open issue (#193) and ZERO open PRs,
-at v1.2.2** (was 0/0 at close the previous day). Re-check before trusting
+**As of 2026-09-07 07:05 the contract has TWO open issues (#193, #194) and ONE
+open PR (#195), at v1.2.2** (was 0/0 at close the previous day). Re-check before trusting
 this — that repo has shipped several releases a day.
 
 | Ref | What | Changes our answer? |
 |---|---|---|
 | **#193** | Retraction of c64-x25519's settled status at v0.16.0: four reproduced conformance gaps (§8.2 provider surface, §8.4 2048 B unenumerated, §2/§5 `fe_wide` ZP, §4 RAM-backed declaration) plus an evidence defect — three `-negative` legs that could not fail | **No conformance answer changes here.** No clause text moved; the contract is still v1.2.2 and §8.x is N/A to us (G3). Two effects that are not conformance: it **breaks S4** (§0), and its check-taxonomy fourth form — *a gate whose fixture encodes the defect it should catch* — is adopted into this repo's working standard (`CLAUDE.md`) |
-
+| **#194** | Their `make verify-addrsize` is a zero-count absence check with no positive control: `OD65=/bin/false make verify-addrsize` prints `ok` and exits 0. A `dump=$(... | awk)` assignment takes awk's status, so a missing dumper yields an empty string, both loops iterate zero times, and `bad=0` prints success | **No.** Their Makefile, not ours (G3/G1 — untagged, and not a clause). Kept for the **form**: an absence assertion that cannot tell "looked and found none" from "looked at nothing". `CLAUDE.md`'s positive-control rule already covers it; the local audit it implies is recorded in §6 |
+| **PR #195** | Records adversarial review + red/green as standards **in the contract repo's own `CLAUDE.md`**. States in its own text that it is not contract text and fails prong 2 of the scope rule, and that it is **not** grounds to un-retire §15 | **No — and no obligation lands on adopters, by its own terms.** Convergent with what this repo adopted the same morning. Two of its ideas are worth taking locally and have been (§6 item 3): the **churn test** and the **citation duty** |
 | Ref | What | Changes our answer? |
 |---|---|---|
 | ~~PR #187~~ | merged as **v1.2.1**, verbatim as read; the G2 call it justified was correct | resolved |
@@ -271,6 +272,27 @@ Cleared as it lands; empty means S1/S2 are met for the current contract tag.
    `.md`/`.s`/`.inc`/`.cfg`/`Makefile`, because the phrases wrap.
 
    Historical release notes stay as written (they were true at their tag).
+
+3. **Audit this repo's own checks for the #194 form — OPEN, not yet done.**
+   Filed here 2026-09-07 off contract#194 and nist-curves#142. The question
+   is not "do our checks pass" but **"has each one ever been observed to
+   fail?"** Candidates, in rough order of exposure: `make
+   consumer-check-shipped` (issue #79 guard — does it still fail if a shipped
+   file is removed?), `make consumer-check-noaes` (#47 guard),
+   `tools/check_knob_staleness.sh`, the `build/.ca65flags` parse-time stamp,
+   and the `make dist` reproducibility re-run. Any that is an **absence**
+   assertion, or whose pass condition is a zero, needs a positive control:
+   sabotage the input, confirm red, restore, confirm green — and record both
+   directions. Also sweep for the non-propagating
+   `X || (echo FAIL; exit 1)` shell form in `Makefile` and `tools/*.sh`.
+
+   Adopted from PR #195 into `CLAUDE.md` at the same time, as local practice:
+   the **churn test** (compliance work must deliver easier consumer
+   integration, a new capability, or a measurable improvement — work whose
+   only product is closing its own loop does not get commissioned) and the
+   **citation duty** (grep every quote and `file:line` a review agent hands
+   you; fabricated verbatim quotes have been produced in this fleet attached
+   to otherwise-sound substance).
 
 ---
 
