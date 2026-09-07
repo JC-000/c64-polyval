@@ -349,7 +349,7 @@ endif
 .PHONY: all lib lib-verify lib-polyval-long lib-polyval-short \
         lib-polyval-compact lib-polyval-gcmsiv lib-polyval-gcmsiv-short \
         lib-polyval-gcmsiv-compact consumer-check \
-        consumer-check-noaes consumer-check-shipped run clean dist
+        consumer-check-noaes consumer-check-shipped run clean dist verify
 .DEFAULT_GOAL := all
 
 all: $(PRG) $(LABELS)
@@ -701,6 +701,36 @@ run: all
 clean:
 	rm -rf $(BUILD_DIR)
 
+# --- Umbrella verification target (issue #96) ------------------------------
+# ONE list. Before this, nothing invoked the gates as a set: `make dist` had
+# no prerequisites at all and tools/build_release.sh called none of them, so a
+# release could be minted from a tree where every guard failed. The sibling
+# case that prompted the check is c64-ChaCha20-Poly1305#119/PR#128, where a
+# release script carried its own hand-copied gate list that had drifted and
+# shipped tarballs verified with four of six gates. Their conclusion is the
+# reason this is a variable and not a second list in the script: "a second
+# list is a second thing to forget."
+#
+# The VICE suite is deliberately NOT here. It needs x64sc and ~3.5 minutes,
+# and this machine is shared with other agents' emulator instances (see the
+# process-hygiene section in CLAUDE.md). These are build-and-link gates only:
+# whole set measured at ~1 second from a cold tree.
+#
+# Order matters: consumer-check-noaes runs `make clean` between profiles, so
+# it goes LAST -- anything after it would rebuild from scratch for nothing.
+VERIFY_TARGETS = lib-verify consumer-check consumer-check-shipped \
+                 consumer-check-noaes
+
+verify:
+	@for t in $(VERIFY_TARGETS); do \
+	  echo "verify: $$t"; \
+	  $(MAKE) --no-print-directory $$t >/dev/null || { \
+	    echo "verify: FAILED at $$t -- re-run \`make $$t\` to see why" >&2; \
+	    exit 1; \
+	  }; \
+	done
+	@echo "verify: all $(words $(VERIFY_TARGETS)) gates pass"
+
 # --- Reproducible release tarball -----------------------------------------
 # `make dist VERSION=vX.Y.Z` produces c64-polyval-<VERSION>.tar.gz at the
 # repo root by invoking tools/build_release.sh. The script enforces the
@@ -709,7 +739,13 @@ clean:
 # tarball's own size + SHA256 (two-pass fixed-point). Determinism: fixed
 # mtime + owner/group + gzip -n so the same source tree always produces
 # a byte-identical tarball.
-dist:
+# `dist` depends on `verify`: a release cannot be minted from a tree where a
+# gate fails (issue #96). The gates run before build_release.sh, so a refusal
+# costs a second and touches nothing. They build into $(BUILD_DIR), which the
+# tarball does not stage, so the artifact is unaffected -- the red/green for
+# this change asserts that the tarball hash is byte-identical with and
+# without the prerequisite.
+dist: verify
 	@if [ -z "$(VERSION)" ]; then \
 	  echo "usage: make dist VERSION=vX.Y.Z" >&2; \
 	  exit 1; \
