@@ -111,8 +111,14 @@ if [ "$SELFTEST" = "--selftest" ]; then
   # comparison compare a value to itself. It can never differ, so nothing is
   # ever invalidated -- a genuine disable of exactly the mechanism under test,
   # with no hardcoded flag string to drift.
+  # Not `|| true`: with the stamp disabled this build is expected to be a
+  # no-op, and a no-op exits 0. Swallowing the status meant a build that
+  # failed outright left dump_all reading the BASELINE objects, and the
+  # selftest concluded "disabled stamp correctly leaves 13" from a build that
+  # never ran. Measured: make shimmed to fail here -> "selftest OK", exit 0.
   $MAKE_Q lib CONTRACT_DEFINES="-D ZP_CONFIG_NO_EXPORTS=1" \
-          CONTRACT_FLAGS_WAS='$(CONTRACT_FLAGS_NOW)' >/dev/null 2>&1 || true
+          CONTRACT_FLAGS_WAS='$(CONTRACT_FLAGS_NOW)' >"$SCRATCH/selftest.log" 2>&1 \
+    || fail "SELFTEST: the stamp-disabled build failed -- $(tail -1 "$SCRATCH/selftest.log")"
   dump_all
   if [ "$(zp_exports)" = "0" ]; then
     fail "SELFTEST: stamp was disabled but the artifact still flipped -- the pin is not testing the stamp"
@@ -162,12 +168,30 @@ n=$(ls "$SCRATCH"/*.o 2>/dev/null | wc -l | tr -d ' ')
 # --- C1: an unchanged invocation must NOT rebuild ---------------------------
 # Guards against "unconditional rebuild wearing a stamp", which would satisfy
 # every assertion above while destroying incremental builds.
-rebuilt=$($MAKE_Q lib 2>&1 | grep -c '^ca65' || true)
+# The status of `make` is captured SEPARATELY. Written as
+# `rebuilt=$(... | grep -c '^ca65' || true)` this was the #86 defect, live:
+# the assignment takes the pipeline's last status, `|| true` forces that to 0,
+# and `2>&1` folds make's errors into grep's input where they match nothing.
+# Measured -- with make shimmed to fail silently on this invocation, the
+# script printed "0 spurious rebuilds" and exited 0, asserting a property
+# about a build that never happened.
+$MAKE_Q lib >"$SCRATCH/c1.log" 2>&1 \
+  || fail "C1: the unchanged invocation FAILED to build -- $(tail -1 "$SCRATCH/c1.log")"
+rebuilt=$(grep -c '^ca65' "$SCRATCH/c1.log" || true)
 [ "$rebuilt" = "0" ] || fail "unchanged invocation recompiled $rebuilt TUs, expected 0 (was SPEC §6.3 C1; clause retired at contract v1.0.0, check kept as local engineering)"
 
 # --- #56 reject branch must remain intact -----------------------------------
-if $MAKE_Q lib CONTRACT_DEFINES="-D POLYVAL_PROFILE=1" >/dev/null 2>&1; then
-  fail "member-set axis via CONTRACT_DEFINES was accepted; the issue #55 guard has regressed"
+# Assert the rejection's IDENTITY, not merely a non-zero exit. "make failed"
+# is satisfied by any failure at all -- a broken Makefile, a typo in an
+# unrelated target, a missing assembler -- so the old form reported "#55 guard
+# intact" while the guard was regressed, whenever something else happened to
+# be broken. Measured, with the rejection simulated away and an unrelated
+# ca65 failure injected: exit 0, "#55 guard intact". The control (same setup,
+# healthy ca65) correctly failed, which is what proved the shim honest.
+if $MAKE_Q lib CONTRACT_DEFINES="-D POLYVAL_PROFILE=1" >"$SCRATCH/reject.log" 2>&1; then
+  fail "member-set axis via CONTRACT_DEFINES was ACCEPTED; the issue #55 guard has regressed"
 fi
+grep -q 'member-set axis \[POLYVAL_PROFILE\] cannot be set through' "$SCRATCH/reject.log" \
+  || fail "the #55 build failed, but NOT with the member-set parse-time rejection -- something else is broken, and this leg cannot vouch for the guard. Last line: $(tail -1 "$SCRATCH/reject.log")"
 
 echo "check_knob_staleness: OK (warm flip both knobs incl. the kept prefixed surface, reverse, 10 objects, 0 spurious rebuilds, #55 guard intact)"
