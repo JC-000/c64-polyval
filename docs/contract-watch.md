@@ -198,8 +198,8 @@ verdict, and do not re-read it every cycle unless it changes.
 
 | Ref | What | Changes our answer? |
 |---|---|---|
-**As of 2026-09-07 12:35 the contract has THREE open issues (#193, #194,
-#198) and THREE open PRs (#195, #196, #197), at v1.2.2** (was 0/0 at close the previous
+**As of 2026-09-07 ~14:20 the contract has FOUR open issues (#193, #194,
+#198, #199) and THREE open PRs (#195, #196, #197), at v1.2.2** (was 0/0 at close the previous
 day). None changes a c64-polyval conformance answer; #196 and #197 close the
 two issues when they merge. Re-check before trusting
 this — that repo has shipped several releases a day.
@@ -212,7 +212,7 @@ this — that repo has shipped several releases a day.
 | **PR #196** | Records c64-x25519 as *tagged with open findings*, not settled; closes #193. Its own adversarial review rejected two of the four verdicts and it revised them — all four gaps stand, §4 confirmed on the declaration (not the attribute), §2's parenthetical withdrawn, §8.2 rescoped with a positive-controlled `git grep` in place of a GitHub code search | **No.** Confirms the S4 reading already recorded in §0. The eight x25519 issues (#130, #132–#138) are the gaps filed out; observed, not audited here |
 | **PR #197** | Fixes their #194: three gates — od65 actually ran, the extractor saw every export the dumper declared, and the population reconciles — replacing the zero-count absence check. Also drops the `awk $2` extraction whose padding is `|24 - namelen|` | **No** (their Makefile). Worth reading as prior art when fixing **our #86**, which is the same class || Ref | What | Changes our answer? |
 | **#198** | Their `verify-addrsize` never dumps the `nobare` object, so the address-size ratchet is checked **only in the mode a composing consumer does not use**. The two modes emit from different macro branches, so passing in one is not evidence about the other. Found by the adversarial review on #197 | **No conformance answer changes** (their Makefile, untagged — G1/G3). But the *question* lands here and was worth asking: measured on `a8db2a2`, our `precalc_manifest.o` suppresses correctly (15 bare → 0, 15 prefixed kept, all absolute in both modes) and **nothing asserts it**. Filed as our **#89** ||---|---|---|
-| ~~PR #187~~ | merged as **v1.2.1**, verbatim as read; the G2 call it justified was correct | resolved |
+| **#199** | Measures consumer define sets across five integrations and concludes **no clause**: the sweeping form ("a library MUST test the configurations its consumers build") is unbounded and unsatisfiable — c64-https assembles x25519's sources directly, so no library-side `make` could reproduce it. The bounded inverse passes both prongs but fails the churn test's first question, *name what breaks if it does not exist*: chacha's only measured miss over-declares by 8293 B, which is §5's **safe** direction | **No obligation lands here, and it names our class explicitly**: the "gate never builds this configuration" findings — ours is **#94** — are "each library's own testing gap", findable from inside the repo, failing prong 2. Verified the trip-wire against ourselves anyway (below) || ~~PR #187~~ | merged as **v1.2.1**, verbatim as read; the G2 call it justified was correct | resolved |
 | ~~#186~~ | closed by v1.2.1 | resolved |
 | ~~#188~~ | §2 / bare `zp_` alias placement | resolved at v1.2.2, which measured the fleet and found c64-polyval exports no bare `zp_` aliases |
 | ~~#180~~ | our §7 arbitration | **closed, and the ruling corrected in place.** It had affirmed our post-conditions argument; we found three post-conditions differ, and the contract re-based the ruling on the documented-input-domain argument. The forward test is recorded in `CLAUDE.md` and `API.md` §9.1 |
@@ -373,6 +373,25 @@ Cleared as it lands; empty means S1/S2 are met for the current contract tag.
    Their **PR#160** also checks in a reviewer agent definition alongside the
    standard. Adopted: `.claude/agents/adversarial-reviewer.md`, which encodes
    the brief that has now found defects twice in this repo.
+
+   **Trip-wire check against contract#199, 2026-09-07.** That issue records
+   three conditions that would turn this class into a clause, the first being
+   *a library **under**-declaring its §5 footprint in the configuration a
+   consumer actually ships*. Measured here: the §5 aggregates are byte-
+   identical between the default build and `-D LIB_NO_BARE_EXPORTS=1` —
+   `RESIDENT 6656`, `COLD 1280`, `REU_BANKS 0`, `ZP 45`, `MAX_PT_LEN 64` in
+   both — which is expected, since that knob suppresses export *names* and
+   moves no code or data, but it is now measured rather than assumed. The
+   other two trip-wires (a miss producing a link failure; a third consumer
+   entering the fleet) are not ours to observe. **Re-check this if a footprint
+   ever becomes conditional on a non-member-set define.**
+
+   A note on how that measurement was nearly botched, since it is the
+   session's recurring theme: the first extraction pasted a *sorted* name list
+   against an *unsorted* value list and reported
+   `LIB_POLYVAL_RESIDENT_BYTES = 0` with two blanks. The tell was that the
+   number was absurd. Pair each `Name:` with the `Value:` that follows it, and
+   look at the raw blocks before trusting any derived table.
 
    **Score for this audit so far: eight issues, five of them found by asking
    another repo's question here rather than by reading our own code.** #85,
