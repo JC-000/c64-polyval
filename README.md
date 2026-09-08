@@ -53,7 +53,8 @@ make lib-verify                   # library-only verification link (pre-v0.3.0 `
 make consumer-check               # assemble + link test/consumer_stub.s
 make run                          # build then launch in VICE
 make dist VERSION=vX.Y.Z          # reproducible source tarball
-make clean                        # rm -rf build/
+make clean                        # rm -rf build/ + any build-scratch.*
+make clean-build                  # rm -rf build/ only (what recursive make uses)
 ```
 
 The Makefile maps `POLYVAL_PROFILE=short|long|compact` to ca65's

@@ -381,7 +381,7 @@ build — whereas the omission the floor exists to catch is silent.
 **Flag-set staleness — handled since issue #58; the manual `make clean` between
 profile switches is no longer required.** `data.o` and `lib_manifest.o` contents
 are conditional on `POLYVAL_PROFILE` (and `lib_manifest.o` additionally on
-`POLYVAL_NO_AES`, which the lib-polyval-{long,short} targets set to suppress the
+`POLYVAL_NO_AES`, which the lib-polyval-{long,short,compact} targets set to suppress the
 AES manifest rows the POLYVAL-only archives don't ship — issue #23), and none of
 those reach a make prerequisite. A **parse-time flag stamp** (`build/.ca65flags`)
 now compares the effective `CA65FLAGS` against the previous invocation's and
