@@ -25,7 +25,7 @@ condition.**
 
 | | State at reopen, 2026-09-07 | vs. close |
 |---|---|---|
-| **S1** | **NOT MET; five open** (#87, #89, #94, #97, #103), all in flight under a supervised team — #87 and #97 implemented and in adversarial review, #89/#94 in revision after review broke two of its claims, #103 (the stale §8.4 doc) folded into that branch. Board-clearing is the precondition for the v0.12.0 release planned in §6 item 3 | **in flight** |
+| **S1** | **NOT MET; seven open** (#87, #89, #94, #97, #103, #104, #105). Rose from five because the team found two more while fixing the first five — **#105 is the most severe of the cycle**: `CONTRACT_ZP_DEFINES` can silently alias two ZP slots onto one address, so the build exits 0, every gate passes, and the library computes incorrect POLYVAL. Found by asking c64-x25519#148's question here. #104 (NO_AES arms unlinked in the composing mode) is deferred past the release | **rising, by design** |
 | **S2** | `v0.11.0`, verified conformant against SPEC **v1.2.2** (still the latest tag) | holds |
 | **S3** | three open contract items as of 07:05: **#193** (x25519 retraction), **#194** (their `verify-addrsize` passes with no `od65` at all), **PR #195** (records adversarial review + red/green as *their repo's* standards, explicitly **not** contract text). Each read; **none changes a c64-polyval conformance answer** | was 0/0 |
 | **S4** | **NOT MET.** x25519 `v0.16.0` retracted by #193 — four reproduced conformance gaps (§8.2, §8.4, §2/§5, §4) plus an evidence defect. polyval `v0.11.0`, nist-curves `v0.14.0`, chacha `v0.11.0`, mlkem `v0.5.0` unchanged, but nist-curves carries **#155 [HIGH] §6.1** filed 2026-09-06, which is the same shape and wants the same "tagged with open findings" reading | **broke** |
