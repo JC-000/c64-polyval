@@ -351,17 +351,17 @@ cp "$NOTES_REL" "$STAGE_ROOT/$NOTES_REL"
 # as well, before a tarball exists: its entire purpose is to refuse, and a
 # guard whose refusal has already rewritten two tracked files is not
 # fail-closed in any useful sense.
-# `--label "$NOTES_REL"` is a DIAGNOSTIC STRING, never a path to open. The
-# sentinel is what lets check_publish_atomic.py tell this apart from the
-# pre-#87 stamper, which passed the same variable positionally and wrote it --
-# truncating the tracked notes to 0 bytes on every run. That gate refuses any
-# other way of handing these two variables to an interpreter, and refuses a
-# heredoc that opens the label.
-python3 - "$STAGE_ROOT/$NOTES_REL" --label "$NOTES_REL" <<'PY'
+# THE HEREDOC NEVER RECEIVES THE WORKING-TREE PATH. It is handed the staged
+# copy and nothing else, so no tracked path is in scope for it to open -- which
+# is exactly what the pre-#87 stamper did, truncating the tracked notes to 0
+# bytes on every run. The diagnostic still names the file: the SHELL prints it
+# after python exits. An earlier cut passed the path behind a `--label`
+# sentinel and had check_publish_atomic.py police what the body did with it;
+# round-5 review defeated that by renaming one variable inside the body. Not
+# receiving the path is the property. Policing its use was only the shadow.
+if ! python3 - "$STAGE_ROOT/$NOTES_REL" <<'PY'
 import re, sys, pathlib
-argv  = sys.argv[1:]
-p     = pathlib.Path(argv[0])          # staged copy -- the only thing rewritten
-shown = argv[argv.index("--label") + 1]  # label only; never opened
+p = pathlib.Path(sys.argv[1])   # staged copy -- the only thing rewritten here
 text = p.read_text()
 # Replace the attestation table's SHA256 with the placeholder string.
 # SCOPED to the `| **SHA256** | <hash> |` row on purpose: release notes
@@ -387,12 +387,16 @@ text = re.sub(r'(\*\*Size\*\*\s*\|\s*)(\d+)( bytes)', r'\g<1>SIZE_PLACEHOLDER\g<
 for name in ('SHA256_PLACEHOLDER', 'SIZE_PLACEHOLDER'):
     count = text.count(name)
     if count != 1:
-        sys.exit("release-notes stamping: expected exactly one %s in %s, "
-                 "found %d -- refusing to stamp (see the scoped reset regex "
-                 "above). No files were modified." % (name, shown, count))
+        sys.exit("release-notes stamping: expected exactly one %s, found %d "
+                 "-- refusing to stamp (see the scoped reset regex above). "
+                 "No files were modified." % (name, count))
 
 p.write_text(text)
 PY
+then
+  echo "       in: $NOTES_REL" >&2
+  exit 1
+fi
 
 # --- Precalc-table enumeration (c64-lib-contract SPEC §8.0) --------------
 cp docs/precalc-tables.md "$STAGE_ROOT/docs/precalc-tables.md"
@@ -475,13 +479,11 @@ SHA=$(shasum -a 256 "$OUT_TMP" | cut -d' ' -f1)
 # Source is the STAGED placeholder copy, not the working-tree file, which at
 # this point still holds the previous run's values untouched.
 STAMPED="${STAGE_DIR}/notes.stamped.md"
-# Same discipline as the reset step: the working-tree path arrives behind
-# `--label` and is used only in the diagnostic.
-python3 - "$STAGE_ROOT/$NOTES_REL" "$STAMPED" "$SIZE" "$SHA" --label "$NOTES_REL" <<'PY'
+# Same discipline as the reset step: this heredoc sees the staged copy and the
+# scratch destination, never the working-tree path.
+if ! python3 - "$STAGE_ROOT/$NOTES_REL" "$STAMPED" "$SIZE" "$SHA" <<'PY'
 import sys, pathlib
-argv = sys.argv[1:]
-src, dst, size, sha = argv[0], argv[1], argv[2], argv[3]
-shown = argv[argv.index("--label") + 1]  # label only; never opened
+src, dst, size, sha = sys.argv[1:5]
 text = pathlib.Path(src).read_text()
 
 # Defence in depth: the reset step already refused on any count != 1, so this
@@ -491,14 +493,18 @@ text = pathlib.Path(src).read_text()
 for name, count in (('SHA256_PLACEHOLDER', text.count('SHA256_PLACEHOLDER')),
                     ('SIZE_PLACEHOLDER',   text.count('SIZE_PLACEHOLDER'))):
     if count != 1:
-        sys.exit("release-notes stamping: expected exactly one %s in %s, "
-                 "found %d -- refusing to stamp (see the scoped reset regex "
-                 "above). No files were modified." % (name, shown, count))
+        sys.exit("release-notes stamping: expected exactly one %s, found %d "
+                 "-- refusing to stamp (see the scoped reset regex above). "
+                 "No files were modified." % (name, count))
 
 text = text.replace('SHA256_PLACEHOLDER', sha)
 text = text.replace('SIZE_PLACEHOLDER', size)
 pathlib.Path(dst).write_text(text)
 PY
+then
+  echo "       in: $NOTES_REL" >&2
+  exit 1
+fi
 
 # --- Publish: the only writes to tracked files, and their ORDER ---------
 # All three happen after every check has passed. The order is chosen so that
