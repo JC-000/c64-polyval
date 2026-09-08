@@ -350,7 +350,8 @@ endif
         lib-polyval-compact lib-polyval-gcmsiv lib-polyval-gcmsiv-short \
         lib-polyval-gcmsiv-compact consumer-check \
         consumer-check-noaes consumer-check-shipped run clean dist verify \
-        check-no-tracked-artifacts check-footprints check-scratch-prefix
+        check-no-tracked-artifacts check-footprints check-scratch-prefix \
+        check-composing-mode
 .DEFAULT_GOAL := all
 
 all: $(PRG) $(LABELS)
@@ -776,6 +777,15 @@ clean:
 # separately for the same reason. Both are issue #86's shape, and adversarial
 # review caught this recipe reintroducing it in the very comment that claimed
 # it would not.
+# --- the composing mode is exercised and asserted (issues #89, #94) --------
+# -D LIB_NO_BARE_EXPORTS=1 is what a consumer linking two sibling libraries
+# must use. Nothing linked against an archive built that way (#94), and
+# nothing asserted precalc_manifest.o's §8.4 suppression in any arm (#89).
+# Builds each of the six arms BOTH ways and compares them against each other,
+# so there is no expected-value table to drift.
+check-composing-mode:
+	@python3.13 $(TOOLS_DIR)/check_composing_mode.py
+
 # --- §5 footprint equates still bound reality (issue #95) ------------------
 # LIB_POLYVAL_RESIDENT_BYTES / _COLD_BYTES are hand-maintained constants,
 # refreshed by a human at release, and nothing checked them against a
@@ -865,7 +875,7 @@ check-no-tracked-artifacts:
 VERIFY_TARGETS = check-no-tracked-artifacts check-scratch-prefix all lib-verify consumer-check \
                  consumer-check-shipped lib-polyval-gcmsiv \
                  lib-polyval-gcmsiv-short lib-polyval-gcmsiv-compact \
-                 consumer-check-noaes check-footprints
+                 consumer-check-noaes check-footprints check-composing-mode
 
 # SCOPE: this fixes the SCRATCH trees (issue #93). Two concurrent `make
 # verify` runs in ONE working tree still collide, because they share
