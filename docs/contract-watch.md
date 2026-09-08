@@ -91,6 +91,20 @@ The watch **ends** when all five hold at the same time. Not four.
 > Release; they are different things and §6g is the cycle where that cost
 > three cycles of a wrong fleet row.
 
+**S1 MOVED 2026-09-08 — and moved the wrong way, correctly.** c64-polyval
+tagged **v0.12.0**, closing thirteen issues. S1 asks for *no* open issues and
+we went 6 → 9, because the release's own pre-tag adversarial review filed
+three (#116, #117, #118). That is the settle condition working as intended
+rather than failing: S1 is a proxy for "nothing left we know about", and a
+review that finds three real gaps has made the repo more honest, not less
+settled. Do not close S1 by declining to look.
+
+**S4 now fails on the siblings alone.** As of this tag, c64-polyval is the
+only fleet repo carrying its merged work in a release. c64-nist-curves and
+c64-x25519 have both emptied their PR queues — every fix merged — with tags
+still at v0.14.0 and v0.16.0. S4 asks whether every adopter carries a
+*conformant tag*, and unreleased work does not count however good it is.
+
 **S4 and S5 are observed, not enforced.** This repository can only PR and tag
 in c64-polyval. For every other repo the watch's output is an issue filed
 against that repo, or a row in §5 saying what it is waiting on. Do not open
@@ -242,7 +256,7 @@ tag, and is **observed**, not asserted on someone else's behalf.
 
 | Repo | Role | Latest tag | Conformant? |
 |---|---|---|---|
-| c64-polyval | adopter | **v0.11.0 (tagged, released)** | verified against v1.2.2: §6.1 member isolation fixed, the withdrawn-§6.1 claims corrected, `lib_version.s` conformant outright under v1.2.1's carve-out |
+| c64-polyval | adopter | **v0.12.0 (tagged + released 2026-09-08)** — nine open, none a conformance defect (#104, #106, #107, #109, #110, #113 from our own audit; #116, #117, #118 filed by v0.12.0's pre-tag review). Tag `43f166d`, tarball `fc0e79ea…`, attestation verified against the published asset | verified against v1.2.2: §6.1 member isolation fixed, the withdrawn-§6.1 claims corrected, `lib_version.s` conformant outright under v1.2.1's carve-out. **v0.12.0 changes no conformance surface**: 162 exported names unchanged, PRGs byte-identical to v0.11.0, ABI still 1 — argued from the documented domain via §9.2's distinct-bytes claim, NOT from the widths alone (that form is a non-sequitur; caught pre-tag) |
 | c64-nist-curves | adopter | **v0.14.0 — tagged with open findings; five open** (#167, #168, #170, #172, **#173 new**; their long-running leg audit **#142 is closed**). **PR#166, #169 and #171 all merged 2026-09-08; their PR queue is now empty**, closing #159 (our **#89**'s twin — 11 of 12 archives never examined by the gated legs) and #161. #172 is new: `test_reu_mul_u64.py` stamps a hardcoded U64E firmware note onto every device row, and its refused-lock path exits 0. **Their tag is still v0.14.0 with every fix merged and none released — S4 remains unmoved, and the gap is now the whole PR queue rather than part of it** | #153 and #154 both closed. #154 verified at the tag with a §6g positive control: bare `zp_*` aliases in `zp_config.s` went **4 → 0**, and `src/zp_aliases.s` (104 lines) plus `src/mul_aliases.s` appeared as the separate archived TUs. #153 is §8.2 REU — **N/A to this library** and their domain to certify; recorded as closed by them, not audited here |
 | c64-x25519 | adopter | **v0.16.0 — RETRACTED (contract#193), ten open** (#134–#138, #140, #142–#145). PR#141/#146/#147 merged earlier; **PR#149 merged 2026-09-08 closing #132** — the v0.16.0 `sqtab_init.o` split left a member no other member imports, so a two-sibling consumer's link failed unless `x25519.a` came last (all four c64-wireguard profiles broke). **Their PR queue is now empty and the tag is still v0.16.0**, so none of the four is in a tag and S4 is unmoved. #132's shape was measured against `polyval.a` and is N/A here — §6i | their settling tag, verified at the tag with a §6g positive control: `src/precalc_manifest.s` present, `lib_manifest.s` 0 macro invocations (3 at v0.13.0), ref+path confirmed to exist so the zero is a real zero. Member isolation shipped at v0.14.0; v0.15.0 added §8.2 `A = a` and ABI 3 → 4; v0.16.0 closes their #128 |
 | c64-ChaCha20-Poly1305 | adopter | **v0.12.0 tagged 2026-09-07** (was v0.11.0), tracker clean: zero open issues, zero open PRs. Their release notes state ABI generation stays 4, 97 export rows on both sides with zero name difference, and all four profile PRGs byte-identical to v0.11.0 — a label/footprint/gate-coverage release with no emitted-code change. **Recorded as THEIR evidence, not our verification**: checking it would mean building their tree, which this watch does not do (§6a). Conformance carries from the v0.11.0 verification if those claims hold | verified at the tag with a §6g positive control. `lib_manifest.s` 5 macro invocations at v0.10.0 → **0** at v0.11.0, `src/lib/precalc_manifest.s` present. Both #108 members done: `poly1305_lib.s` went 11 `.export` lines → 2, moving out the 8 `APP_OWNED` §8.1/§8.3 names. Their release also corrects the five under-reporting footprint equates from #113 |
