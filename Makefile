@@ -351,7 +351,7 @@ endif
         lib-polyval-gcmsiv-compact consumer-check \
         consumer-check-noaes consumer-check-shipped run clean dist verify \
         check-no-tracked-artifacts check-footprints check-scratch-prefix \
-        check-composing-mode
+        check-composing-mode clean-build
 .DEFAULT_GOAL := all
 
 all: $(PRG) $(LABELS)
@@ -737,6 +737,20 @@ SCRATCH_TREES = build-scratch.*
 clean:
 	rm -rf $(BUILD_DIR) $(SCRATCH_TREES)
 
+# --- BUILD_DIR-only clean (issue #93 fallout, found in review of #89/#94) --
+# `clean` sweeps $(SCRATCH_TREES) as well, and that glob is REPO-WIDE: a tool
+# running in its own private tree via `make BUILD_DIR=build-scratch.NNN clean`
+# deletes every OTHER tool's build-scratch.* too, which is exactly what #93's
+# per-run names were bought to prevent. Measured: two trees present, one
+# `make BUILD_DIR=build-scratch.MINE clean`, both gone.
+#
+# So the private-tree tools (check_composing_mode.py, check_footprints.py)
+# call THIS, which removes only the tree they own. Plain `clean` keeps
+# sweeping SCRATCH_TREES -- that is the backstop for a run killed with
+# SIGKILL, and it must stay repo-wide to do that job.
+clean-build:
+	rm -rf $(BUILD_DIR)
+
 # --- No build artifacts in git (issue #99) ---------------------------------
 # build-short/ sat TRACKED for two tags -- six artifacts from an unattributed
 # configuration, which a submodule-pinning consumer could have linked without
@@ -782,7 +796,15 @@ clean:
 # must use. Nothing linked against an archive built that way (#94), and
 # nothing asserted precalc_manifest.o's §8.4 suppression in any arm (#89).
 # Builds each of the six arms BOTH ways and compares them against each other,
-# so there is no expected-value table to drift.
+# so there is no expected-value table to drift, and LINKS the shipped stub
+# against each AEAD ARCHIVE (not the loose objects) with the shipped
+# polyval-example.cfg -- the first cut linked bd/*.o with src/lib_only.cfg and
+# still passed with the archives reduced to a single member.
+#
+# The §8.4 enumeration is reconciled against docs/precalc-tables.md, which a
+# human maintains separately: names, sizes, regions, classifications, and the
+# exact set of arms each table appears in. Reconciling the manifest against
+# ITSELF cannot see a table deleted from every arm at once.
 check-composing-mode:
 	@python3.13 $(TOOLS_DIR)/check_composing_mode.py
 

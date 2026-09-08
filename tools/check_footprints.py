@@ -172,12 +172,17 @@ def main():
     # the real build/, destroying a concurrent build from inside `make verify`
     # -- worse than the #93 race it would have added to. mkdtemp also avoids
     # adding a new fixed-name scratch tree while #93 is open.
+    #
+    # `clean-build`, not `clean`: plain `clean` also sweeps $(SCRATCH_TREES),
+    # which is the repo-wide `build-scratch.*` glob, so cleaning THIS tree
+    # deleted every other tool's private tree too -- #93's per-run names bought
+    # nothing while the cleanup was still global.
     bd = Path(tempfile.mkdtemp(prefix="build-scratch.", dir=str(ROOT)))
     rel = bd.name
     bad = 0
     try:
         for label, target, driver, defines in arms:
-            run(["make",f"BUILD_DIR={rel}","clean"], "make clean")
+            run(["make",f"BUILD_DIR={rel}","clean-build"], "make clean-build")
             run(["make",f"BUILD_DIR={rel}",target], f"make {target}")
             emit = default_segment_emission(bd)
             if emit:
