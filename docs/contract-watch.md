@@ -578,6 +578,28 @@ Cleared as it lands; empty means S1/S2 are met for the current contract tag.
    span-basis and object-sum basis agree here; adopters whose ro segments are
    aligned will see the two diverge, which is the point of the clause.
 
+   **The COMPACT-omission class, swept 2026-09-08.** COMPACT arrived in
+   v0.8.0, and lists written before it have been wrong ever since — now
+   **four findings of one shape**: `docs/precalc-tables.md`'s table rows
+   (#103), its prose paragraph, its `lib-polyval-{long,short}` brace list,
+   and `API.md:1305`'s identical brace list. The last is the one that
+   matters, because `API.md` is staged into the release tarball while the
+   precalc doc is maintainer-facing.
+
+   Swept rather than waiting for a fifth: every tracked `*.md`, `*.s`,
+   `*.inc`, `*.cfg` and the `Makefile`, for lines naming long and short
+   without compact. Everything else that matched is correct in context
+   (`API.md:229` and `:965` name COMPACT on the following line, `:181` is a
+   genuine SHORT-vs-LONG comparison, `:661` is the frozen v0.1.0 `.lib`
+   release) or a historical `CHANGELOG.md` entry, true at its tag and left
+   as written. **Two live instances, both fixed on the #89/#94 branch.**
+
+   The lesson is about where guards go, not about COMPACT: each guard added
+   to that paragraph displaced the drift rather than removing it — rows
+   watched, so it moved to the prose; parentheticals watched, so it moved
+   four lines down into a brace list. **Anchor on the Makefile's target set
+   wherever a document names archives**, rather than parsing more prose.
+
    **Method note, 2026-09-08 — assert the BRANCH before committing watch work.**
    A watch-cycle commit went onto a detached HEAD and was orphaned: an agent's
    worktree had vanished, its git commands resolved against the main checkout,
