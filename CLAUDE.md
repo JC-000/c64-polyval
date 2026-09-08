@@ -356,6 +356,28 @@ reusing objects assembled under another profile; use
 two targets, two `PIN_` rows, two `(profile × NO_AES)` manifest branches, two
 footprint rows — the v0.7.0 shape, done again for COMPACT in v0.8.0 (issue #51).
 
+**Adding a contract MEMBER is the other member-set axis, and it has one more
+place: `LIB_CONTRACT_MEMBERS`** in the `Makefile`, next to `LIB_CORE_OBJS`.
+That is the floor `tools/check_archive_members.sh` asserts on every archive,
+and it is deliberately a second list — a check whose expectation is the list
+it checks is blind to an edit of that list (issue #97). Adding the member to
+`LIB_CORE_OBJS` alone is not wrong and goes green; it just leaves the new
+member uncovered, and the next contract member will by its nature be another
+manifest TU that no consumer stub links — inheriting `precalc_manifest.o`'s
+invisibility exactly. So: add it in both places. This cannot be automated by
+asserting the two lists are equal, which would restore the tautology for a
+two-place delete.
+
+**Only members COMMON TO ALL SEVEN ARCHIVES belong in the floor.** It is
+asserted on every archive, so an AEAD-only member put there breaks the
+POLYVAL-only builds: adding `tables.o` to `LIB_CONTRACT_MEMBERS` leaves
+`make lib` green and then fails `make lib-polyval-long` with
+`MISSING (required by LIB_CONTRACT_MEMBERS): tables.o` (measured). An
+AEAD-only member belongs in `LIB_AEAD_OBJS`, not the floor. This is a clause
+rather than a check because the failure is loud, immediate and
+self-correcting — the wrong choice cannot ship quietly, it just costs a
+build — whereas the omission the floor exists to catch is silent.
+
 **Flag-set staleness — handled since issue #58; the manual `make clean` between
 profile switches is no longer required.** `data.o` and `lib_manifest.o` contents
 are conditional on `POLYVAL_PROFILE` (and `lib_manifest.o` additionally on
@@ -536,6 +558,17 @@ as historical reference and must not be edited. The active ABI is now
    every profile the baseline shipped, hash pairs) whenever they claim
    binary identity, and
    MUST use absolute blob URLs (relative links 404 on release pages).
+
+   **A byte-identity receipt may hash PRGs and the tarball, never a `.a`
+   or a `.o`.** ca65 stamps the assembly wall-clock second into every
+   object; ar65 stores members verbatim (so the stamp rides along) and
+   its index additionally records each object file's mtime. Archives and
+   objects are therefore not byte-reproducible, while the PRGs and the
+   tarball are (measured; issue #97). An archive hash in a receipt
+   will fail to reproduce and will read as a regression. The measurement,
+   and the traps in comparing archives some other way, are recorded in
+   the `Makefile` block above `VERIFY_TARGETS`.
+
 1. Bump `VERSION`, `CHANGELOG.md`, **and `LIB_POLYVAL_VERSION_MINOR`/`_PATCH`
    in `src/lib_version.s`** (the bare `LIB_VERSION_*` aliases follow
    automatically; the v0.3.0 release forgot this file entirely and it went

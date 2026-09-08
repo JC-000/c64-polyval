@@ -68,6 +68,13 @@ the worktree-rebuild receipt: the baseline tag rebuilt in a separate
 worktree, every profile the baseline shipped, hash pairs stated. Releases are staged as
 PRs and reviewed before tagging (see `CLAUDE.md`, release flow).
 
+Those receipts hash PRGs and the tarball, which are byte-reproducible.
+The `.a` archives and `.o` objects are **not**: ca65 stamps the assembly
+second into every object and ar65's index records each object's mtime, so
+two builds of identical source differ unless they land in the same second
+(issue #97). Compare archives by member set and member content, never by
+archive hash.
+
 ## Test
 
 ```bash

@@ -203,6 +203,30 @@ LIB_CORE_OBJS = $(BUILD_DIR)/lib_version.o \
                 $(BUILD_DIR)/lib_manifest.o \
                 $(BUILD_DIR)/precalc_manifest.o
 
+# The same four members, stated again BY NAME and on purpose (issue #97).
+# tools/check_archive_members.sh asserts this floor is present in every
+# archive it builds. It must NOT be derived from LIB_CORE_OBJS: a check whose
+# expectation is the list it checks is blind to an edit of that list, which
+# is exactly how the first cut of that script passed a 9-member polyval.a
+# with "9 members, exactly as declared" after precalc_manifest.o was deleted
+# from LIB_CORE_OBJS above. This is the one place in the build where a second
+# list is the point rather than the defect -- see #93/#95/#99 for the usual
+# case. It is a FLOOR, not an inventory: adding a member here without adding
+# it to LIB_CORE_OBJS goes red, adding one there without adding it here
+# merely leaves it uncovered. And only members COMMON TO ALL SEVEN ARCHIVES
+# belong here -- the floor is asserted on every one, so an AEAD-only member
+# put here fails the POLYVAL-only builds (measured with tables.o: `make lib`
+# green, `make lib-polyval-long` red). AEAD-only members go in LIB_AEAD_OBJS.
+#
+# Each name earns its place from the contract, not from convenience:
+#   lib_version.o       SPEC §1  version + ABI equates
+#   zp_config.o         SPEC §2  .exportzp slot inventory
+#   lib_manifest.o      SPEC §5  aggregate footprint equates + input bound
+#   precalc_manifest.o  SPEC §8.4 precalc-table enumeration -- the ONLY one
+#                       of the four that no consumer stub imports, so the
+#                       only one whose loss no link gate would notice
+LIB_CONTRACT_MEMBERS = lib_version.o zp_config.o lib_manifest.o precalc_manifest.o
+
 # POLYVAL-only variants: just the chosen polyval primitive plus data.o
 # (which provides polyval_h / polyval_temp / polyval_htable[8] / polyval_
 # reduce8 buffer reservations). No AES, no GCM-SIV.
@@ -551,9 +575,15 @@ $(LIB_EXAMPLE_CFG): $(SRC_DIR)/polyval-example.cfg | $(LIB_DIR)
 # invocation cleans build/ first to avoid mixing .o files assembled under
 # different POLYVAL_PROFILE values.
 #
-# `lib` and `lib-polyval-gcmsiv` produce byte-identical archives today;
-# the two names exist because consumers semantically want "the GCM-SIV
-# bundle" rather than "everything we happen to ship". If a future variant
+# `lib` and `lib-polyval-gcmsiv` produce byte-identical archives today --
+# meaning identical CONTENT, one object set archived under two names, not a
+# claim that either is byte-reproducible across builds; it is not, see the
+# issue #97 block above VERIFY_TARGETS. The two DO compare equal to each
+# other however far apart they are archived -- measured 9 s apart, still
+# byte-identical, because they share one object set and ar65 adds no clock;
+# what does not reproduce is a build that REASSEMBLES. The two names exist
+# because consumers semantically want "the GCM-SIV bundle" rather than
+# "everything we happen to ship". If a future variant
 # ever ships more than the AEAD bundle in `lib`, this split lets us widen
 # `lib` without surprising AEAD consumers.
 
@@ -563,10 +593,12 @@ lib-polyval-gcmsiv: $(LIB_DIR)/polyval-gcmsiv.a
 $(LIB_DIR)/polyval.a: $(LIB_AEAD_OBJS) | $(LIB_DIR) $(LIB_SHIPPED)
 	rm -f $@
 	$(AR65) a $@ $(LIB_AEAD_OBJS)
+	$(TOOLS_DIR)/check_archive_members.sh --require "$(LIB_CONTRACT_MEMBERS)" $@ $^
 
 $(LIB_DIR)/polyval-gcmsiv.a: $(LIB_AEAD_OBJS) | $(LIB_DIR) $(LIB_SHIPPED)
 	rm -f $@
 	$(AR65) a $@ $(LIB_AEAD_OBJS)
+	$(TOOLS_DIR)/check_archive_members.sh --require "$(LIB_CONTRACT_MEMBERS)" $@ $^
 
 # Per-profile POLYVAL-only archives. Recursive `make` invocations pin
 # POLYVAL_PROFILE for the .o build so the resulting archive only contains
@@ -608,22 +640,27 @@ lib-polyval-gcmsiv-compact:
 $(LIB_DIR)/polyval-long.a: $(LIB_POLYVAL_LONG_OBJS) | $(LIB_DIR) $(LIB_SHIPPED)
 	rm -f $@
 	$(AR65) a $@ $(LIB_POLYVAL_LONG_OBJS)
+	$(TOOLS_DIR)/check_archive_members.sh --require "$(LIB_CONTRACT_MEMBERS)" $@ $^
 
 $(LIB_DIR)/polyval-short.a: $(LIB_POLYVAL_SHORT_OBJS) | $(LIB_DIR) $(LIB_SHIPPED)
 	rm -f $@
 	$(AR65) a $@ $(LIB_POLYVAL_SHORT_OBJS)
+	$(TOOLS_DIR)/check_archive_members.sh --require "$(LIB_CONTRACT_MEMBERS)" $@ $^
 
 $(LIB_DIR)/polyval-compact.a: $(LIB_POLYVAL_COMPACT_OBJS) | $(LIB_DIR) $(LIB_SHIPPED)
 	rm -f $@
 	$(AR65) a $@ $(LIB_POLYVAL_COMPACT_OBJS)
+	$(TOOLS_DIR)/check_archive_members.sh --require "$(LIB_CONTRACT_MEMBERS)" $@ $^
 
 $(LIB_DIR)/polyval-gcmsiv-short.a: $(LIB_AEAD_OBJS) | $(LIB_DIR) $(LIB_SHIPPED)
 	rm -f $@
 	$(AR65) a $@ $(LIB_AEAD_OBJS)
+	$(TOOLS_DIR)/check_archive_members.sh --require "$(LIB_CONTRACT_MEMBERS)" $@ $^
 
 $(LIB_DIR)/polyval-gcmsiv-compact.a: $(LIB_AEAD_OBJS) | $(LIB_DIR) $(LIB_SHIPPED)
 	rm -f $@
 	$(AR65) a $@ $(LIB_AEAD_OBJS)
+	$(TOOLS_DIR)/check_archive_members.sh --require "$(LIB_CONTRACT_MEMBERS)" $@ $^
 
 # --- Shipped-surface guard (issue #79) -------------------------------------
 # Proves the three files `make lib` puts in build/lib/ are a COMPLETE and
@@ -862,6 +899,72 @@ check-no-tracked-artifacts:
 # them leaves BUILD_DIR holding COMPACT/NO_AES objects, the recipe ends by
 # rebuilding the default tree -- otherwise `make verify` (or a release, which
 # depends on it) would silently hand the caller back a non-default build/.
+#
+# DO NOT ADD AN ARCHIVE-HASH REPRODUCIBILITY CHECK TO THIS LIST (issue #97).
+# `build/lib/*.a` and `build/*.o` are NOT byte-reproducible; `build/*.prg` and
+# the release tarball ARE. A gate that hashes an archive across two builds is
+# red or green depending on when the clock happened to tick, and an
+# intermittent red trains people to re-run until green.
+#
+# MECHANISM, measured 2026-09-07 (ca65/ar65/od65 V2.18, homebrew cc65). Both
+# sources of variation are ca65's assembly time; ar65 contributes no clock of
+# its own:
+#   1. ca65 writes OPT_DATETIME -- the assembly wall-clock second -- into
+#      every object, as a 5-byte VARIABLE-LENGTH integer, 7 value bits per
+#      byte, low group first (`od65 --dump-all` prints it as `Data: <unix
+#      time>`). Decoded from build/data.o at 0-based offset 100 it matched
+#      the assembly second exactly in three separate objects.
+#   2. ar65's trailing index stores each member's FILE mtime, which for a
+#      fresh build is when ca65 wrote the object. Demonstrated in isolation:
+#      `touch`ing an unchanged .o and re-archiving changed 3 bytes, all of
+#      them inside the index.
+# ar65 stores and returns member data VERBATIM. Extracting a member 13 s
+# after archiving gave a byte-identical object, and re-archiving unchanged
+# objects 31 s later gave a byte-identical archive. Issue #97 attributes the
+# stamp to ar65 and says the member objects are reproducible; both are wrong,
+# and the second matters -- see the extraction trap below.
+#
+# HOW MANY BYTES DIFFER is set by how many 7-bit groups of the stamp differ,
+# i.e. which 128-second (then 16384-, then 2097152-second) boundaries the two
+# builds straddle. NOT by the elapsed interval. Measured:
+#   - six clean `make lib` runs gave two distinct polyval.a hashes, split
+#     exactly on a second boundary (four at t=1788828363 matching, two at
+#     t+1 matching);
+#   - that t/t+1 pair differs in exactly 20 bytes for polyval.a's 10 members
+#     -- one low group byte per member's OPT_DATETIME plus one per index
+#     mtime -- with every byte going 0313 -> 0314 octal, i.e. 0x4B|0x80 ->
+#     0x4C|0x80, and 1788828363 mod 128 = 75 = 0x4B;
+#   - 20 is not a constant and does not track the interval. A pair 238 s
+#     apart differs in 40 bytes because it crosses a 128-boundary twice; a
+#     synthetic single-member pair only 2 s apart, straddling one, likewise
+#     differs in two stamp bytes rather than one. So "tolerate <= 20 differing
+#     bytes for builds within a second" is NOT a workaround -- two builds one
+#     second apart can straddle a group boundary too.
+#   - `build/polyval.prg` and `build/lib_main.prg` were identical across six
+#     clean builds spanning five second boundaries: ld65 does not propagate
+#     the stamp. `make dist` was byte-identical across three runs spanning two
+#     second boundaries, and ships source only, so no released artifact is
+#     affected. Byte-identity receipts in release notes must therefore stay on
+#     PRG and tarball hashes; an archive hash in a receipt will not reproduce
+#     and will look like a regression.
+#
+# WHAT IS SAFE TO CHECK, and what this repo does check: the member NAME LIST
+# carries no timestamp. `tools/check_archive_members.sh` runs from every
+# archive recipe below and asserts `ar65 t` equals that rule's own
+# prerequisite list. It is timestamp-immune, so it cannot flake.
+#
+# If per-member CONTENT comparison is ever wanted on top of that, two traps,
+# both measured rather than guessed:
+#   - hashing EXTRACTED members does not compare equal across differently
+#     timed builds. Not because extraction adds anything -- it does not --
+#     but because the objects already differ: the OPT_DATETIME is inside the
+#     member data ar65 stored verbatim;
+#   - `od65 --dump-all` prints both that stamp and the *source* files'
+#     modification times, which are checkout-dependent; a dump comparison
+#     must filter both.
+# Any such check must also fail loudly when `ar65`/`od65` are missing or the
+# member list comes back empty -- an empty member set otherwise compares equal
+# to an empty member set and the gate passes vacuously (the #86/#91 shape).
 VERIFY_TARGETS = check-no-tracked-artifacts check-scratch-prefix all lib-verify consumer-check \
                  consumer-check-shipped lib-polyval-gcmsiv \
                  lib-polyval-gcmsiv-short lib-polyval-gcmsiv-compact \
