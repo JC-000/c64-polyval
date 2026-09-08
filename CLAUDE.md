@@ -356,6 +356,18 @@ reusing objects assembled under another profile; use
 two targets, two `PIN_` rows, two `(profile × NO_AES)` manifest branches, two
 footprint rows — the v0.7.0 shape, done again for COMPACT in v0.8.0 (issue #51).
 
+**Adding a contract MEMBER is the other member-set axis, and it has one more
+place: `LIB_CONTRACT_MEMBERS`** in the `Makefile`, next to `LIB_CORE_OBJS`.
+That is the floor `tools/check_archive_members.sh` asserts on every archive,
+and it is deliberately a second list — a check whose expectation is the list
+it checks is blind to an edit of that list (issue #97). Adding the member to
+`LIB_CORE_OBJS` alone is not wrong and goes green; it just leaves the new
+member uncovered, and the next contract member will by its nature be another
+manifest TU that no consumer stub links — inheriting `precalc_manifest.o`'s
+invisibility exactly. So: add it in both places. This cannot be automated by
+asserting the two lists are equal, which would restore the tautology for a
+two-place delete.
+
 **Flag-set staleness — handled since issue #58; the manual `make clean` between
 profile switches is no longer required.** `data.o` and `lib_manifest.o` contents
 are conditional on `POLYVAL_PROFILE` (and `lib_manifest.o` additionally on

@@ -41,6 +41,27 @@
 # lib_manifest.o (SPEC v1.2.0 §6.1) so nothing else drags it in. Drop it and
 # every link gate stays green.
 #
+# WHY NOT COVER THE MEMBER WITH A STUB IMPORT INSTEAD. The elegant
+# alternative is to have a consumer stub `.import` a name from
+# precalc_manifest.o, so ld65 fails if the member is gone. Rejected on
+# ARITHMETIC, not on safety. Only 4 of the 7 archives are linked by any gate:
+# polyval.a (consumer-check-shipped) and the three NO_AES archives
+# (consumer-check-noaes). consumer-check links LOOSE OBJECTS, $(LIB_OBJECTS),
+# not an archive, and nothing links polyval-gcmsiv.a, -gcmsiv-short.a or
+# -gcmsiv-compact.a. So imports in both stubs would cover at best 4 of 7
+# archives and 1 of the 4 contract members, while the floor covers 4 members
+# in all 7. It would also argue against the §6.1 member isolation that is
+# precalc_manifest.o's whole reason for being a separate member.
+#   Correction, recorded because this repo re-derives recorded reasons: the
+#   commit that added the floor also claimed the import would be unsafe under
+#   composition, because the natural name comes from the triple that
+#   LIB_NO_BARE_EXPORTS suppresses. That is FALSE. src/precalc_table.inc
+#   emits the PREFIXED LIB_%s_PRECALC_%s_* triple outside the
+#   `.ifndef LIB_NO_BARE_EXPORTS` block, gated only on a non-blank lib
+#   argument -- `od65 --dump-exports build/precalc_manifest.o` lists
+#   LIB_POLYVAL_PRECALC_aes_sbox_SIZE unconditionally. Importing the prefixed
+#   form is safe. The decision stands on the two reasons above.
+#
 # SCOPE -- this is a RECIPE-TIME check, not a state invariant over the file on
 # disk. It runs when a recipe builds an archive. `ar65 d build/lib/polyval.a
 # precalc_manifest.o` followed by `make lib` on a warm tree prints "Nothing to
@@ -75,8 +96,20 @@ shift
 # Both expectations must be non-empty. An empty one would compare equal to an
 # empty member list and the gate would pass having checked nothing -- the
 # vacuous-pass shape of issues #86 and #91.
-[ -n "$REQUIRED" ] || fail "$ARCHIVE: --require list is empty (an empty floor asserts nothing)"
+#
+# Count the floor by WORD-SPLITTING it, not with [ -n ]. `--require "   "` is
+# non-empty as a string but iterates zero times, so the floor asserted nothing
+# and the script still printed "contract floor present" -- measured. It is
+# reachable from a plausible edit: LIB_CONTRACT_MEMBERS = $(CONTRACT_EXTRA)
+# with CONTRACT_EXTRA undefined hands this call site a blank argument.
 [ $# -gt 0 ] || fail "$ARCHIVE: no declared members given (an empty expectation passes vacuously)"
+# count_words is a function so the word-split happens on ITS positional
+# parameters -- `set -- $REQUIRED` here would clobber the declared object
+# list that assertion 2 still needs.
+count_words() { echo $#; }
+if [ "$(count_words $REQUIRED)" -eq 0 ]; then
+  fail "$ARCHIVE: --require list is empty or blank (an empty floor asserts nothing)"
+fi
 
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/archmembers.XXXXXX") || \
   fail "could not create a scratch directory"
@@ -101,7 +134,10 @@ fi
 # --- assertion 1: the required floor ---------------------------------------
 missing=""
 for want in $REQUIRED; do
-  if ! grep -qx -- "$want" "$WORK/actual"; then
+  # -F: the names contain '.', which a BRE would match against any character.
+  # Measured: without -F, an archive holding lib_versionXo satisfied a floor
+  # asking for lib_version.o.
+  if ! grep -qxF -- "$want" "$WORK/actual"; then
     missing="$missing $want"
   fi
 done
