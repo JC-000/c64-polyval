@@ -61,6 +61,18 @@
 #   placeholders on a fresh run) reproduces the same tarball
 #   byte-for-byte.
 #
+# Ordering (issue #87): every check runs before any write to a tracked
+#   file. The placeholder reset is applied to the STAGED copy of the
+#   notes, the tarball is built to a temp path, and the working-tree
+#   notes + c64-polyval-<tag>.tar.gz are written only in the publish
+#   block at the very bottom, after the stamper is satisfied. A refused
+#   run therefore leaves the working tree exactly as it found it -- which
+#   is what "fail-closed" has to mean for a guard whose whole job is to
+#   refuse. The publish block itself is ordered placeholder-notes ->
+#   tarball -> stamped-notes so that an interruption inside it leaves a
+#   loudly unfinished state rather than a plausible-looking release; see
+#   the comment on that block.
+#
 # Make convenience target: `make dist VERSION=v0.2.0`.
 
 set -euo pipefail
@@ -165,12 +177,59 @@ elif git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
     exit 1
   fi
 
+  # INTERRUPTED-PUBLISH SIGNATURE (#87 round-2 review, D7). A `make dist` killed
+  # inside the publish block leaves the notes in placeholder form -- deliberately
+  # loud -- and on an already-tagged tree that loudness IS tag drift, so the next
+  # plain re-run lands here. Both messages below were wrong for that operator:
+  # the refusal never mentioned the interrupted run, and ALLOW_TAG_DRIFT's
+  # warning asserted the rebuilt tarball would NOT describe the released
+  # artifact, which is false when the notes' placeholder rows are the only
+  # difference -- the tarball stages the notes in placeholder form either way,
+  # so the rebuild reproduces the released bytes exactly. Being told the
+  # artifact will be wrong when it will not is worse than being told nothing.
+  #
+  # The signature is: the notes are the ONLY drifted path, nothing untracked
+  # would be staged, and the notes carry the placeholder tokens.
+  INTERRUPTED=0
+  if [[ "$DRIFTED" == "$NOTES_REL" && -z "$UNTRACKED" ]] \
+     && grep -q 'SHA256_PLACEHOLDER\|SIZE_PLACEHOLDER' "$NOTES_REL"; then
+    INTERRUPTED=1
+  fi
+
   if [[ -n "$DRIFTED" || -n "$UNTRACKED" ]]; then
     if [[ "$ALLOW_TAG_DRIFT" == "1" ]]; then
-      echo "warning: ALLOW_TAG_DRIFT=1 -- rebuilding $TAG from a tree that has" >&2
-      echo "         moved past the tag. The tarball and the Attestation block" >&2
-      echo "         in $NOTES_REL will NOT describe the released artifact." >&2
+      if [[ "$INTERRUPTED" == "1" ]]; then
+        echo "warning: ALLOW_TAG_DRIFT=1 -- $NOTES_REL differs from tag '$TAG'" >&2
+        echo "         only by its placeholder Attestation rows, which is the" >&2
+        echo "         signature of a 'make dist' interrupted mid-publish (#87)." >&2
+        echo "         The tarball stages the notes in placeholder form either" >&2
+        echo "         way, so this rebuild DOES reproduce the released bytes;" >&2
+        echo "         the stamp it writes back is the repair." >&2
+      else
+        echo "warning: ALLOW_TAG_DRIFT=1 -- rebuilding $TAG from a tree that has" >&2
+        echo "         moved past the tag. The tarball and the Attestation block" >&2
+        echo "         in $NOTES_REL will NOT describe the released artifact." >&2
+      fi
     else
+      if [[ "$INTERRUPTED" == "1" ]]; then
+        # Remedy first, caveat second, override last. This is read at 2am by
+        # someone whose release just died mid-publish; the line they need is
+        # the first one, not the ninth.
+        echo "error: a 'make dist' was interrupted mid-publish (#87)." >&2
+        echo "       FIX:  git checkout $TAG -- $NOTES_REL && make dist VERSION=$TAG" >&2
+        echo "       THEN: check $OUT -- an interrupt after the tarball rename" >&2
+        echo "             leaves the NEW tarball in place, which the restored" >&2
+        echo "             Attestation may no longer describe." >&2
+        echo "" >&2
+        echo "       Why: $NOTES_REL carries placeholder Attestation rows and is" >&2
+        echo "       the only file differing from tag '$TAG' -- it was reset for" >&2
+        echo "       staging and never stamped back." >&2
+        echo "       ALLOW_TAG_DRIFT=1 also repairs it and reproduces the same" >&2
+        echo "       bytes (the tarball stages the notes in placeholder form" >&2
+        echo "       either way); its warning about the artifact not matching" >&2
+        echo "       the release does not apply here." >&2
+        exit 1
+      fi
       echo "error: tag '$TAG' exists, but staged files differ from it." >&2
       [[ -n "$DRIFTED" ]]   && { echo "       changed since the tag:" >&2; \
                                  echo "$DRIFTED" | sed 's/^/         /' >&2; }
@@ -205,33 +264,68 @@ if [[ -z "$RELEASE_DATE" ]]; then
 fi
 MTIME="${RELEASE_DATE}T00:00:00Z"
 
-# Reset the on-disk notes to placeholder form before staging, so that
-# every build (including reruns over already-stamped notes) produces
-# the same staged bytes. We restore the on-disk values from the
-# computed SHA256/size at the end.
-python3 - "$NOTES_REL" <<'PY'
-import re, sys, pathlib
-p = pathlib.Path(sys.argv[1])
-text = p.read_text()
-# Replace the attestation table's SHA256 with the placeholder string.
-# SCOPED to the `| **SHA256** | <hash> |` row on purpose: release notes
-# also carry OTHER 64-hex hashes — the worktree-rebuild byte-identity
-# receipt CLAUDE.md's release flow requires (one PRG hash per profile,
-# per baseline). An unscoped `[0-9a-f]{64}` here placeholder-ised those
-# too, and the unbounded str.replace() below then stamped the tarball's
-# hash over every one of them, rewriting the receipt into a row of
-# identical hashes that reads as a successful identity check. Measured;
-# see the guard below, which now makes that shape fail loudly.
-text = re.sub(r'(\*\*SHA256\*\*\s*\|\s*)`[0-9a-f]{64}`',
-              r'\g<1>`SHA256_PLACEHOLDER`', text)
-# Replace "|" + decimal + " bytes" with placeholder (the attestation
-# table's Size row).
-text = re.sub(r'(\*\*Size\*\*\s*\|\s*)(\d+)( bytes)', r'\g<1>SIZE_PLACEHOLDER\g<3>', text)
-p.write_text(text)
-PY
-
+# --- No mutation before every check (issue #87) ---------------------------
+# Everything from here down to the two writes at the very bottom happens in
+# scratch space. Until this fix, the script reset the on-disk notes to
+# placeholder form and overwrote the tracked c64-polyval-<tag>.tar.gz BEFORE
+# the fail-closed stamper ran, so a REFUSED run exited non-zero having already
+# left both tracked files modified, with no restoration and nothing said about
+# it. The operator was told the notes were wrong, not that the tree had
+# already changed. Measured on the unfixed script with notes carrying a second
+# `**SHA256**` row:
+#     release-notes stamping: expected exactly one SHA256_PLACEHOLDER in
+#     docs/RELEASE_NOTES_v0.12.0.md, found 2 -- refusing to stamp
+#     make: *** [dist] Error 1
+#     $ git status --porcelain
+#      M c64-polyval-v0.12.0.tar.gz
+#      M docs/RELEASE_NOTES_v0.12.0.md
+#
+# The fix is ORDERING, not restoration: the placeholder reset rewrites the
+# STAGED copy rather than the working-tree file, the placeholder-count guard
+# runs at reset time (before a tarball exists at all), and the tarball is
+# built to a temp path renamed onto $OUT only once every check has passed.
+# The #85 tag-drift guard's "a refusal touches nothing" property now holds
+# for the script as a whole. The working-tree notes are still put through
+# placeholder form, but in the publish block at the bottom, where it is a
+# deliberate crash-visible marker rather than a pre-check mutation.
 STAGE_DIR="$(mktemp -d "/tmp/c64-polyval-release-XXXXXX")"
-trap 'rm -rf "$STAGE_DIR"' EXIT
+
+# Temp tarball path. In the repo root rather than $STAGE_DIR so the final
+# publish is a same-directory rename, not a cross-filesystem copy.
+#
+# The NAME is load-bearing and must keep the `build-scratch.` prefix. This is
+# scratch state minted in the repo root, i.e. exactly #93's shape, and SIGKILL
+# catches no trap -- so it has to be a name `make clean` already sweeps
+# (SCRATCH_TREES = build-scratch.*). The first cut of this fix used
+# `.${OUT}.tmp.$$`, which nothing swept: `make clean` did not match it and
+# `make check-scratch-prefix` printed "all swept" because its scan only knew
+# the `mktemp -d "$ROOT/..."` and `mkdtemp(dir=ROOT)` shapes. Adversarial
+# review caught both halves. check_scratch_prefix.py now recognises this
+# `VAR="literal...$$..."` shape too, so the agreement is asserted rather than
+# described -- rename this and that gate goes red.
+OUT_TMP="build-scratch.release.$$.tar.gz"
+
+# Same for the notes: the working-tree notes file is only ever REPLACED by a
+# rename of this temp, never written in place, so it cannot be caught torn.
+NOTES_TMP="build-scratch.release.$$.notes.md"
+
+# EXIT alone leaves scratch state behind on a catchable signal. Bash does run
+# an EXIT trap on SIGINT, but SIGTERM was measured leaving the tree behind in
+# 1 of 2 attempts in the sibling case (#93, check_knob_staleness.sh); the #87
+# comment asks for the same closure here. INT TERM HUP closes the catchable
+# half; SIGKILL cannot be closed, which is what the swept name is for.
+#
+# Each signal handler re-raises rather than `exit`ing: `exit 143` makes the
+# script look like it terminated NORMALLY with status 143, so a caller's
+# WIFSIGNALED/`$?` == -15 test can no longer tell a killed release from a
+# script that chose to fail. Clear the trap and kill ourselves with the same
+# signal instead, which is the portable idiom and preserves the exit status a
+# supervisor expects.
+cleanup() { rm -rf "$STAGE_DIR"; rm -f "$OUT_TMP" "$NOTES_TMP"; }
+trap 'cleanup' EXIT
+trap 'cleanup; trap - INT ; kill -INT  $$' INT
+trap 'cleanup; trap - TERM; kill -TERM $$' TERM
+trap 'cleanup; trap - HUP ; kill -HUP  $$' HUP
 
 STAGE_ROOT="${STAGE_DIR}/${PREFIX}"
 mkdir -p "$STAGE_ROOT/src/include" "$STAGE_ROOT/docs"
@@ -240,7 +334,69 @@ mkdir -p "$STAGE_ROOT/src/include" "$STAGE_ROOT/docs"
 cp README.md API.md CHANGELOG.md LICENSE VERSION "$STAGE_ROOT/"
 
 # --- Release notes (placeholder form; on-disk stamped after build) -------
+# The working-tree notes are copied verbatim and the placeholder reset is then
+# applied IN PLACE to the staged copy. Doing it in this order rather than
+# resetting the working-tree file first buys two things (issue #87):
+#   * the working-tree file is not written until every check has passed, and
+#   * the staged file keeps the mode `cp` gave it from the source, so the tar
+#     header bytes are exactly what the old order produced -- the
+#     reproducibility this script exists for is unperturbed.
 cp "$NOTES_REL" "$STAGE_ROOT/$NOTES_REL"
+
+# Reset the STAGED notes to placeholder form, so that every build (including
+# reruns over already-stamped notes) produces the same staged bytes. The
+# on-disk values are stamped from the computed SHA256/size at the very end.
+#
+# The placeholder-count guard that used to live only in the stamper runs HERE
+# as well, before a tarball exists: its entire purpose is to refuse, and a
+# guard whose refusal has already rewritten two tracked files is not
+# fail-closed in any useful sense.
+# THE HEREDOC NEVER RECEIVES THE WORKING-TREE PATH. It is handed the staged
+# copy and nothing else, so no tracked path is in scope for it to open -- which
+# is exactly what the pre-#87 stamper did, truncating the tracked notes to 0
+# bytes on every run. The diagnostic still names the file: the SHELL prints it
+# after python exits. An earlier cut passed the path behind a `--label`
+# sentinel and had check_publish_atomic.py police what the body did with it;
+# round-5 review defeated that by renaming one variable inside the body. Not
+# receiving the path is the property. Policing its use was only the shadow.
+if ! python3 - "$STAGE_ROOT/$NOTES_REL" <<'PY'
+import re, sys, pathlib
+p = pathlib.Path(sys.argv[1])   # staged copy -- the only thing rewritten here
+text = p.read_text()
+# Replace the attestation table's SHA256 with the placeholder string.
+# SCOPED to the `| **SHA256** | <hash> |` row on purpose: release notes
+# also carry OTHER 64-hex hashes — the worktree-rebuild byte-identity
+# receipt CLAUDE.md's release flow requires (one PRG hash per profile,
+# per baseline). An unscoped `[0-9a-f]{64}` here placeholder-ised those
+# too, and the unbounded str.replace() in the stamper then stamped the
+# tarball's hash over every one of them, rewriting the receipt into a row
+# of identical hashes that reads as a successful identity check. Measured;
+# see the count guard below, which makes that shape fail loudly.
+text = re.sub(r'(\*\*SHA256\*\*\s*\|\s*)`[0-9a-f]{64}`',
+              r'\g<1>`SHA256_PLACEHOLDER`', text)
+# Replace "|" + decimal + " bytes" with placeholder (the attestation
+# table's Size row).
+text = re.sub(r'(\*\*Size\*\*\s*\|\s*)(\d+)( bytes)', r'\g<1>SIZE_PLACEHOLDER\g<3>', text)
+
+# Exactly one of each placeholder must be present. More than one means the
+# reset matched something it should not have (e.g. a byte-identity receipt
+# hash), and stamping would overwrite real measurements with the tarball's
+# hash -- silently, and in a shape that still reads as a valid attestation.
+# Zero means there is no attestation row to stamp at all. Fail loudly here,
+# where nothing outside the scratch staging area has been written.
+for name in ('SHA256_PLACEHOLDER', 'SIZE_PLACEHOLDER'):
+    count = text.count(name)
+    if count != 1:
+        sys.exit("release-notes stamping: expected exactly one %s, found %d "
+                 "-- refusing to stamp (see the scoped reset regex above). "
+                 "No files were modified." % (name, count))
+
+p.write_text(text)
+PY
+then
+  echo "       in: $NOTES_REL" >&2
+  exit 1
+fi
 
 # --- Precalc-table enumeration (c64-lib-contract SPEC §8.0) --------------
 cp docs/precalc-tables.md "$STAGE_ROOT/docs/precalc-tables.md"
@@ -306,42 +462,103 @@ if [[ "$TAR_FLAVOUR" == "bsd" ]]; then
        | tar --no-recursion \
              --uid 0 --gid 0 --uname "" --gname "" \
              -cf - -T - ) \
-    | gzip -n -9 > "$OUT"
+    | gzip -n -9 > "$OUT_TMP"
 else
   tar -C "$STAGE_DIR" \
     --owner=0 --group=0 --numeric-owner \
     --mtime="$MTIME" \
     --sort=name \
     -cf - "$PREFIX" \
-    | gzip -n -9 > "$OUT"
+    | gzip -n -9 > "$OUT_TMP"
 fi
 
-SIZE=$(wc -c < "$OUT" | tr -d ' ')
-SHA=$(shasum -a 256 "$OUT" | cut -d' ' -f1)
+SIZE=$(wc -c < "$OUT_TMP" | tr -d ' ')
+SHA=$(shasum -a 256 "$OUT_TMP" | cut -d' ' -f1)
 
-# --- Stamp the *on-disk* notes (not the staged/in-tarball copy) ---------
-python3 - "$NOTES_REL" "$SIZE" "$SHA" <<'PY'
+# --- Compute the stamped notes, still in scratch space ------------------
+# Source is the STAGED placeholder copy, not the working-tree file, which at
+# this point still holds the previous run's values untouched.
+STAMPED="${STAGE_DIR}/notes.stamped.md"
+# Same discipline as the reset step: this heredoc sees the staged copy and the
+# scratch destination, never the working-tree path.
+if ! python3 - "$STAGE_ROOT/$NOTES_REL" "$STAMPED" "$SIZE" "$SHA" <<'PY'
 import sys, pathlib
-path, size, sha = sys.argv[1], sys.argv[2], sys.argv[3]
-p = pathlib.Path(path)
-text = p.read_text()
+src, dst, size, sha = sys.argv[1:5]
+text = pathlib.Path(src).read_text()
 
-# Exactly one of each placeholder must be present. More than one means
-# the reset step above matched something it should not have (e.g. a
-# byte-identity receipt hash), and stamping would overwrite real
-# measurements with the tarball's hash -- silently, and in a shape that
-# still reads as a valid attestation. Fail loudly instead.
+# Defence in depth: the reset step already refused on any count != 1, so this
+# cannot fire on a path that reaches here. It is kept because the substitution
+# below is unbounded, and it still runs before anything outside scratch space
+# is written.
 for name, count in (('SHA256_PLACEHOLDER', text.count('SHA256_PLACEHOLDER')),
                     ('SIZE_PLACEHOLDER',   text.count('SIZE_PLACEHOLDER'))):
     if count != 1:
-        sys.exit("release-notes stamping: expected exactly one %s in %s, "
-                 "found %d -- refusing to stamp (see the scoped reset regex "
-                 "above)" % (name, path, count))
+        sys.exit("release-notes stamping: expected exactly one %s, found %d "
+                 "-- refusing to stamp (see the scoped reset regex above). "
+                 "No files were modified." % (name, count))
 
 text = text.replace('SHA256_PLACEHOLDER', sha)
 text = text.replace('SIZE_PLACEHOLDER', size)
-p.write_text(text)
+pathlib.Path(dst).write_text(text)
 PY
+then
+  echo "       in: $NOTES_REL" >&2
+  exit 1
+fi
+
+# --- Publish: the only writes to tracked files, and their ORDER ---------
+# All three happen after every check has passed. The order is chosen so that
+# an interruption anywhere inside this block leaves a LOUD state, not a state
+# that reads as a finished release.
+#
+# The first cut of this fix wrote the stamped notes and then renamed the
+# tarball. Adversarial review widened that gap with a `sleep 4` and sent
+# SIGTERM: the notes came out fully stamped with ZERO placeholder tokens, the
+# on-disk tarball was still the PREVIOUS run's, and the correct tarball had
+# been deleted by the TERM handler -- `git status` then showed exactly what a
+# successful release shows, with an Attestation describing an artifact that no
+# longer existed. That is a smaller window than the one it replaced, but a
+# SILENT one, and the old window was always loud. Trading loud for silent is
+# a regression in failure-mode quality however much smaller the window gets.
+#
+# So: reset the working-tree notes to the STAGED placeholder form FIRST, then
+# rename the tarball, then stamp. `$SIZE`/`$SHA` were computed from
+# `$OUT_TMP` above, so the values stamped in step 3 describe exactly the bytes
+# step 2 published. Interrupted after step 1 or step 2, the notes carry
+# SHA256_PLACEHOLDER / SIZE_PLACEHOLDER -- the same unmistakable signature the
+# pre-fix window left, and one a re-run consumes cleanly (the reset step finds
+# exactly one of each and proceeds).
+#
+# ALL THREE STEPS ARE RENAMES. The notes steps were plain `cp`s until round-2
+# review measured the remaining hole: a `cp` is tearable, and the attestation
+# rows sit ~98% of the way through the file, so a torn copy drops them
+# entirely -- no placeholder tokens, no `**SHA256**` row at all. (Reaching it
+# needs a process-group SIGKILL: killing only the shell lets the `cp` child
+# run to completion, which is why the first probes missed it.) Every torn
+# state is still unmistakably broken -- a re-run dies at "could not parse
+# release date" -- so this was a documentation question, not a correctness
+# one. Renaming removes the class instead of describing it: rename(2) is
+# atomic, so each tracked file is the old bytes or the new bytes and never a
+# prefix of either.
+#
+# The temp files live in the repo root, not in docs/. Atomicity needs the same
+# FILESYSTEM, not the same directory, and one repo is one filesystem -- while
+# `make clean`'s SCRATCH_TREES only sweeps the repo root, so a docs/-resident
+# temp would be #93's shape all over again.
+#
+# NOTES_TMP is seeded by copying the CURRENT notes first, purely so it inherits
+# that file's mode: `cp` onto an existing file keeps the destination's mode, so
+# the second `cp` writes content without changing it, and the rename then
+# installs a file with the same permissions the notes already had.
+cp "$NOTES_REL"             "$NOTES_TMP"
+cp "$STAGE_ROOT/$NOTES_REL" "$NOTES_TMP"
+mv "$NOTES_TMP" "$NOTES_REL"
+
+mv "$OUT_TMP" "$OUT"
+
+cp "$NOTES_REL" "$NOTES_TMP"
+cp "$STAMPED"   "$NOTES_TMP"
+mv "$NOTES_TMP" "$NOTES_REL"
 
 echo "Built ${OUT}"
 echo "  Path:   ${REPO_ROOT}/${OUT}"

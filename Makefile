@@ -389,7 +389,7 @@ endif
         lib-polyval-gcmsiv-compact consumer-check \
         consumer-check-noaes consumer-check-shipped run clean dist verify \
         check-no-tracked-artifacts check-footprints check-scratch-prefix \
-        check-composing-mode clean-build check-zp-slots
+        check-composing-mode clean-build check-zp-slots check-publish-atomic
 .DEFAULT_GOAL := all
 
 all: $(PRG) $(LABELS)
@@ -934,6 +934,17 @@ check-scratch-prefix:
 check-zp-slots:
 	@sh $(TOOLS_DIR)/check_zp_slot_aliasing.sh
 
+# --- the release publishes by rename, not by copy (issue #87) --------------
+# Source scan, no build. build_release.sh writes its two tracked files --
+# docs/RELEASE_NOTES_<tag>.md and the tarball -- only by renaming a finished
+# temp over them, because `cp` is tearable and a torn notes copy loses the
+# whole Attestation table without leaving a placeholder token behind. Nothing
+# else in this repo can observe that property: the release still works after
+# an edit back to `cp`, and the damage shows up only under a process-group
+# SIGKILL at the right microsecond.
+check-publish-atomic:
+	@python3.13 $(TOOLS_DIR)/check_publish_atomic.py
+
 check-no-tracked-artifacts:
 	@files=$$(git ls-files) || { \
 	  echo "check-no-tracked-artifacts: 'git ls-files' failed" >&2; exit 1; }; \
@@ -1068,7 +1079,7 @@ check-no-tracked-artifacts:
 # Any such check must also fail loudly when `ar65`/`od65` are missing or the
 # member list comes back empty -- an empty member set otherwise compares equal
 # to an empty member set and the gate passes vacuously (the #86/#91 shape).
-VERIFY_TARGETS = check-no-tracked-artifacts check-scratch-prefix check-zp-slots \
+VERIFY_TARGETS = check-no-tracked-artifacts check-scratch-prefix check-zp-slots check-publish-atomic \
                  all lib-verify consumer-check \
                  consumer-check-shipped lib-polyval-gcmsiv \
                  lib-polyval-gcmsiv-short lib-polyval-gcmsiv-compact \
