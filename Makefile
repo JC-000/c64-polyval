@@ -49,7 +49,11 @@
 #                        #47: the POLYVAL-only archives must not export the
 #                        AES / GCM-SIV BSS block out of the shared data.o.
 #   run                  `make all` then launch VICE x64sc with -moncommands.
-#   clean                rm -rf build/.
+#   clean                rm -rf $(BUILD_DIR) and every build-scratch.* in the
+#                        repo (the SIGKILL backstop -- see $(SCRATCH_TREES)).
+#   clean-build          rm -rf $(BUILD_DIR) ONLY. What every recursive
+#                        $(MAKE) and every private-tree tool calls, so a run
+#                        never deletes a sibling's scratch tree.
 #   dist                 reproducible release tarball.
 #
 # Variables:
@@ -420,6 +424,14 @@ $(LIB_DIR): | $(BUILD_DIR)
 # both excluded so a clean does not recreate build/ just to drop a stamp in it
 # -- which also covers the recursive `$(MAKE) clean-build` in the
 # lib-polyval-* and consumer-check-noaes targets.
+#
+# Consequence, noted so it is not re-derived: `make clean-build all` builds
+# `all` and writes NO stamp, because the filter skips the whole block for that
+# invocation. `make clean all` had the identical shape before clean-build
+# existed, so this is not new. It is also the safe direction -- the next build
+# sees no stamp, compares unequal, and does one extra full rebuild; it never
+# yields a stale artifact. Measured: after `make clean-build all`, a following
+# `make POLYVAL_PROFILE=short` still produced the 18970-byte SHORT PRG.
 #
 # Limitation: the stamp round-trips through the shell, so a define containing
 # a single quote would not compare correctly. ca65 -D values are symbols and

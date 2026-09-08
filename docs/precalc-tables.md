@@ -46,7 +46,7 @@ Profile cannot express that axis — `polyval-long.a` and
 `polyval-gcmsiv.a` are both built at `PROFILE=long`, while
 `polyval-gcmsiv-short.a` and `polyval-short.a` are both built at
 `PROFILE=short` yet differ in AES membership — so the
-`lib-polyval-{long,short}` targets pass `-D LIB_POLYVAL_NO_AES=1`,
+`lib-polyval-{long,short,compact}` targets pass `-D LIB_POLYVAL_NO_AES=1`,
 which suppresses the two AES rows in `src/precalc_manifest.s`. A manifest
 must never describe tables its archive does not ship (same defect
 class as [c64-lib-contract#62](https://github.com/JC-000/c64-lib-contract/issues/62)).

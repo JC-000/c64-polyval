@@ -1094,7 +1094,7 @@ profile × variant combination therefore has its own §6.1 target, and
 each carries a `lib_manifest.o` assembled under the same pin so the §5
 equates describe the archive they ship in (§6.4). `lib` and
 `lib-polyval-gcmsiv` name the **LONG** AEAD archive implicitly and do
-not `make clean` first, so they reject `POLYVAL_PROFILE=short` or
+not clean first, so they reject `POLYVAL_PROFILE=short` or
 `=compact` rather than silently reusing objects assembled under
 another profile; use `make lib-polyval-gcmsiv-short` /
 `make lib-polyval-gcmsiv-compact`, which pin the profile behind a
@@ -1150,7 +1150,7 @@ archive exports `polyval_acc` at `$40`).
 **§6.4 — The manifest describes the archive it ships in.** Already
 conformant, both halves: (1) `lib_manifest.o` is assembled under the
 same configuration as the archive it ships in — the
-`lib-polyval-{long,short,compact}` targets `make clean` and rebuild
+`lib-polyval-{long,short,compact}` targets `make clean-build` and rebuild
 recursively with `POLYVAL_PROFILE` and `POLYVAL_NO_AES` pinned, so no
 archive ever receives a manifest object assembled under another
 configuration; (2) every manifest row is gated on the same switches
@@ -1297,14 +1297,14 @@ removed at a future contract MAJOR):
 | `polyval_htable` | 256 B | RAM | every build (all three profiles) |
 | `polyval_htable8` | 4096 B | RAM | LONG-profile builds only |
 | `polyval_reduce8` | 4096 B | RAM | LONG-profile builds only |
-| `aes_sbox` | 256 B | RODATA | AEAD bundle only (`polyval.a` / `polyval-gcmsiv.a`) |
-| `aes_inv_sbox` | 256 B | RODATA | AEAD bundle only (`polyval.a` / `polyval-gcmsiv.a`) |
+| `aes_sbox` | 256 B | RODATA | AEAD archives only (`polyval.a` / `polyval-gcmsiv.a` / `polyval-gcmsiv-short.a` / `polyval-gcmsiv-compact.a`) |
+| `aes_inv_sbox` | 256 B | RODATA | AEAD archives only (`polyval.a` / `polyval-gcmsiv.a` / `polyval-gcmsiv-short.a` / `polyval-gcmsiv-compact.a`) |
 
 Manifest rows are gated on the same two axes: the LONG-only tables on
 `POLYVAL_PROFILE`, and the AES tables on `LIB_POLYVAL_NO_AES`, which
-the `lib-polyval-{long,short}` targets define so the POLYVAL-only
-archives (which omit `src/tables.s`) do not enumerate tables they do
-not ship (issue #23). This gating is exactly SPEC v0.9.0 §6.4's
+the `lib-polyval-{long,short,compact}` targets define so the three
+POLYVAL-only archives (which omit `src/tables.s`) do not enumerate
+tables they do not ship (issue #23). This gating is exactly SPEC v0.9.0 §6.4's
 per-variant manifest rule, both halves — see §9.5.
 
 All five are classified algorithm-specific (`PRECALC_SHARED_NO`) — no

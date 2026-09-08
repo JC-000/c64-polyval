@@ -49,7 +49,13 @@ below anchors OUTSIDE the manifest, in two directions:
     the row grammar was proving nothing about the prose, which is now the
     likelier drift site precisely because the rows are watched. Its two
     archive lists and its count word are reconciled against the same
-    lib-polyval-* target set.
+    lib-polyval-* target set; so are the `lib-polyval-{a,b}` brace lists that
+    name targets, in API.md as well as here (the same omission was live in
+    both), and no backticked archive may appear in the
+    membership sentence OUTSIDE the two reconciled parentheticals. What is
+    still NOT read is any other prose in that paragraph: a claim written in
+    some further form is unchecked, and the fix for that is to state it in one
+    of the forms above rather than to widen this into prose interpretation.
 
 The residual gap, stated rather than papered over: the doc is a human artifact
 in the same commit, so a change made to BOTH sides at once reconciles by
@@ -254,11 +260,24 @@ def doc_prose_archives():
         die(f"{DOC.name}: no 'member of all <count> AEAD archives (...)' sentence under "
             f"'## Enumerated tables' -- the prose half of the archive-membership claim "
             f"cannot be reconciled, and must not be skipped")
-    n = re.search(r"POLYVAL-only archives\s*\(([^)]*)\)", body)
+    n = re.search(r"POLYVAL-only archives\s*\(([^)]*)\)", body[a.end():])
     if not n:
-        die(f"{DOC.name}: no 'POLYVAL-only archives (...)' sentence under "
+        die(f"{DOC.name}: no 'POLYVAL-only archives (...)' sentence after the AEAD one under "
             f"'## Enumerated tables' -- the prose half of the archive-membership claim "
             f"cannot be reconciled, and must not be skipped")
+    # NOTHING OUTSIDE THE TWO PARENTHETICALS. Everything above reads only what is
+    # inside them, so a clause between them parsed green with both lists and the
+    # count correct -- and the constructed case was "a member of ... and of
+    # `polyval-long.a`", the exact false claim issue #23 exists to prevent. Any
+    # backticked archive in the membership sentence must be inside one of the two
+    # lists that ARE reconciled.
+    span = body[a.start():a.end() + n.end()]
+    stray = set(re.findall(r"`([a-z0-9.-]+\.a)`",
+                           span.replace(a.group(2), "").replace(n.group(1), "")))
+    if stray:
+        die(f"{DOC.name}: the membership sentence names {sorted(stray)} OUTSIDE the two "
+            f"parenthetical lists -- only those two are reconciled, so an archive claim "
+            f"made anywhere else in the sentence is unchecked prose")
     if a.group(1) not in NUMWORD:
         die(f"{DOC.name}: 'all {a.group(1)} AEAD archives' -- {a.group(1)!r} is not a count word "
             f"this check knows, so the count cannot be reconciled")
@@ -269,6 +288,55 @@ def doc_prose_archives():
             die(f"{DOC.name}: the {what} parenthetical names no `*.a` archive -- an empty list "
                 f"must not read as 'reconciles'")
     return NUMWORD[a.group(1)], aead, noaes
+
+# Backticks optional: CLAUDE.md writes the same list bare, and that instance was
+# stale too. The gcmsiv- form is read as well -- same drift risk, same fix.
+BRACE = re.compile(r"lib-polyval-(gcmsiv-)?\{([a-z,]+)\}")
+BRACE_FILES = ("docs/precalc-tables.md", "API.md", "README.md", "CLAUDE.md")
+NEAR = 150
+NOAES = "POLYVAL_NO_AES"
+
+def brace_targets():
+    """Every `lib-polyval-{a,b}` brace list in the docs that name targets.
+
+    The form is invisible to the parenthetical grammar above, and D11 is the
+    proof that matters: `lib-polyval-{long,short}` said TWO targets pass
+    -D LIB_POLYVAL_NO_AES=1 when the Makefile has had three since v0.8.0 --
+    #103's own omission, four lines below the sentence corrected for #103, and
+    green. A sweep then found the SAME omission in API.md, which ships in the
+    release tarball. So this reads both files, not just the §8.4 one.
+
+    Two mechanical legs, no prose interpreted:
+      * every list expands to targets the Makefile actually provides;
+      * a list within NEAR characters of `LIB_POLYVAL_NO_AES` is claiming which
+        targets suppress the AES rows, and must name exactly those. Each file
+        must carry at least one such list -- a rewording that moves the mention
+        out of range fails loudly here rather than dropping the leg silently.
+
+    Returns [(file, expanded set, is-the-NO_AES-claim)].
+    """
+    out = []
+    for rel in BRACE_FILES:
+        f = ROOT / rel
+        if not f.exists(): die(f"{rel} does not exist -- its brace lists cannot be reconciled")
+        txt, seen = f.read_text(), 0
+        for mm in BRACE.finditer(txt):
+            stem = "lib-polyval-" + (mm.group(1) or "")
+            names = {stem + x for x in mm.group(2).split(",") if x}
+            if not names:
+                die(f"{rel}: an empty `lib-polyval-{{}}` list -- it names no target")
+            ctx = txt[max(0, mm.start()-NEAR): mm.end()+NEAR]
+            is_noaes = NOAES in ctx
+            seen += is_noaes
+            out.append((rel, names, is_noaes))
+        # A file that never mentions the define makes no claim to reconcile (README
+        # is that case). A file that DOES mention it must state which targets carry
+        # it in the reconcilable form, so a rewording cannot drop the leg quietly.
+        if NOAES in txt and not seen:
+            die(f"{rel}: mentions {NOAES} but has no `lib-polyval-{{...}}` list within "
+                f"{NEAR} characters of it -- the claim naming which targets suppress the "
+                f"AES rows cannot be reconciled, and must not be skipped")
+    return out
 
 def const_vals():
     """PRECALC_REGION_* / PRECALC_SHARED_* numeric values from the canonical macro."""
@@ -468,8 +536,26 @@ def main():
     if count != len(want_aead):
         die(f"{DOC.name}: the prose says 'all {count} AEAD archives' but names {len(prose_aead)} "
             f"and the Makefile builds {len(want_aead)}")
+    # (7) the brace lists in the same paragraph. D11: `lib-polyval-{long,short}`
+    # claimed two NO_AES targets against the Makefile's three, four lines below
+    # the sentence #103 corrected, and every leg above was green on it.
+    braces = brace_targets()
+    all_targets = {a[1] for a in ARMS}
+    want_noaes_targets = {a[1] for a in ARMS if not a[3]}
+    for rel, names, is_noaes in braces:
+        unknown = sorted(names - all_targets)
+        if unknown:
+            die(f"{rel}: a `lib-polyval-{{...}}` list expands to {unknown}, which no "
+                f"lib-polyval-* target in the Makefile provides")
+        if is_noaes and names != want_noaes_targets:
+            die(f"{rel}: the prose says {sorted(names)} carry LIB_POLYVAL_NO_AES, but the "
+                f"Makefile passes POLYVAL_NO_AES=1 from {sorted(want_noaes_targets)} -- "
+                f"missing {sorted(want_noaes_targets - names)}, unexpected "
+                f"{sorted(names - want_noaes_targets)}")
     print(f"  §8.4 prose          the paragraph's archive lists match the "
-          f"lib-polyval-* targets ({count} AEAD, {len(want_noaes)} POLYVAL-only)")
+          f"lib-polyval-* targets ({count} AEAD, {len(want_noaes)} POLYVAL-only); "
+          f"{len(braces)} brace list(s) in {len(BRACE_FILES)} file(s) expand to real "
+          f"targets, {sum(1 for _,_,n in braces if n)} of them the NO_AES claim")
     if bad: die(f"{bad} assertion(s) failed -- see the rows above")
     print(f"check_composing_mode: suppression removes every bare name and keeps every prefixed one, "
           f"all 6 arms; {len(doc)} enumerated table(s) reconcile with {DOC.name}; "
