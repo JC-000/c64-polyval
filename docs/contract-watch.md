@@ -291,7 +291,47 @@ Cleared as it lands; empty means S1/S2 are met for the current contract tag.
 
    Historical release notes stay as written (they were true at their tag).
 
-3. **Audit this repo's own checks for the #194 form — OPEN, not yet done.**
+3. **Release in flight: v0.12.0.** JC-000 asked for the board cleared and a
+   tagged release, worked by a supervised team (implementer + a *different*
+   adversarial reviewer per change, supervisor holds the gate and does not
+   implement — the shape c64-x25519 adopted in their PR#141).
+
+   **Version call: MINOR, v0.12.0.** The library itself is unchanged — every
+   commit this cycle touches `Makefile`, `tools/` or docs, so the three PRGs
+   should come out byte-identical to v0.11.0 and `LIB_POLYVAL_ABI_VERSION`
+   stays **1**. What makes it MINOR rather than PATCH is additive §6.1 surface:
+   `verify` plus `check-no-tracked-artifacts`, `check-scratch-prefix`,
+   `check-footprints`, `check-composing-mode` are consumer-visible make
+   targets, and nothing was removed or renamed.
+
+   **The seven footprint rows, measured 2026-09-08** — one per shipped
+   archive, per the release-flow rule. `polyval.a` and `polyval-gcmsiv.a`
+   carry identical values and still get **two rows**: merging them is what
+   made v0.7.0–v0.7.2's own row-count claim unperformable.
+
+   | archive | RESIDENT | COLD | `GCMSIV_MAX_PT_LEN` |
+   |---|---|---|---|
+   | `polyval.a` | 6656 | 1280 | 64 |
+   | `polyval-gcmsiv.a` | 6656 | 1280 | 64 |
+   | `polyval-gcmsiv-short.a` | 16128 | 3072 | 64 |
+   | `polyval-gcmsiv-compact.a` | 2816 | 512 | 64 |
+   | `polyval-long.a` | 4352 | 1280 | absent |
+   | `polyval-short.a` | 13824 | 3072 | absent |
+   | `polyval-compact.a` | 512 | 256 | absent |
+
+   `MAX_PT_LEN` is correctly absent from the three NO_AES archives, which
+   ship no `gcm_siv.o`. All seven values are unchanged from v0.11.0.
+
+   Release gate, in order: board cleared → version bump in `VERSION`,
+   `src/lib_version.s` **and `API.md` §9.1's value table** (v0.4.1 bumped the
+   file and left the table stale) → notes with the seven rows → `make clean &&
+   make dist` → reproducibility re-run → full VICE suite on all three profiles
+   → a U64E confirmation run (JC-000 offered the hardware; it is confirmatory,
+   not diagnostic, since the PRGs are byte-identical) → release PR →
+   adversarial review → **then** the tag. Never the tag first: that is how
+   v0.10.0 shipped four defects.
+
+4. **Audit this repo's own checks for the #194 form — OPEN, not yet done.**
    Filed here 2026-09-07 off contract#194 and nist-curves#142. The question
    is not "do our checks pass" but **"has each one ever been observed to
    fail?"** Candidates, in rough order of exposure: `make
