@@ -33,6 +33,27 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 MK   = ROOT / "Makefile"
 
+# How many scratch-minting sites each file is KNOWN to have.
+#
+# Round-2 review of #87 broke the gate without tripping it: replacing
+# build_release.sh's `OUT_TMP=` line with an unquoted assignment, with a
+# `$(date +%s)` name, or with a `mktemp "$REPO_ROOT/..."` call each made the
+# scan stop recognising the site, and the gate then reported "2 minting
+# site(s), all swept" and exited 0. The site count dropped 3 -> 2 and nothing
+# asserted otherwise. The pre-existing zero-sites guard covers ABSENCE, not a
+# DECREASE -- the same distinction as issue #86, and the shape this repo keeps
+# shipping: a check satisfied by not seeing the thing it must check.
+#
+# So the expected sites are named. This IS a hand-maintained list, the drift
+# class this repo dislikes -- but it drifts in the SAFE direction: adding a
+# site is fine (the test is >=), and removing or disguising one is exactly what
+# must not pass silently. Update it deliberately when a tool stops minting.
+EXPECTED_SITES = {
+    "build_release.sh":        2,   # OUT_TMP + NOTES_TMP
+    "check_footprints.py":     1,
+    "check_knob_staleness.sh": 1,
+}
+
 def die(msg):
     print(f"check_scratch_prefix: FAIL -- {msg}", file=sys.stderr); sys.exit(1)
 
@@ -74,6 +95,21 @@ def main():
     if not sites:
         die("found no mktemp/mkdtemp scratch-tree site in tools/ -- either the scan broke or a tool stopped "
             "using one; an empty result must not read as 'all covered'")
+
+    # A site the scan can no longer SEE is indistinguishable from a site that
+    # is swept, and the failure is silent in the direction that matters.
+    seen = {}
+    for f, _i, _p in sites:
+        seen[f] = seen.get(f, 0) + 1
+    missing = [(f, n, seen.get(f, 0)) for f, n in sorted(EXPECTED_SITES.items())
+               if seen.get(f, 0) < n]
+    if missing:
+        for f, want, got in missing:
+            print(f"  {f}: expected at least {want} scratch-minting site(s), scan found {got}",
+                  file=sys.stderr)
+        die("a scratch-minting site went MISSING from the scan (see above). Either the tool stopped minting "
+            "-- update EXPECTED_SITES deliberately -- or it now mints in a shape this scan cannot see, which "
+            "is how this gate passes without ever looking at the file it must sweep (#87 round-2 review, D6)")
     bad = [(f,i,p) for f,i,p in sites if not covered(p, pats)]
     for f,i,p in sites:
         print(f"  {f}:{i} mints {p or '<no literal prefix>'}*  "

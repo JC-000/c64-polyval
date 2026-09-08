@@ -177,12 +177,56 @@ elif git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
     exit 1
   fi
 
+  # INTERRUPTED-PUBLISH SIGNATURE (#87 round-2 review, D7). A `make dist` killed
+  # inside the publish block leaves the notes in placeholder form -- deliberately
+  # loud -- and on an already-tagged tree that loudness IS tag drift, so the next
+  # plain re-run lands here. Both messages below were wrong for that operator:
+  # the refusal never mentioned the interrupted run, and ALLOW_TAG_DRIFT's
+  # warning asserted the rebuilt tarball would NOT describe the released
+  # artifact, which is false when the notes' placeholder rows are the only
+  # difference -- the tarball stages the notes in placeholder form either way,
+  # so the rebuild reproduces the released bytes exactly. Being told the
+  # artifact will be wrong when it will not is worse than being told nothing.
+  #
+  # The signature is: the notes are the ONLY drifted path, nothing untracked
+  # would be staged, and the notes carry the placeholder tokens.
+  INTERRUPTED=0
+  if [[ "$DRIFTED" == "$NOTES_REL" && -z "$UNTRACKED" ]] \
+     && grep -q 'SHA256_PLACEHOLDER\|SIZE_PLACEHOLDER' "$NOTES_REL"; then
+    INTERRUPTED=1
+  fi
+
   if [[ -n "$DRIFTED" || -n "$UNTRACKED" ]]; then
     if [[ "$ALLOW_TAG_DRIFT" == "1" ]]; then
-      echo "warning: ALLOW_TAG_DRIFT=1 -- rebuilding $TAG from a tree that has" >&2
-      echo "         moved past the tag. The tarball and the Attestation block" >&2
-      echo "         in $NOTES_REL will NOT describe the released artifact." >&2
+      if [[ "$INTERRUPTED" == "1" ]]; then
+        echo "warning: ALLOW_TAG_DRIFT=1 -- $NOTES_REL differs from tag '$TAG'" >&2
+        echo "         only by its placeholder Attestation rows, which is the" >&2
+        echo "         signature of a 'make dist' interrupted mid-publish (#87)." >&2
+        echo "         The tarball stages the notes in placeholder form either" >&2
+        echo "         way, so this rebuild DOES reproduce the released bytes;" >&2
+        echo "         the stamp it writes back is the repair." >&2
+      else
+        echo "warning: ALLOW_TAG_DRIFT=1 -- rebuilding $TAG from a tree that has" >&2
+        echo "         moved past the tag. The tarball and the Attestation block" >&2
+        echo "         in $NOTES_REL will NOT describe the released artifact." >&2
+      fi
     else
+      if [[ "$INTERRUPTED" == "1" ]]; then
+        echo "error: $NOTES_REL carries placeholder Attestation rows and is the" >&2
+        echo "       only file that differs from tag '$TAG'. That is the" >&2
+        echo "       signature of a 'make dist' interrupted mid-publish (#87):" >&2
+        echo "       the notes were reset for staging and never stamped back." >&2
+        echo "       Restore them, then re-run -- this is the first remedy:" >&2
+        echo "         git checkout $TAG -- $NOTES_REL && make dist VERSION=$TAG" >&2
+        echo "       ALLOW_TAG_DRIFT=1 also repairs it and reproduces the same" >&2
+        echo "       bytes, because the tarball stages the notes in placeholder" >&2
+        echo "       form regardless; its warning about the artifact not" >&2
+        echo "       matching the release does not apply to this case." >&2
+        echo "       Check $OUT too: an interrupt after the rename leaves the" >&2
+        echo "       NEW tarball in place, one an unstamped Attestation does" >&2
+        echo "       not describe." >&2
+        exit 1
+      fi
       echo "error: tag '$TAG' exists, but staged files differ from it." >&2
       [[ -n "$DRIFTED" ]]   && { echo "       changed since the tag:" >&2; \
                                  echo "$DRIFTED" | sed 's/^/         /' >&2; }
@@ -258,6 +302,10 @@ STAGE_DIR="$(mktemp -d "/tmp/c64-polyval-release-XXXXXX")"
 # described -- rename this and that gate goes red.
 OUT_TMP="build-scratch.release.$$.tar.gz"
 
+# Same for the notes: the working-tree notes file is only ever REPLACED by a
+# rename of this temp, never written in place, so it cannot be caught torn.
+NOTES_TMP="build-scratch.release.$$.notes.md"
+
 # EXIT alone leaves scratch state behind on a catchable signal. Bash does run
 # an EXIT trap on SIGINT, but SIGTERM was measured leaving the tree behind in
 # 1 of 2 attempts in the sibling case (#93, check_knob_staleness.sh); the #87
@@ -270,7 +318,7 @@ OUT_TMP="build-scratch.release.$$.tar.gz"
 # script that chose to fail. Clear the trap and kill ourselves with the same
 # signal instead, which is the portable idiom and preserves the exit status a
 # supervisor expects.
-cleanup() { rm -rf "$STAGE_DIR"; rm -f "$OUT_TMP"; }
+cleanup() { rm -rf "$STAGE_DIR"; rm -f "$OUT_TMP" "$NOTES_TMP"; }
 trap 'cleanup' EXIT
 trap 'cleanup; trap - INT ; kill -INT  $$' INT
 trap 'cleanup; trap - TERM; kill -TERM $$' TERM
@@ -459,14 +507,38 @@ PY
 # step 2 published. Interrupted after step 1 or step 2, the notes carry
 # SHA256_PLACEHOLDER / SIZE_PLACEHOLDER -- the same unmistakable signature the
 # pre-fix window left, and one a re-run consumes cleanly (the reset step finds
-# exactly one of each and proceeds). There is no interruption point in this
-# block that yields a plausible-looking release.
+# exactly one of each and proceeds).
 #
-# `cp` onto the existing notes keeps that file's mode; `mv` within the repo
-# root is a rename.
-cp "$STAGE_ROOT/$NOTES_REL" "$NOTES_REL"
+# ALL THREE STEPS ARE RENAMES. The notes steps were plain `cp`s until round-2
+# review measured the remaining hole: a `cp` is tearable, and the attestation
+# rows sit ~98% of the way through the file, so a torn copy drops them
+# entirely -- no placeholder tokens, no `**SHA256**` row at all. (Reaching it
+# needs a process-group SIGKILL: killing only the shell lets the `cp` child
+# run to completion, which is why the first probes missed it.) Every torn
+# state is still unmistakably broken -- a re-run dies at "could not parse
+# release date" -- so this was a documentation question, not a correctness
+# one. Renaming removes the class instead of describing it: rename(2) is
+# atomic, so each tracked file is the old bytes or the new bytes and never a
+# prefix of either.
+#
+# The temp files live in the repo root, not in docs/. Atomicity needs the same
+# FILESYSTEM, not the same directory, and one repo is one filesystem -- while
+# `make clean`'s SCRATCH_TREES only sweeps the repo root, so a docs/-resident
+# temp would be #93's shape all over again.
+#
+# NOTES_TMP is seeded by copying the CURRENT notes first, purely so it inherits
+# that file's mode: `cp` onto an existing file keeps the destination's mode, so
+# the second `cp` writes content without changing it, and the rename then
+# installs a file with the same permissions the notes already had.
+cp "$NOTES_REL"             "$NOTES_TMP"
+cp "$STAGE_ROOT/$NOTES_REL" "$NOTES_TMP"
+mv "$NOTES_TMP" "$NOTES_REL"
+
 mv "$OUT_TMP" "$OUT"
-cp "$STAMPED" "$NOTES_REL"
+
+cp "$NOTES_REL" "$NOTES_TMP"
+cp "$STAMPED"   "$NOTES_TMP"
+mv "$NOTES_TMP" "$NOTES_REL"
 
 echo "Built ${OUT}"
 echo "  Path:   ${REPO_ROOT}/${OUT}"
