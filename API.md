@@ -831,6 +831,19 @@ mangles every `$`-hex escape ladder silently (SPEC §2, v0.8.6). See
 §9.5 for why this library forwards `CONTRACT_ZP_DEFINES` to every
 member TU.
 
+**Overlapping overrides are rejected at assembly time (issue #105).**
+`src/zp_config.s` asserts that every slot in the table below lies wholly
+inside `$00`–`$ff` and that no two slots' byte ranges overlap, and it does
+so with `.assert ..., error` — so a bad override fails *your* ca65
+invocation, naming both slots, rather than producing an archive that links
+and computes the wrong POLYVAL. This matters most for the case that is not
+an exact address collision: `-D polyval_acc=0x28` equals no default
+address, but `$28..$37` sits across `pv_mul_input` (`$20..$2f`) and
+`pv_mul_nibble` (`$30`). The **Width** column is what the check uses, so
+when you relocate `polyval_acc` or `pv_mul_input` you are placing 16 bytes,
+not one. Slots may abut exactly. `make check-zp-slots` is the repo-side pin
+on those assertions.
+
 | Symbol | Address | Width | Role |
 |---|---:|---:|---|
 | `polyval_zp_ptr2` | `$02` | 2 B | Secondary pointer |

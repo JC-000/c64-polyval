@@ -48,6 +48,12 @@
 #                        polyval-short.a and polyval-compact.a. Guards issue
 #                        #47: the POLYVAL-only archives must not export the
 #                        AES / GCM-SIV BSS block out of the shared data.o.
+#   check-zp-slots       §2 ZP slot distinctness pin (issue #105): drives the
+#                        assembly-time overlap / range assertions in
+#                        src/zp_config.s red on four collision shapes, green
+#                        on the documented CONTRACT_ZP_DEFINES examples, and
+#                        runs the -D PV_ZP_SELFTEST=1 positive control that
+#                        proves the assertions are evaluated at all.
 #   run                  `make all` then launch VICE x64sc with -moncommands.
 #   clean                rm -rf $(BUILD_DIR) and every build-scratch.* in the
 #                        repo (the SIGKILL backstop -- see $(SCRATCH_TREES)).
@@ -380,7 +386,7 @@ endif
         lib-polyval-gcmsiv-compact consumer-check \
         consumer-check-noaes consumer-check-shipped run clean dist verify \
         check-no-tracked-artifacts check-footprints check-scratch-prefix \
-        check-composing-mode clean-build
+        check-composing-mode clean-build check-zp-slots
 .DEFAULT_GOAL := all
 
 all: $(PRG) $(LABELS)
@@ -903,6 +909,16 @@ check-footprints:
 check-scratch-prefix:
 	@python3.13 $(TOOLS_DIR)/check_scratch_prefix.py
 
+# --- §2 ZP slots stay distinct under CONTRACT_ZP_DEFINES (issue #105) ------
+# src/zp_config.s asserts at ASSEMBLY time that no two slots overlap and that
+# every slot fits in $00-$ff. This target is the pin on those assertions: it
+# drives the -D PV_ZP_SELFTEST=1 positive control (which must FAIL), four
+# collision shapes (which must fail), and the default plus every documented
+# CONTRACT_ZP_DEFINES example (which must assemble). Pure ca65, no link, no
+# VICE, a second or so.
+check-zp-slots:
+	@sh $(TOOLS_DIR)/check_zp_slot_aliasing.sh
+
 check-no-tracked-artifacts:
 	@files=$$(git ls-files) || { \
 	  echo "check-no-tracked-artifacts: 'git ls-files' failed" >&2; exit 1; }; \
@@ -1037,7 +1053,8 @@ check-no-tracked-artifacts:
 # Any such check must also fail loudly when `ar65`/`od65` are missing or the
 # member list comes back empty -- an empty member set otherwise compares equal
 # to an empty member set and the gate passes vacuously (the #86/#91 shape).
-VERIFY_TARGETS = check-no-tracked-artifacts check-scratch-prefix all lib-verify consumer-check \
+VERIFY_TARGETS = check-no-tracked-artifacts check-scratch-prefix check-zp-slots \
+                 all lib-verify consumer-check \
                  consumer-check-shipped lib-polyval-gcmsiv \
                  lib-polyval-gcmsiv-short lib-polyval-gcmsiv-compact \
                  consumer-check-noaes check-footprints check-composing-mode
