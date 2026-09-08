@@ -137,13 +137,28 @@ ZP_CONFIG_S_INCLUDED = 1
 ; =============================================================================
 ;
 ; ONE list, three consumers: the range check, the pairwise-overlap check, and
-; the `.exportzp` block. That coupling is the whole point. A slot that gets an
-; `.ifndef` equate above but no row here is NOT exported, so `make
-; consumer-check` / `lib-verify` / any consumer link that touches it fails —
-; rather than the slot silently escaping the distinctness check, which is how
-; a two-list version would rot. It is still a MANUAL edit: adding a slot means
-; adding a row. Nothing here detects an equate with no row on its own; the
-; detection is downstream, at link, and only for a slot something references.
+; the `.exportzp` block. Driving the exports from the same list keeps the two
+; from drifting apart the way two hand-maintained lists would.
+;
+; WHAT THIS DOES NOT GUARD -- read before adding a slot.
+;
+; Adding a ZP slot is a MANUAL edit: you add an `.ifndef` equate above AND a
+; row here, and nothing in this file detects the second half being forgotten.
+; An earlier revision of this comment claimed such a slot would at least be
+; caught downstream "at a link that references it". That is FALSE for the
+; likelier case and was measured false: a new slot used only by library code
+; is baked into every TU via constants_lib.inc's include of this file, so no
+; TU ever needs the `.exportzp`, and `make lib-verify` links and exits 0 with
+; the new slot aliased on top of an existing one. Only an EXTERNAL consumer's
+; `.importzp` of the missing name fails, and a purely internal slot has no
+; such consumer.
+;
+; A ca65 assertion cannot close this: the assembler offers no way to enumerate
+; the symbols a file has defined, so "every `.ifndef` equate above has a row
+; below" is not expressible here. So it is stated rather than guarded. The
+; slot count is pinned in three places (see check 3) to make a half-finished
+; edit noisy, but a slot added above with no row anywhere is UNGUARDED and
+; will silently escape the distinctness checks.
 ;
 ; Each row is: index, symbol, byte-length, "symbol as a string".
 ;   - the index gives the pair loop a canonical order so each unordered pair is
@@ -176,13 +191,24 @@ ZP_CONFIG_S_INCLUDED = 1
   cb 12, polyval_zp_count,  1, "polyval_zp_count"
 .endmacro
 
-; --- Check 1: every slot lies wholly inside $00-$FF -------------------------
+; --- Check 1: every slot lies wholly inside $02-$FF -------------------------
 ;
 ; A slot pushed off the end of the zero page is a different silent corruption:
 ; ca65 emits only "Symbol 'x' is absolute but exported zeropage" (a WARNING,
 ; exit 0), and every `lda slot,x` in the library then addresses the wrong
 ; page. The last byte, not the first, has to fit: polyval_acc at $f8 puts
 ; bytes 8..15 outside the page.
+;
+; The FLOOR is $02, not $00. $00 and $01 are the 6510's data-direction
+; register and processor port -- the bytes that bank BASIC, KERNAL, CHAREN and
+; I/O in and out. A consumer fitting the library into their memory map with
+; `-D polyval_zp_temp=0x00` looks exactly as legal as the documented
+; `-D polyval_acc=0x40`, and before this floor it assembled, archived and
+; linked; every `sta polyval_zp_temp` in the library would then re-bank the
+; machine mid-multiply. That is the same silent-corruption class as the
+; aliasing this file exists to reject, so it is rejected the same way rather
+; than documented as a caveat. $02 is also the floor API.md section 9.2
+; already publishes: the claimed layout's lowest region is `$02-$09`.
 ;
 ; `error`, not `lderror`, throughout. `lderror` is deferred to ld65, and the
 ; §6.2 delivery this defends -- `make lib CONTRACT_ZP_DEFINES=...` -- runs
@@ -192,7 +218,7 @@ ZP_CONFIG_S_INCLUDED = 1
 ; zp_config.s is being assembled, in the build that supplied the -D.
 
 .macro PV_ZP_CHECK_RANGE idx, addr, size, name
-  .assert (addr >= 0) && (addr + size <= $100), error, .sprintf("zp_config: slot %s is outside $00-$ff (base $%04x, %d bytes) -- see CONTRACT_ZP_DEFINES in this file's header", name, addr, size)
+  .assert (addr >= $02) && (addr + size <= $100), error, .sprintf("zp_config: slot %s is outside $02-$ff (base $%04x, %d bytes) -- $00/$01 are the 6510 DDR and processor port and are never available; see CONTRACT_ZP_DEFINES in this file's header", name, addr, size)
 .endmacro
 
 PV_ZP_SLOT_LIST PV_ZP_CHECK_RANGE

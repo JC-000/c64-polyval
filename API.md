@@ -333,10 +333,18 @@ pv_mul_input = $90
 .include "exports.inc"
 ```
 
-Doing this is only safe if the host has verified non-overlap with the
-library's actual ZP usage and with whatever else the host puts on
-zero-page. The defaults above are the canonical layout the library
-was tested under.
+Since v0.11.0 the library checks the half of this it can see (issue
+#105): `src/zp_config.s` asserts at **assembly time** that no two of its
+own slots overlap and that each lies inside `$02`–`$ff`, so an override
+that aliases two library slots, or parks one on the 6510 port at
+`$00`/`$01`, fails your build with a message naming the slots instead of
+producing a library that computes the wrong POLYVAL. Overlap is computed
+from each slot's **width**, so moving `polyval_acc` or `pv_mul_input`
+places 16 bytes.
+
+What it cannot see is **your** side: non-overlap with whatever else the
+host puts on zero page is still yours to verify. The defaults above are
+the canonical layout the library was tested under.
 
 ## 5. Calling conventions
 
@@ -831,18 +839,33 @@ mangles every `$`-hex escape ladder silently (SPEC §2, v0.8.6). See
 §9.5 for why this library forwards `CONTRACT_ZP_DEFINES` to every
 member TU.
 
-**Overlapping overrides are rejected at assembly time (issue #105).**
+**Bad overrides are rejected at assembly time (issue #105).**
 `src/zp_config.s` asserts that every slot in the table below lies wholly
-inside `$00`–`$ff` and that no two slots' byte ranges overlap, and it does
+inside `$02`–`$ff` and that no two slots' byte ranges overlap, and it does
 so with `.assert ..., error` — so a bad override fails *your* ca65
 invocation, naming both slots, rather than producing an archive that links
-and computes the wrong POLYVAL. This matters most for the case that is not
-an exact address collision: `-D polyval_acc=0x28` equals no default
-address, but `$28..$37` sits across `pv_mul_input` (`$20..$2f`) and
-`pv_mul_nibble` (`$30`). The **Width** column is what the check uses, so
-when you relocate `polyval_acc` or `pv_mul_input` you are placing 16 bytes,
-not one. Slots may abut exactly. `make check-zp-slots` is the repo-side pin
-on those assertions.
+and computes the wrong POLYVAL. Three things to know:
+
+- **Ranges, not addresses.** `-D polyval_acc=0x28` equals no default
+  address, but `$28..$37` sits across `pv_mul_input` (`$20..$2f`) and
+  `pv_mul_nibble` (`$30`). The **Width** column is what the check uses, so
+  relocating `polyval_acc` or `pv_mul_input` places 16 bytes, not one.
+  Slots may abut exactly.
+- **The floor is `$02`, not `$00`.** `$00` and `$01` are the 6510
+  data-direction register and processor port; a slot parked there would
+  re-bank BASIC, KERNAL or I/O on every store. `$02` is also the floor this
+  section's own layout has always published — the lowest claimed region is
+  `$02–$09`.
+- **The ceiling is the slot's last byte.** `-D polyval_acc=0xf8` is
+  rejected: `$f8 + 16` runs past the end of the page.
+
+`make check-zp-slots` is the repo-side pin on those assertions, and it
+drives `make lib` with an aliased override as well as ca65 directly.
+
+If you **vendor** `src/zp_config.s` (override route 3) rather than linking
+the archive, note that the checks occupy six macro names and five symbols
+under the `PV_ZP_` prefix in your translation unit; the list is in
+`src/polyval_api.inc`. Linking the archive is unaffected.
 
 | Symbol | Address | Width | Role |
 |---|---:|---:|---|

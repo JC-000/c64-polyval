@@ -130,6 +130,27 @@ POLYVAL_API_INC_ = 1
 ; imported name is `Symbol already defined`). Import the ones you need
 ; yourself; the inventory is in API.md §4 and exported from the archive's
 ; zp_config.o.
+;
+; NAMESPACE FOOTPRINT IF YOU VENDOR src/zp_config.s (v0.11.0+, issue #105).
+; Linking the archive costs you nothing here -- this note is only for a
+; consumer who `.include`s zp_config.s or constants_lib.inc into their own
+; translation unit, which is documented override route 3. That file's slot
+; distinctness checks occupy these names in the including TU, all reserved
+; under the PV_ZP_ prefix:
+;
+;   macros   PV_ZP_SLOT_LIST  PV_ZP_CHECK_RANGE  PV_ZP_CHECK_PAIR
+;            PV_ZP_CHECK_AGAINST_REST  PV_ZP_COUNT_SLOT  PV_ZP_EXPORT
+;   symbols  PV_ZP_OUTER_IDX  PV_ZP_OUTER_ADDR  PV_ZP_OUTER_SIZE
+;            PV_ZP_PAIR_COUNT  PV_ZP_SLOT_COUNT
+;   .define  PV_ZP_OUTER_NAME (defined and undefined inside one expansion,
+;            so it is not live afterwards, but the name is still taken while
+;            zp_config.s is being read)
+;
+; plus PV_ZP_SELFTEST, which is read but never defined by the library and is
+; yours to leave alone. A collision surfaces at assembly time as
+; `Symbol 'PV_ZP_...' is already different kind` or a macro redefinition
+; error, so it cannot be silent. Additive-only: no previously usable name
+; became unusable, and nothing here is exported into your link.
 ; -----------------------------------------------------------------------------
 
 .ifndef POLYVAL_API_NO_DECLS

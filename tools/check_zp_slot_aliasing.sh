@@ -102,14 +102,28 @@ red "override collides with a non-overridden slot" \
 
 # 1c: a slot pushed off the zero page. ca65 alone emits only a WARNING here
 # ("absolute but exported zeropage") and exits 0.
-red "slot pushed outside \$00-\$ff" \
-    "polyval_zp_temp is outside \$00-\$ff" \
+red "slot pushed outside \$02-\$ff" \
+    "polyval_zp_temp is outside \$02-\$ff" \
     -D polyval_zp_temp=0x100
 
 # 1d: the last byte, not the first, has to fit -- the base address is in range.
 red "slot whose last byte falls off the zero page" \
-    "polyval_acc is outside \$00-\$ff" \
+    "polyval_acc is outside \$02-\$ff" \
     -D polyval_acc=0xf8
+
+# 1e/1f: $00 and $01 are the 6510 data-direction register and processor port --
+# the bytes that bank BASIC/KERNAL/CHAREN/IO. A slot parked there assembles,
+# archives and links, and every store to it re-banks the machine mid-multiply.
+# Same silent-corruption class as the aliasing, so the floor is $02 and both
+# addresses get their own case: an `addr >= 0` floor accepts both, and that is
+# what shipped in the first cut of this fix.
+red "slot on \$00 (6510 data-direction register)" \
+    "polyval_zp_temp is outside \$02-\$ff" \
+    -D polyval_zp_temp=0x00
+
+red "slot on \$01 (6510 processor port)" \
+    "polyval_zp_count is outside \$02-\$ff" \
+    -D polyval_zp_count=0x01
 
 # --- 2. GREEN cases --------------------------------------------------------
 green() {
@@ -143,4 +157,34 @@ if [ "$n" -ne 13 ]; then
   fail "zp_config.o exports $n zero-page symbols, expected 13 -- the §2 slot inventory changed"
 fi
 
-echo "check_zp_slot_aliasing: PASS -- positive control fires, 4 red cases fail, 5 green cases assemble, 13 exports"
+# --- 4. The whole thing through `make`, not just ca65 ----------------------
+# Every leg above invokes ca65 on src/zp_config.s directly. That proves the
+# assertions work, but NOT that the build still routes CONTRACT_ZP_DEFINES to
+# the TU carrying them: a future Makefile change that stopped forwarding them
+# to zp_config.o would leave every leg above green while `make lib` happily
+# minted the aliased archive #105 is about. So drive the documented §6.2
+# entry point end to end, once, and require it to fail.
+#
+# Uses a scratch BUILD_DIR so it cannot disturb build/ or race a concurrent
+# `make verify` in the same tree, and `make clean` is NOT used -- it would
+# sweep this run's own scratch tree (build-scratch.* is in SCRATCH_TREES).
+echo "check_zp_slot_aliasing: RED   make lib with aliased CONTRACT_ZP_DEFINES"
+set +e
+make -C "$ROOT" BUILD_DIR="$(basename "$SCRATCH")/mk" lib \
+     CONTRACT_ZP_DEFINES="-D polyval_acc=0x40 -D pv_mul_input=0x40" \
+     >"$SCRATCH/make.log" 2>&1
+mk_rc=$?
+set -e
+if [ $mk_rc -eq 0 ]; then
+  fail "\`make lib CONTRACT_ZP_DEFINES='-D polyval_acc=0x40 -D pv_mul_input=0x40'\`
+  SUCCEEDED. The assertions in src/zp_config.s pass their direct ca65 legs but
+  the build is no longer delivering CONTRACT_ZP_DEFINES to the TU that carries
+  them, so a consumer can still mint an aliased archive -- issue #105 is live
+  through the documented entry point."
+fi
+if ! grep -q "polyval_acc.*pv_mul_input.*OVERLAP" "$SCRATCH/make.log"; then
+  cat "$SCRATCH/make.log" >&2
+  fail "\`make lib\` with aliased overrides failed, but not with the OVERLAP diagnostic -- it may be failing for an unrelated reason"
+fi
+
+echo "check_zp_slot_aliasing: PASS -- positive control fires, 6 red cases + the make leg fail, 5 green cases assemble, 13 exports"
