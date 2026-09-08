@@ -203,6 +203,27 @@ LIB_CORE_OBJS = $(BUILD_DIR)/lib_version.o \
                 $(BUILD_DIR)/lib_manifest.o \
                 $(BUILD_DIR)/precalc_manifest.o
 
+# The same four members, stated again BY NAME and on purpose (issue #97).
+# tools/check_archive_members.sh asserts this floor is present in every
+# archive it builds. It must NOT be derived from LIB_CORE_OBJS: a check whose
+# expectation is the list it checks is blind to an edit of that list, which
+# is exactly how the first cut of that script passed a 9-member polyval.a
+# with "9 members, exactly as declared" after precalc_manifest.o was deleted
+# from LIB_CORE_OBJS above. This is the one place in the build where a second
+# list is the point rather than the defect -- see #93/#95/#99 for the usual
+# case. It is a FLOOR, not an inventory: adding a member here without adding
+# it to LIB_CORE_OBJS goes red, adding one there without adding it here
+# merely leaves it uncovered.
+#
+# Each name earns its place from the contract, not from convenience:
+#   lib_version.o       SPEC §1  version + ABI equates
+#   zp_config.o         SPEC §2  .exportzp slot inventory
+#   lib_manifest.o      SPEC §5  aggregate footprint equates + input bound
+#   precalc_manifest.o  SPEC §8.4 precalc-table enumeration -- the ONLY one
+#                       of the four that no consumer stub imports, so the
+#                       only one whose loss no link gate would notice
+LIB_CONTRACT_MEMBERS = lib_version.o zp_config.o lib_manifest.o precalc_manifest.o
+
 # POLYVAL-only variants: just the chosen polyval primitive plus data.o
 # (which provides polyval_h / polyval_temp / polyval_htable[8] / polyval_
 # reduce8 buffer reservations). No AES, no GCM-SIV.
@@ -569,12 +590,12 @@ lib-polyval-gcmsiv: $(LIB_DIR)/polyval-gcmsiv.a
 $(LIB_DIR)/polyval.a: $(LIB_AEAD_OBJS) | $(LIB_DIR) $(LIB_SHIPPED)
 	rm -f $@
 	$(AR65) a $@ $(LIB_AEAD_OBJS)
-	$(TOOLS_DIR)/check_archive_members.sh $@ $^
+	$(TOOLS_DIR)/check_archive_members.sh --require "$(LIB_CONTRACT_MEMBERS)" $@ $^
 
 $(LIB_DIR)/polyval-gcmsiv.a: $(LIB_AEAD_OBJS) | $(LIB_DIR) $(LIB_SHIPPED)
 	rm -f $@
 	$(AR65) a $@ $(LIB_AEAD_OBJS)
-	$(TOOLS_DIR)/check_archive_members.sh $@ $^
+	$(TOOLS_DIR)/check_archive_members.sh --require "$(LIB_CONTRACT_MEMBERS)" $@ $^
 
 # Per-profile POLYVAL-only archives. Recursive `make` invocations pin
 # POLYVAL_PROFILE for the .o build so the resulting archive only contains
@@ -616,27 +637,27 @@ lib-polyval-gcmsiv-compact:
 $(LIB_DIR)/polyval-long.a: $(LIB_POLYVAL_LONG_OBJS) | $(LIB_DIR) $(LIB_SHIPPED)
 	rm -f $@
 	$(AR65) a $@ $(LIB_POLYVAL_LONG_OBJS)
-	$(TOOLS_DIR)/check_archive_members.sh $@ $^
+	$(TOOLS_DIR)/check_archive_members.sh --require "$(LIB_CONTRACT_MEMBERS)" $@ $^
 
 $(LIB_DIR)/polyval-short.a: $(LIB_POLYVAL_SHORT_OBJS) | $(LIB_DIR) $(LIB_SHIPPED)
 	rm -f $@
 	$(AR65) a $@ $(LIB_POLYVAL_SHORT_OBJS)
-	$(TOOLS_DIR)/check_archive_members.sh $@ $^
+	$(TOOLS_DIR)/check_archive_members.sh --require "$(LIB_CONTRACT_MEMBERS)" $@ $^
 
 $(LIB_DIR)/polyval-compact.a: $(LIB_POLYVAL_COMPACT_OBJS) | $(LIB_DIR) $(LIB_SHIPPED)
 	rm -f $@
 	$(AR65) a $@ $(LIB_POLYVAL_COMPACT_OBJS)
-	$(TOOLS_DIR)/check_archive_members.sh $@ $^
+	$(TOOLS_DIR)/check_archive_members.sh --require "$(LIB_CONTRACT_MEMBERS)" $@ $^
 
 $(LIB_DIR)/polyval-gcmsiv-short.a: $(LIB_AEAD_OBJS) | $(LIB_DIR) $(LIB_SHIPPED)
 	rm -f $@
 	$(AR65) a $@ $(LIB_AEAD_OBJS)
-	$(TOOLS_DIR)/check_archive_members.sh $@ $^
+	$(TOOLS_DIR)/check_archive_members.sh --require "$(LIB_CONTRACT_MEMBERS)" $@ $^
 
 $(LIB_DIR)/polyval-gcmsiv-compact.a: $(LIB_AEAD_OBJS) | $(LIB_DIR) $(LIB_SHIPPED)
 	rm -f $@
 	$(AR65) a $@ $(LIB_AEAD_OBJS)
-	$(TOOLS_DIR)/check_archive_members.sh $@ $^
+	$(TOOLS_DIR)/check_archive_members.sh --require "$(LIB_CONTRACT_MEMBERS)" $@ $^
 
 # --- Shipped-surface guard (issue #79) -------------------------------------
 # Proves the three files `make lib` puts in build/lib/ are a COMPLETE and
