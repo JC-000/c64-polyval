@@ -243,7 +243,7 @@ tag, and is **observed**, not asserted on someone else's behalf.
 | Repo | Role | Latest tag | Conformant? |
 |---|---|---|---|
 | c64-polyval | adopter | **v0.11.0 (tagged, released)** | verified against v1.2.2: §6.1 member isolation fixed, the withdrawn-§6.1 claims corrected, `lib_version.s` conformant outright under v1.2.1's carve-out |
-| c64-nist-curves | adopter | **v0.14.0 — tagged with open findings; three open** (#142, #159, #161). PR#160 and PR#162 merged 2026-09-07 closing #158 and #155, both still on `main` with the tag unchanged at v0.14.0, so their settling tag carries neither fix. **PR#164/#165 merged 2026-09-08** (ACME comparand wording; a post-poison rebuild nested after a `raise SystemExit`) — #165's *is cleanup reachable on every path?* asked here and cleared: no unreachable-cleanup instance in `tools/`, one EXIT-only trap noted on our **#87** | #153 and #154 both closed. #154 verified at the tag with a §6g positive control: bare `zp_*` aliases in `zp_config.s` went **4 → 0**, and `src/zp_aliases.s` (104 lines) plus `src/mul_aliases.s` appeared as the separate archived TUs. #153 is §8.2 REU — **N/A to this library** and their domain to certify; recorded as closed by them, not audited here |
+| c64-nist-curves | adopter | **v0.14.0 — tagged with open findings; six open** (#142, #159, #161, #167, #168, #170). PR#160/#162/#164/#165 merged; **PR#166, #169, #171 open** — #171 closes #159, our **#89**'s twin (11 of 12 archives never examined by the gated legs), and is **stacked on #169**. Every merged fix is still on `main` with the tag at v0.14.0, so their settling tag carries none of them and S4 is unmoved | #153 and #154 both closed. #154 verified at the tag with a §6g positive control: bare `zp_*` aliases in `zp_config.s` went **4 → 0**, and `src/zp_aliases.s` (104 lines) plus `src/mul_aliases.s` appeared as the separate archived TUs. #153 is §8.2 REU — **N/A to this library** and their domain to certify; recorded as closed by them, not audited here |
 | c64-x25519 | adopter | **v0.16.0 — RETRACTED (contract#193), eleven open** (#132, #134–#138, #140, #142–#145). PR#141, PR#146 and **PR#147 merged** (our #86's and #94's twins, plus the `.import`/`.global` header fix that is N/A here). All three are on `main`; their tag is still v0.16.0, so none is in a tag and S4 is unmoved | their settling tag, verified at the tag with a §6g positive control: `src/precalc_manifest.s` present, `lib_manifest.s` 0 macro invocations (3 at v0.13.0), ref+path confirmed to exist so the zero is a real zero. Member isolation shipped at v0.14.0; v0.15.0 added §8.2 `A = a` and ABI 3 → 4; v0.16.0 closes their #128 |
 | c64-ChaCha20-Poly1305 | adopter | **v0.12.0 tagged 2026-09-07** (was v0.11.0), tracker clean: zero open issues, zero open PRs. Their release notes state ABI generation stays 4, 97 export rows on both sides with zero name difference, and all four profile PRGs byte-identical to v0.11.0 — a label/footprint/gate-coverage release with no emitted-code change. **Recorded as THEIR evidence, not our verification**: checking it would mean building their tree, which this watch does not do (§6a). Conformance carries from the v0.11.0 verification if those claims hold | verified at the tag with a §6g positive control. `lib_manifest.s` 5 macro invocations at v0.10.0 → **0** at v0.11.0, `src/lib/precalc_manifest.s` present. Both #108 members done: `poly1305_lib.s` went 11 `.export` lines → 2, moving out the 8 `APP_OWNED` §8.1/§8.3 names. Their release also corrects the five under-reporting footprint equates from #113 |
 | c64-mlkem | adopter | v0.5.0 (open: #3 stale contract version in their CLAUDE.md, #1 §6.3 warm-tree define drop) | **clean on §8.4** — defines `LIB_NO_BARE_EXPORTS = 1` in its enumerating TU per §8.4's zero-consumer carve-out, so nothing displaceable is there to isolate |
@@ -705,6 +705,16 @@ Cleared as it lands; empty means S1/S2 are met for the current contract tag.
    (#133, 16 arms), c64-nist-curves PR#160 (#158), c64-ChaCha20-Poly1305
    PR#128 (#119) plus their earlier #126. Nobody coordinated the remedy; the
    findings propagated as *questions* and each repo measured its own answer.
+
+   **One to watch on their side, not ours: nist is stacking PRs** — #171 says
+   "stacked on #161 (PR #169) — merge that first". c64-ChaCha20-Poly1305's own
+   standard (their PR#195, adopted into their CLAUDE.md) records that a
+   stacked pair once *stranded a released version off `main`*, which is why
+   this repo has deliberately kept its four branches independent and rebased
+   them in sequence rather than chaining them. If nist merges #171 without
+   #169, or tags between the two, their next tag could carry half a fix — an
+   S4 hazard worth checking at their next tag rather than assuming the merge
+   order held.
 
    **nist#170 asked here and already answered — by our own review, before
    they filed it.** Their finding: twelve "links against that archive" rows
