@@ -50,10 +50,13 @@
 #                        AES / GCM-SIV BSS block out of the shared data.o.
 #   check-zp-slots       §2 ZP slot distinctness pin (issue #105): drives the
 #                        assembly-time overlap / range assertions in
-#                        src/zp_config.s red on four collision shapes, green
-#                        on the documented CONTRACT_ZP_DEFINES examples, and
-#                        runs the -D PV_ZP_SELFTEST=1 positive control that
-#                        proves the assertions are evaluated at all.
+#                        src/zp_config.s red on a set of collision shapes,
+#                        green on the documented CONTRACT_ZP_DEFINES
+#                        examples, red through `make lib` itself, and runs
+#                        the -D PV_ZP_SELFTEST=1 positive control that proves
+#                        the assertions are evaluated at all. The script owns
+#                        the case list and prints the counts it actually ran;
+#                        deliberately not restated here, where it would rot.
 #   run                  `make all` then launch VICE x64sc with -moncommands.
 #   clean                rm -rf $(BUILD_DIR) and every build-scratch.* in the
 #                        repo (the SIGKILL backstop -- see $(SCRATCH_TREES)).
@@ -910,12 +913,24 @@ check-scratch-prefix:
 	@python3.13 $(TOOLS_DIR)/check_scratch_prefix.py
 
 # --- §2 ZP slots stay distinct under CONTRACT_ZP_DEFINES (issue #105) ------
-# src/zp_config.s asserts at ASSEMBLY time that no two slots overlap and that
-# every slot fits in $00-$ff. This target is the pin on those assertions: it
-# drives the -D PV_ZP_SELFTEST=1 positive control (which must FAIL), four
-# collision shapes (which must fail), and the default plus every documented
-# CONTRACT_ZP_DEFINES example (which must assemble). Pure ca65, no link, no
-# VICE, a second or so.
+# src/zp_config.s asserts at ASSEMBLY time that no two slots' byte ranges
+# overlap and that every slot fits in $02-$ff -- the floor is $02, not $00,
+# because $00/$01 are the 6510 DDR and processor port.
+#
+# This target is the pin on those assertions. It drives the
+# -D PV_ZP_SELFTEST=1 positive control (which must FAIL), a set of collision
+# shapes (which must fail), the default plus every documented
+# CONTRACT_ZP_DEFINES example (which must assemble), and finally `make lib`
+# with an aliased override, which must fail too -- that last leg is what
+# would catch the build no longer forwarding CONTRACT_ZP_DEFINES to the TU
+# carrying the assertions, a change every direct-ca65 leg would sail past.
+#
+# The case list lives in the script, which prints what it ran; no counts are
+# restated here, because a hand-maintained count in a header is exactly the
+# drift this target exists to prevent elsewhere.
+#
+# Mostly ca65 and no VICE, but NOT free: the `make lib` leg builds a full
+# archive into a scratch BUILD_DIR, so budget a few seconds, not one.
 check-zp-slots:
 	@sh $(TOOLS_DIR)/check_zp_slot_aliasing.sh
 

@@ -333,14 +333,18 @@ pv_mul_input = $90
 .include "exports.inc"
 ```
 
-Since v0.11.0 the library checks the half of this it can see (issue
-#105): `src/zp_config.s` asserts at **assembly time** that no two of its
+**Since v0.12.0** the library checks the half of this it can see (issue
+#105). `src/zp_config.s` asserts at **assembly time** that no two of its
 own slots overlap and that each lies inside `$02`–`$ff`, so an override
 that aliases two library slots, or parks one on the 6510 port at
 `$00`/`$01`, fails your build with a message naming the slots instead of
 producing a library that computes the wrong POLYVAL. Overlap is computed
 from each slot's **width**, so moving `polyval_acc` or `pv_mul_input`
 places 16 bytes.
+
+**A pin at v0.11.0 or earlier does not have this check** — there an
+overlapping override assembles, archives and links silently, and
+verifying non-overlap between library slots is entirely yours.
 
 What it cannot see is **your** side: non-overlap with whatever else the
 host puts on zero page is still yours to verify. The defaults above are

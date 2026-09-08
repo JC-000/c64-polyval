@@ -9,6 +9,82 @@ Releases: https://github.com/JC-000/c64-polyval/releases — tagged releases
 track `MAJOR.MINOR.PATCH` and are the supported consumption points for
 downstream projects (see `API.md` §8 for the integration contract).
 
+## Unreleased
+
+### Fixed
+
+- **`CONTRACT_ZP_DEFINES` can no longer alias two zero-page slots onto one
+  address, or push a slot off the usable page (issue #105).** SPEC §6.2
+  invites a consumer to relocate the library's 13 ZP slots to fit their
+  memory map. Nothing checked the resulting addresses were distinct, so
+
+  ```sh
+  make lib CONTRACT_ZP_DEFINES='-D polyval_acc=0x40 -D pv_mul_input=0x40'
+  ```
+
+  exited 0, archived, linked, passed every gate — and put the POLYVAL
+  accumulator on top of the multiply scratch, so every multiply corrupted
+  the accumulator. **Wrong results from a green build**, with no diagnostic
+  at any stage. On a C64 the symptom is a failed tag comparison in someone
+  else's code, days later.
+
+  `src/zp_config.s` now asserts, at **assembly time** (`.assert ..., error`,
+  not `lderror` — `make lib` runs ca65 and ar65 and never ld65, so a
+  link-deferred assertion would not fire on the build that mints the bad
+  archive), that:
+
+  - no two slots' byte **ranges** overlap. Ranges, not addresses: with
+    `polyval_acc` and `pv_mul_input` 16 bytes wide and the two pointers 2,
+    `-D polyval_acc=0x28` matches no default address yet lands across
+    `pv_mul_input` (`$20..$2f`) and `pv_mul_nibble` (`$30`);
+  - every slot lies wholly within **`$02`–`$ff`**. The floor is `$02`
+    because `$00`/`$01` are the 6510 data-direction register and processor
+    port; a slot parked there re-banks BASIC/KERNAL/IO on every store. The
+    ceiling counts the slot's last byte, so `-D polyval_acc=0xf8` is
+    rejected.
+
+  A rejected override names both slots and its widths. `make check-zp-slots`
+  (in `make verify`) is the pin, including a `-D PV_ZP_SELFTEST=1` positive
+  control proving the assertions are evaluated, and a leg that drives
+  `make lib` itself so the check cannot go green if the build stops
+  forwarding `CONTRACT_ZP_DEFINES`.
+
+### Changed
+
+- **If you pass `CONTRACT_ZP_DEFINES`, re-check your values against this
+  release.** An override that was silently accepted before may now fail
+  your build. That is the point — but it is a build that used to succeed,
+  so it is called out here rather than left to be discovered. Legal
+  relayouts are unaffected: the default build, `-D polyval_acc=0x40`, and
+  exactly-abutting slots all still assemble.
+- Vendoring `src/zp_config.s` (override route 3) rather than linking the
+  archive now also occupies six macro names, five symbols and one transient
+  `.define`, all under a reserved `PV_ZP_` prefix. Enumerated in
+  `src/polyval_api.inc`. A collision is a build-time error, never silent.
+  Linking the archive is unaffected.
+
+### ABI
+
+`LIB_POLYVAL_ABI_VERSION` **holds at 1**, argued from the documented input
+domain and not from the runtime surface. `API.md` §9.2 has carried an
+Address **and a Width** for all 13 slots since before this change, closing
+with "Total: **45 bytes** claimed across three discontiguous regions
+(`$02–$09`, `$10–$30`, `$fb–$fe`)", and `LIB_POLYVAL_ZP_USAGE_BYTES = 45`
+is exported unconditionally — including from the `NO_AES` archives, so
+there is no carve-out under which a POLYVAL-only consumer could
+legitimately park a live slot on a dead AES slot. Thirteen widths summing
+to exactly 45 bytes **entails** non-overlap, so an aliased layout was never
+inside the documented domain, and a guard that only fires outside that
+domain cannot move the counter however its diagnostics read. The same
+published sentence supplies the `$02` floor: `$02–$09` is the documented
+lower bound, so `$00`/`$01` were never in the domain either.
+
+Note the argument deliberately does **not** rest on "no entry point, return
+set, segment or exported value changed". That is the runtime-surface form
+CLAUDE.md records as the wrong one at v0.10.0; it appears in an earlier
+commit message on this branch and was withdrawn under review. Recorded so
+it is not re-derived.
+
 ## v0.11.0 — 2026-09-06
 
 Contract-alignment **MINOR**, current against c64-lib-contract

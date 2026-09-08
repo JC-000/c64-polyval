@@ -131,7 +131,7 @@ POLYVAL_API_INC_ = 1
 ; yourself; the inventory is in API.md §4 and exported from the archive's
 ; zp_config.o.
 ;
-; NAMESPACE FOOTPRINT IF YOU VENDOR src/zp_config.s (v0.11.0+, issue #105).
+; NAMESPACE FOOTPRINT IF YOU VENDOR src/zp_config.s (v0.12.0+, issue #105).
 ; Linking the archive costs you nothing here -- this note is only for a
 ; consumer who `.include`s zp_config.s or constants_lib.inc into their own
 ; translation unit, which is documented override route 3. That file's slot
