@@ -351,10 +351,17 @@ cp "$NOTES_REL" "$STAGE_ROOT/$NOTES_REL"
 # as well, before a tarball exists: its entire purpose is to refuse, and a
 # guard whose refusal has already rewritten two tracked files is not
 # fail-closed in any useful sense.
-python3 - "$STAGE_ROOT/$NOTES_REL" "$NOTES_REL" <<'PY'
+# `--label "$NOTES_REL"` is a DIAGNOSTIC STRING, never a path to open. The
+# sentinel is what lets check_publish_atomic.py tell this apart from the
+# pre-#87 stamper, which passed the same variable positionally and wrote it --
+# truncating the tracked notes to 0 bytes on every run. That gate refuses any
+# other way of handing these two variables to an interpreter, and refuses a
+# heredoc that opens the label.
+python3 - "$STAGE_ROOT/$NOTES_REL" --label "$NOTES_REL" <<'PY'
 import re, sys, pathlib
-p = pathlib.Path(sys.argv[1])   # staged copy -- the only thing rewritten here
-shown = sys.argv[2]             # working-tree path, for the diagnostic only
+argv  = sys.argv[1:]
+p     = pathlib.Path(argv[0])          # staged copy -- the only thing rewritten
+shown = argv[argv.index("--label") + 1]  # label only; never opened
 text = p.read_text()
 # Replace the attestation table's SHA256 with the placeholder string.
 # SCOPED to the `| **SHA256** | <hash> |` row on purpose: release notes
@@ -468,9 +475,13 @@ SHA=$(shasum -a 256 "$OUT_TMP" | cut -d' ' -f1)
 # Source is the STAGED placeholder copy, not the working-tree file, which at
 # this point still holds the previous run's values untouched.
 STAMPED="${STAGE_DIR}/notes.stamped.md"
-python3 - "$STAGE_ROOT/$NOTES_REL" "$STAMPED" "$NOTES_REL" "$SIZE" "$SHA" <<'PY'
+# Same discipline as the reset step: the working-tree path arrives behind
+# `--label` and is used only in the diagnostic.
+python3 - "$STAGE_ROOT/$NOTES_REL" "$STAMPED" "$SIZE" "$SHA" --label "$NOTES_REL" <<'PY'
 import sys, pathlib
-src, dst, shown, size, sha = sys.argv[1:6]
+argv = sys.argv[1:]
+src, dst, size, sha = argv[0], argv[1], argv[2], argv[3]
+shown = argv[argv.index("--label") + 1]  # label only; never opened
 text = pathlib.Path(src).read_text()
 
 # Defence in depth: the reset step already refused on any count != 1, so this
