@@ -9,7 +9,20 @@ Releases: https://github.com/JC-000/c64-polyval/releases — tagged releases
 track `MAJOR.MINOR.PATCH` and are the supported consumption points for
 downstream projects (see `API.md` §8 for the integration contract).
 
-## Unreleased
+## v0.12.0 — 2026-09-08
+
+A verification release. Every change is a guard, a gate or a documentation
+correction; **no emitted code changed**. The three profile PRGs are
+byte-identical to `v0.11.0` and the export set is unchanged at 162 names, so
+for a consumer already linking v0.11.0 the only observable difference is that
+some previously-accepted `CONTRACT_ZP_DEFINES` values now fail the build
+(see **Changed**).
+
+The thirteen issues closed here were filed by this repository's own audit
+against itself, seeded by findings ported from `c64-x25519`,
+`c64-nist-curves` and `c64-ChaCha20-Poly1305`. Nine of them share one shape:
+**a check whose pass condition is a zero, an absence or an empty result,
+satisfied equally by a correct artifact and by a broken tool.**
 
 ### Fixed
 
@@ -49,6 +62,66 @@ downstream projects (see `API.md` §8 for the integration contract).
   `make lib` itself so the check cannot go green if the build stops
   forwarding `CONTRACT_ZP_DEFINES`.
 
+- **`make dist` ran no gates at all (issue #96).** A release could be minted
+  from a tree in which every guard was failing. `dist` now depends on a
+  `verify` umbrella target, which runs all 14 checks and restores the default
+  build afterwards.
+- **`make dist` silently overwrote a released tarball and rewrote its
+  attestation when the tree had moved past the tag (issue #85).** Re-running
+  `make dist VERSION=v0.11.0` from a later tree replaced the released
+  artifact and restamped its notes with a hash for different source. It now
+  refuses unless the tracked release inputs match the tag, comparing with
+  explicit git pathspecs and checking the status rather than swallowing it.
+- **The fail-closed stamper aborted *after* mutating the tree (issue #87).**
+  `build_release.sh` rewrote the notes and overwrote the tarball, then hit
+  its own placeholder check and exited — leaving the tracked notes truncated
+  with neither an Attestation table nor a placeholder token to detect it by.
+  All checks now run before any mutation, both tracked files are published by
+  renaming a finished temp over them, and the catchable signals are trapped
+  and re-raised. `make check-publish-atomic` is the standing guard.
+- **`build-short/` was tracked in git (issue #99).** Six build artifacts,
+  including a `polyval-short.a` that predated the v0.11.0 member-isolation
+  fix — a stale archive a consumer could have picked up from a checkout.
+  Untracked, with `make check-no-tracked-artifacts` guarding the return.
+- **Concurrent runs in one working tree raced on fixed-name scratch trees
+  (issue #93), reproduced 3/3.** `build-knobcheck` and `shipped-check` are
+  now per-run names under a single swept `build-scratch.*` prefix, and
+  `make check-scratch-prefix` asserts the prefix and the `.gitignore` agree.
+- **Nothing verified `LIB_POLYVAL_RESIDENT_BYTES` / `_COLD_BYTES` against a
+  measurement (issue #95).** The §5 values were hand-maintained constants
+  refreshed by a human at release; `c64-x25519#142` and
+  `c64-ChaCha20-Poly1305#126` both shipped this defect in the *unsafe*
+  direction on one day. `make check-footprints` now rebuilds all six
+  configurations and asserts declared ≥ measured, measuring a link span per
+  c64-lib-contract PR#200's basis rather than a sum of object sizes.
+- **`check_knob_staleness.sh` could not tell 0 exports from a missing object
+  or a dead `od65` (issues #86, #90).** The `contract#194` shape: the gate's
+  pass condition was a count of zero. It now fails distinctly on a missing
+  object, an `od65` failure, an unparseable dump and a count mismatch, and it
+  checks the `LIB_NO_BARE_EXPORTS` gate for what it **keeps** as well as what
+  it removes — a lost prefixed export previously passed every guard.
+- **The composing mode was unverified end to end (issues #89, #94).**
+  `LIB_NO_BARE_EXPORTS=1` is the mode a consumer linking two sibling
+  libraries must build in, and no target ever built it, so §8.4 bare-export
+  suppression in `precalc_manifest.o` was never checked in any arm.
+  `make check-composing-mode` now derives all six archive configurations from
+  the Makefile's own target list — aborting if it does not find exactly six —
+  and builds each one **both** bare and gated.
+- **`docs/precalc-tables.md` omitted `polyval-gcmsiv-compact.a` from both
+  sbox rows (issue #103).** The §8.4 artifact of record had been stale since
+  v0.8.0. Swept the whole COMPACT omission class: seven stale lists across
+  `API.md`, `README.md`, `src/exports.inc`, `src/precalc_manifest.s` and that
+  file, four of them in shipped artifacts.
+- **`ar65` embeds a timestamp, so `polyval.a` is not byte-reproducible
+  (issue #97) — documented, not "fixed".** The PRGs and the release tarball
+  *are* reproducible; archives are not, and the mechanism is `ca65`'s
+  `OPT_DATETIME` plus `ar65`'s member-mtime index, measured rather than
+  guessed. Byte-identity receipts must therefore quote PRG and tarball
+  hashes; an archive hash will not reproduce and will read as a regression.
+  What is safe to check is the member **name list**, which carries no
+  timestamp — `tools/check_archive_members.sh` now runs from every archive
+  recipe and asserts it against that rule's own prerequisites.
+
 ### Changed
 
 - **If you pass `CONTRACT_ZP_DEFINES`, re-check your values against this
@@ -72,10 +145,18 @@ with "Total: **45 bytes** claimed across three discontiguous regions
 (`$02–$09`, `$10–$30`, `$fb–$fe`)", and `LIB_POLYVAL_ZP_USAGE_BYTES = 45`
 is exported unconditionally — including from the `NO_AES` archives, so
 there is no carve-out under which a POLYVAL-only consumer could
-legitimately park a live slot on a dead AES slot. Thirteen widths summing
-to exactly 45 bytes **entails** non-overlap, so an aliased layout was never
-inside the documented domain, and a guard that only fires outside that
-domain cannot move the counter however its diagnostics read. The same
+legitimately park a live slot on a dead AES slot. The entailment runs
+through **distinctness**: 45 bytes *claimed* in zero page, and thirteen
+slots whose widths total 45, can coexist only if none overlaps —
+pigeonhole. An aliased layout claims fewer than 45 distinct bytes and so
+contradicts an exported symbol, putting it outside the documented domain,
+and a guard that only fires outside that domain cannot move the counter
+however its diagnostics read.
+
+Not "thirteen widths summing to 45 entails non-overlap" — that shorter
+form is a non-sequitur, since the widths are library constants that still
+sum to 45 under an overlapping override. It stood in this file, the release
+notes and the release PR until adversarial review caught it. The same
 published sentence supplies the `$02` floor: `$02–$09` is the documented
 lower bound, so `$00`/`$01` were never in the domain either.
 

@@ -559,6 +559,28 @@ as historical reference and must not be edited. The active ABI is now
    binary identity, and
    MUST use absolute blob URLs (relative links 404 on release pages).
 
+   **Comparing anything against `v0.11.0`: `rm -rf build-short` FIRST.**
+   That tag tracks `build-short/lib/polyval-short.a` in git (issue #99,
+   fixed after it), so a fresh checkout arrives with a committed archive
+   already in place and `git status` clean. Make sees an up-to-date
+   target and never rebuilds it, and the comparison silently measures an
+   artifact that predates the v0.11.0 member-isolation fix. Found during
+   the v0.12.0 pre-tag review, where it first produced a **false**
+   finding: `v0.11.0` appeared to export 724 names against v0.12.0's 731,
+   with `polyval-short.a` seeming to gain the whole bare surface — which
+   would have read as a §6.1 widening in a release claiming an unchanged
+   surface. After `rm -rf build-short build` and a forced rebuild both
+   sides measure 731/731/162, identical per-name. #99 removes the hazard
+   going forward, but **the tag keeps it permanently**: any ABI diff,
+   export-set comparison or footprint measurement against `v0.11.0` must
+   force the rebuild. Two related notes, both measured rather than
+   assumed: PRG byte-identity is *not* affected (`make POLYVAL_PROFILE=<p>`
+   writes `build/polyval.prg` and never consults `build-short/`, and the
+   v0.12.0 receipt reproduces hash-for-hash with the directory removed);
+   and a single `make` invocation naming all seven archive targets does
+   not produce all seven — later targets overwrite earlier output, so
+   build them separately.
+
    **A byte-identity receipt may hash PRGs and the tarball, never a `.a`
    or a `.o`.** ca65 stamps the assembly wall-clock second into every
    object; ar65 stores members verbatim (so the stamp rides along) and
