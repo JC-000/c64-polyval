@@ -177,8 +177,8 @@
 ;   gcmsiv_gen_keystream, gcmsiv_derive_ctr
 ; IMPORTS:
 ;   aes_encrypt: aes_encrypt_block, aes_key_expansion
-;   polyval_(long|short): polyval_init, polyval_update,
-;                         polyval_precompute_table
+;   polyval_(long|short|compact): polyval_init, polyval_update,
+;                                 polyval_precompute_table
 ;   data: aes_state, aes_expanded_key, aes_current_key,
 ;         polyval_h, polyval_temp,
 ;         gcmsiv_nonce, gcmsiv_pt_buf, gcmsiv_pt_len,

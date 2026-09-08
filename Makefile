@@ -164,7 +164,7 @@ endif
 # default, a silent mismatch. The nist#104 explicit-pattern-rule caveat
 # (ZP TU built by a generic pattern rule missing the scoped variable) is
 # therefore inapplicable: the pattern rule delivering to everything is the
-# point. The lib-polyval-{long,short} recursive $(MAKE) invocations inherit
+# point. The lib-polyval-{long,short,compact} recursive $(MAKE) invocations inherit
 # both variables automatically (command-line-origin variables propagate to
 # sub-makes; measured — see API.md §9.5).
 CONTRACT_DEFINES    ?=
@@ -255,10 +255,10 @@ LIB_AEAD_OBJS = $(LIB_CORE_OBJS) $(BUILD_DIR)/data.o \
 # at parse time rather than in a recipe means nothing is built before the
 # rejection — a half-built tree is itself the input to the staleness shape.
 #
-# The lib-polyval-{long,short,gcmsiv-short} wrappers are deliberately absent
-# from the table: they establish the pin themselves via a recursive $(MAKE),
-# and their inner invocation names the archive path, which is what gets
-# checked here.
+# The lib-polyval-{long,short,compact,gcmsiv-short,gcmsiv-compact} wrappers
+# are deliberately absent from the table: they establish the pin themselves
+# via a recursive $(MAKE), and their inner invocation names the archive path,
+# which is what gets checked here.
 POLYVAL_PIN = $(POLYVAL_PROFILE)$(if $(POLYVAL_NO_AES),-noaes)
 
 PIN_lib                               = long
@@ -558,11 +558,11 @@ $(LIB_EXAMPLE_CFG): $(SRC_DIR)/polyval-example.cfg | $(LIB_DIR)
 # ar65 `a` appends (no replace-all flag), so each recipe `rm -f $@` before
 # invoking ar65 to ensure a clean rebuild.
 #
-# The per-profile POLYVAL archives (lib-polyval-{long,short}) re-invoke
+# The per-profile POLYVAL archives (lib-polyval-{long,short,compact}) re-invoke
 # `make` recursively with POLYVAL_PROFILE pinned. This matters because the
 # polyval primitives and data.s use `.if POLYVAL_PROFILE = ...` blocks at
 # assemble time, so each profile needs its own .o set. The recursive
-# invocation cleans build/ first to avoid mixing .o files assembled under
+# invocation runs `clean-build` first to avoid mixing .o files assembled under
 # different POLYVAL_PROFILE values.
 #
 # `lib` and `lib-polyval-gcmsiv` produce byte-identical archives today;
@@ -702,7 +702,8 @@ $(CONSUMER_PRG): $(BUILD_DIR)/consumer_stub.o $(LIB_OBJECTS) $(LIB_CFG) | $(BUIL
 
 # --- POLYVAL-only consumer check (issue #47 regression guard) --------------
 # Links test/consumer_stub_noaes.s -- which defines its OWN aes_state and
-# gcmsiv_tag -- against the real polyval-long.a / polyval-short.a archives.
+# gcmsiv_tag -- against the real polyval-long.a / polyval-short.a /
+# polyval-compact.a archives.
 # If the NO_AES archives ever again export the AES / GCM-SIV BSS block, ld65
 # fails here with "Duplicate external identifier".
 #

@@ -3,7 +3,8 @@
 ;
 ; Simulates a downstream project that already ships its OWN AES and GCM-SIV
 ; (c64-aes256-ecdsa is the motivating consumer) and wants POLYVAL alone from
-; polyval-long.a / polyval-short.a.
+; polyval-long.a / polyval-short.a / polyval-compact.a (the link runs
+; against all three).
 ;
 ; The point of this stub is the definitions below: it DEFINES aes_state and
 ; gcmsiv_tag itself. If the POLYVAL-only archives ever again ship the AES /

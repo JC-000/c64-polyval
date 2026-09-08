@@ -292,7 +292,16 @@ def doc_prose_archives():
 # Backticks optional: CLAUDE.md writes the same list bare, and that instance was
 # stale too. The gcmsiv- form is read as well -- same drift risk, same fix.
 BRACE = re.compile(r"lib-polyval-(gcmsiv-)?\{([a-z,]+)\}")
-BRACE_FILES = ("docs/precalc-tables.md", "API.md", "README.md", "CLAUDE.md")
+# HAND-MAINTAINED, and that is a real limitation: a new file naming targets is
+# unwatched until someone adds it here. Scanning every tracked file instead is a
+# different change, and it would have to cope with the forms this grammar does
+# NOT read -- the Makefile's own comments (a brace list there can sit near a
+# POLYVAL_NO_AES mention while correctly naming a different set), the pipe form
+# `polyval_(long|short)` in src/exports.inc, and the archive brace
+# `polyval-{long,short,compact}.a` in src/lib_manifest.s. Those four files were
+# corrected by hand in the same sweep and are NOT guarded by anything.
+BRACE_FILES = ("docs/precalc-tables.md", "API.md", "README.md", "CLAUDE.md",
+               "src/precalc_manifest.s")
 NEAR = 150
 NOAES = "POLYVAL_NO_AES"
 
