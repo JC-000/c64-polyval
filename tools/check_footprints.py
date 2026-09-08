@@ -172,7 +172,7 @@ def main():
     # the real build/, destroying a concurrent build from inside `make verify`
     # -- worse than the #93 race it would have added to. mkdtemp also avoids
     # adding a new fixed-name scratch tree while #93 is open.
-    bd = Path(tempfile.mkdtemp(prefix="build-fpcheck.", dir=str(ROOT)))
+    bd = Path(tempfile.mkdtemp(prefix="build-scratch.", dir=str(ROOT)))
     rel = bd.name
     bad = 0
     try:

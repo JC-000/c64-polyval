@@ -350,7 +350,7 @@ endif
         lib-polyval-compact lib-polyval-gcmsiv lib-polyval-gcmsiv-short \
         lib-polyval-gcmsiv-compact consumer-check \
         consumer-check-noaes consumer-check-shipped run clean dist verify \
-        check-no-tracked-artifacts check-footprints
+        check-no-tracked-artifacts check-footprints check-scratch-prefix
 .DEFAULT_GOAL := all
 
 all: $(PRG) $(LABELS)
@@ -640,7 +640,16 @@ $(LIB_DIR)/polyval-gcmsiv-compact.a: $(LIB_AEAD_OBJS) | $(LIB_DIR) $(LIB_SHIPPED
 #
 # It depends on $(LIB_DIR)/polyval.a, so the shipped .inc and .cfg are staged
 # by that rule's order-only prerequisites before this runs.
-CHECK_SHIPPED_DIR = $(BUILD_DIR)/shipped-check
+# Unique per invocation (issue #93): a fixed name plus the `rm -rf` at the top
+# of the recipe meant two concurrent runs in one tree deleted each other's
+# staging directory mid-link.
+#
+# `:=` and $(shell ...) are both load-bearing. Written as a recursive
+# `= ...$$$$`, the PID is expanded ONCE PER RECIPE LINE -- and each line is
+# its own shell -- so mkdir created one directory and the next cp targeted a
+# different name: "cp: build/shipped-check.46834: Not a directory". Measured,
+# not theorised.
+CHECK_SHIPPED_DIR := $(BUILD_DIR)/shipped-check.$(shell echo $$$$)
 
 consumer-check-shipped: $(LIB_DIR)/polyval.a
 	rm -rf $(CHECK_SHIPPED_DIR)
@@ -654,6 +663,10 @@ consumer-check-shipped: $(LIB_DIR)/polyval.a
 	@test -s $(CHECK_SHIPPED_DIR)/consumer_stub_shipped.prg
 	@echo "consumer-check-shipped: polyval.a + polyval.inc + polyval-example.cfg" \
 	      "are a sufficient consumer surface (no src/ on the include path)"
+	@# Removed only on SUCCESS: a per-run name would otherwise accumulate under
+	@# build/, and on failure the staging tree is exactly what you want to look
+	@# at. `make clean` sweeps any left by a failed run.
+	@rm -rf $(CHECK_SHIPPED_DIR)
 
 # --- Consumer-stub smoke check --------------------------------------------
 # Assembles test/consumer_stub.s against the public .inc surface only and
@@ -699,12 +712,26 @@ run: all
 	x64sc -moncommands $(LABELS) $(PRG)
 
 # --- Clean ----------------------------------------------------------------
-# Deletion stays an explicit list even though .gitignore now uses a pattern.
-# The asymmetry is deliberate: a wrong ignore rule hides a file, a wrong
-# `rm -rf` glob deletes someone's directory. SCRATCH_TREES are the trees this
-# repo's own tooling creates outside $(BUILD_DIR); check_knob_staleness.sh
-# also removes its own on exit, so this is belt-and-braces.
-SCRATCH_TREES = build-knobcheck
+# SCRATCH_TREES are the trees this repo's own tooling creates outside
+# $(BUILD_DIR). Since #93 gave them per-run names, the literal
+# `build-knobcheck` this listed matched nothing -- adversarial review caught
+# that the entry was dead and its comment false, so a run killed with SIGKILL
+# (which no trap can catch) left a tree nothing would ever sweep.
+#
+# This REVERSES the position argued in #99, that deletion should stay an
+# explicit list because a wrong ignore rule hides a file while a wrong
+# `rm -rf` glob deletes someone's directory. That still holds for an
+# unbounded `build*`. This is bounded: a fixed prefix plus a dot, matching
+# only names our own tooling mints via mktemp. An unmatched glob stays
+# literal and `rm -rf` exits 0 on it, so `make clean` is safe on a clean tree
+# -- verified under /bin/sh, which is what recipes use and which has neither
+# nullglob nor failglob.
+#
+# ONE prefix for every tool, and check-scratch-prefix asserts it. Two
+# prefixes meant three places had to agree with nothing checking they did,
+# which is how the first cut of #93 shipped with a `clean` entry that matched
+# nothing -- the same shape as #99's .gitignore drift.
+SCRATCH_TREES = build-scratch.*
 
 clean:
 	rm -rf $(BUILD_DIR) $(SCRATCH_TREES)
@@ -758,6 +785,14 @@ clean:
 # it rebuilds all six configurations; ~6 s against ~1 s for everything above.
 check-footprints:
 	@python3.13 $(TOOLS_DIR)/check_footprints.py
+
+# --- every minted scratch tree is one `make clean` sweeps (issue #93) ------
+# Cheap source scan, no build. It exists because #93's own fix shipped with a
+# SCRATCH_TREES entry that matched nothing, and #99 shipped with a .gitignore
+# that enumerated two trees and missed a third: two places that must agree,
+# with nothing checking they do.
+check-scratch-prefix:
+	@python3.13 $(TOOLS_DIR)/check_scratch_prefix.py
 
 check-no-tracked-artifacts:
 	@files=$$(git ls-files) || { \
@@ -827,11 +862,19 @@ check-no-tracked-artifacts:
 # them leaves BUILD_DIR holding COMPACT/NO_AES objects, the recipe ends by
 # rebuilding the default tree -- otherwise `make verify` (or a release, which
 # depends on it) would silently hand the caller back a non-default build/.
-VERIFY_TARGETS = check-no-tracked-artifacts all lib-verify consumer-check \
+VERIFY_TARGETS = check-no-tracked-artifacts check-scratch-prefix all lib-verify consumer-check \
                  consumer-check-shipped lib-polyval-gcmsiv \
                  lib-polyval-gcmsiv-short lib-polyval-gcmsiv-compact \
                  consumer-check-noaes check-footprints
 
+# SCOPE: this fixes the SCRATCH trees (issue #93). Two concurrent `make
+# verify` runs in ONE working tree still collide, because they share
+# $(BUILD_DIR) itself -- measured, one of each pair fails with
+# "ar65: Error: Read error (file corrupt?)" or "Problem deleting temporary
+# library file". Unique scratch names cannot fix that; only a private
+# BUILD_DIR per run could, and that would cost the "default build restored"
+# property this target deliberately provides. `make -j` within ONE invocation
+# is fine -- make serialises its own targets.
 verify:
 	@for t in $(VERIFY_TARGETS); do \
 	  echo "verify: $$t"; \

@@ -22,11 +22,24 @@
 set -e
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-SCRATCH="$ROOT/build-knobcheck"
-MAKE_Q="make -C $ROOT BUILD_DIR=build-knobcheck"
+# Private scratch tree per run (issue #93). This was the fixed name
+# build-knobcheck, and the standalone `rm -rf` on it plus the cleanup trap
+# meant two concurrent runs in one working tree destroyed each other --
+# measured 0/10 pairs passing before, 130/130 after. A false FAIL is cheaper
+# than a false pass, but it trains people to re-run until green, and
+# c64-x25519#140 is the same defect in a sibling.
+#
+# The `build-scratch.` prefix is SHARED with tools/check_footprints.py and is
+# what `make clean`'s SCRATCH_TREES sweeps. One prefix, not one per tool:
+# three places had to agree before, nothing checked that they did, and that
+# is precisely how this fix first shipped with a dead entry in `clean`.
+# tools/check_scratch_prefix.py asserts the agreement.
+SCRATCH=$(mktemp -d "$ROOT/build-scratch.XXXXXX") || {
+  echo "check_knob_staleness: FAIL -- could not create a scratch tree" >&2; exit 1; }
+MAKE_Q="make -C $ROOT BUILD_DIR=$(basename "$SCRATCH")"
 fail() { echo "check_knob_staleness: FAIL -- $1" >&2; exit 1; }
 cleanup() { rm -rf "$SCRATCH"; }
-trap cleanup EXIT
+trap cleanup EXIT INT TERM HUP   # EXIT alone left the tree on SIGTERM (measured 1 of 2)
 
 # --- export inspection (issues #86, #90) ------------------------------------
 # These used to be two one-liners ending in `| grep -c ... || true`, which
@@ -109,7 +122,6 @@ prefixed_exports() { n_matching '"LIB_POLYVAL_(VERSION|ABI)' lib_version; }
 
 SELFTEST=${1:-}
 
-rm -rf "$SCRATCH"
 $MAKE_Q lib >/dev/null 2>&1 || fail "baseline build failed"
 dump_all
 
