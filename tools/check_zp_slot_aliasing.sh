@@ -19,8 +19,12 @@
 #                     broken both ways at once. It MUST fail. If it passes,
 #                     the machinery is dead and every RED case below could be
 #                     failing for some unrelated reason.
-#   RED cases         the three collision shapes from #105 must each fail
-#                     assembly, and the diagnostic must name the slots.
+#   RED cases         each documented collision shape must fail assembly, and
+#                     the diagnostic must name the slots. The case list below
+#                     is the authority on which shapes and how many; it is not
+#                     restated here, and not all of them come from #105 -- the
+#                     $00/$01 processor-port cases came out of review of the
+#                     first fix, which had an `addr >= 0` floor.
 #   GREEN cases       the default build and every CONTRACT_ZP_DEFINES example
 #                     in CLAUDE.md must still assemble.
 #
