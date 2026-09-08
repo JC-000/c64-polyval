@@ -536,6 +536,16 @@ as historical reference and must not be edited. The active ABI is now
    every profile the baseline shipped, hash pairs) whenever they claim
    binary identity, and
    MUST use absolute blob URLs (relative links 404 on release pages).
+
+   **A byte-identity receipt may hash PRGs and the tarball, never a `.a`
+   or a `.o`.** ca65 stamps the assembly wall-clock second into every
+   object header and ar65 copies it into the archive members and index,
+   so archives and objects are not byte-reproducible while the PRGs and
+   the tarball are (measured; issue #97). An archive hash in a receipt
+   will fail to reproduce and will read as a regression. The measurement,
+   and the traps in comparing archives some other way, are recorded in
+   the `Makefile` block above `VERIFY_TARGETS`.
+
 1. Bump `VERSION`, `CHANGELOG.md`, **and `LIB_POLYVAL_VERSION_MINOR`/`_PATCH`
    in `src/lib_version.s`** (the bare `LIB_VERSION_*` aliases follow
    automatically; the v0.3.0 release forgot this file entirely and it went

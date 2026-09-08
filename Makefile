@@ -862,6 +862,47 @@ check-no-tracked-artifacts:
 # them leaves BUILD_DIR holding COMPACT/NO_AES objects, the recipe ends by
 # rebuilding the default tree -- otherwise `make verify` (or a release, which
 # depends on it) would silently hand the caller back a non-default build/.
+#
+# DO NOT ADD AN ARCHIVE-HASH REPRODUCIBILITY CHECK TO THIS LIST (issue #97).
+# `build/lib/*.a` and `build/*.o` are NOT byte-reproducible; `build/*.prg` and
+# the release tarball ARE. A gate that hashes an archive across two builds is
+# red or green depending on whether they straddle a wall-clock second, and an
+# intermittent red trains people to re-run until green.
+#
+# Mechanism, measured 2026-09-07 (ca65 V2.18, homebrew cc65):
+#   ca65 writes an OPT_DATETIME option -- the assembly wall-clock second --
+#   into every object header (visible as `Data: <unix time>` in
+#   `od65 --dump-all`). ar65 copies that stamp into each member header and
+#   again into the archive index. So the stamp originates in ca65, not ar65:
+#   the objects are NOT reproducible either, which is the one point issue #97
+#   states the other way round.
+#   - six clean `make lib` runs gave two distinct polyval.a hashes, split
+#     exactly on the second boundary (four runs at t, two at t+1, matching
+#     within each group);
+#   - the t/t+1 pair differs in exactly 20 bytes for polyval.a's 10 members:
+#     one per member header plus one per index entry, each the low byte of the
+#     32-bit stamp. 20 is the ONE-SECOND case, not a constant -- a pair 238 s
+#     apart differs in 40 bytes (two stamp bytes per site);
+#   - `build/polyval.prg` and `build/lib_main.prg` were identical across six
+#     clean builds spanning five second boundaries: ld65 does not propagate
+#     the stamp. `make dist` was byte-identical across three runs spanning two
+#     second boundaries, and ships source only, so no released artifact is
+#     affected. Byte-identity receipts in release notes must therefore stay on
+#     PRG and tarball hashes; an archive hash in a receipt will not reproduce
+#     and will look like a regression.
+#
+# If an archive comparison is ever genuinely wanted, compare the member SET
+# (`ar65 t`) plus per-member content, and note two traps that were measured,
+# not guessed:
+#   - `ar65 x` re-materialises the stamp into the extracted file, so hashing
+#     extracted members does NOT compare equal either (measured: each
+#     extracted .o differed in exactly the one OPT_DATETIME byte);
+#   - `od65 --dump-all` prints both that stamp and the *source* files'
+#     modification times, which are checkout-dependent; a dump comparison must
+#     filter both.
+# Any such check must also fail loudly when `ar65`/`od65` are missing or the
+# member list comes back empty -- an empty member set otherwise compares equal
+# to an empty member set and the gate passes vacuously (the #86/#91 shape).
 VERIFY_TARGETS = check-no-tracked-artifacts check-scratch-prefix all lib-verify consumer-check \
                  consumer-check-shipped lib-polyval-gcmsiv \
                  lib-polyval-gcmsiv-short lib-polyval-gcmsiv-compact \
