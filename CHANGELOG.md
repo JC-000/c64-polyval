@@ -145,10 +145,18 @@ with "Total: **45 bytes** claimed across three discontiguous regions
 (`$02–$09`, `$10–$30`, `$fb–$fe`)", and `LIB_POLYVAL_ZP_USAGE_BYTES = 45`
 is exported unconditionally — including from the `NO_AES` archives, so
 there is no carve-out under which a POLYVAL-only consumer could
-legitimately park a live slot on a dead AES slot. Thirteen widths summing
-to exactly 45 bytes **entails** non-overlap, so an aliased layout was never
-inside the documented domain, and a guard that only fires outside that
-domain cannot move the counter however its diagnostics read. The same
+legitimately park a live slot on a dead AES slot. The entailment runs
+through **distinctness**: 45 bytes *claimed* in zero page, and thirteen
+slots whose widths total 45, can coexist only if none overlaps —
+pigeonhole. An aliased layout claims fewer than 45 distinct bytes and so
+contradicts an exported symbol, putting it outside the documented domain,
+and a guard that only fires outside that domain cannot move the counter
+however its diagnostics read.
+
+Not "thirteen widths summing to 45 entails non-overlap" — that shorter
+form is a non-sequitur, since the widths are library constants that still
+sum to 45 under an overlapping override. It stood in this file, the release
+notes and the release PR until adversarial review caught it. The same
 published sentence supplies the `$02` floor: `$02–$09` is the documented
 lower bound, so `$00`/`$01` were never in the domain either.
 

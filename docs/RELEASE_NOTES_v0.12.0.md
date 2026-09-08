@@ -64,10 +64,25 @@ discontiguous regions (`$02–$09`, `$10–$30`, `$fb–$fe`)", and
 `LIB_POLYVAL_ZP_USAGE_BYTES = 45` is exported unconditionally — including
 from the `NO_AES` archives, so there is no carve-out under which a
 POLYVAL-only consumer could legitimately park a live slot on a dead AES
-slot. Thirteen widths summing to exactly 45 bytes **entails** non-overlap,
-so an aliased layout was never inside the documented input domain, and a
-guard that only fires outside that domain cannot move the counter however
-its diagnostics read. The same published sentence supplies the `$02` floor.
+slot. The entailment runs through **distinctness**, not through the widths
+alone: `LIB_POLYVAL_ZP_USAGE_BYTES = 45` publishes 45 bytes *claimed* in
+zero page, and thirteen slots whose widths total 45 can occupy 45 distinct
+bytes only if none of them overlaps — pigeonhole. (The three published
+regions hold 8 + 33 + 4 = exactly 45, so the documented layout is tight,
+with no slack an overlap could hide in.) An aliased layout therefore claims
+fewer than 45 distinct bytes and contradicts a symbol this library has
+exported since before the change, so it was never inside the documented
+input domain, and a guard that only fires outside that domain cannot move
+the counter however its diagnostics read. The same published sentence
+supplies the `$02` floor.
+
+Stated carefully because the obvious shorter form is wrong, and the release
+notes carried it through review: *"thirteen widths summing to 45 entails
+non-overlap"* does **not** follow. The widths are library constants
+(`src/zp_config.s`), unchanged by any `-D` override, so they still sum to 45
+under `-D polyval_acc=0x40 -D pv_mul_input=0x40` — an overlapping layout.
+It is the *distinct-bytes* claim that does the work. Caught in adversarial
+review of this release; corrected before tagging.
 
 The argument deliberately does **not** rest on "no entry point, return set,
 segment or exported value changed". That is the runtime-surface form
@@ -104,10 +119,26 @@ commit message on the #105 branch and was withdrawn under review.
 
 ### Byte-identity method
 
-Both trees were built from scratch in **separate git worktrees**, so
-neither could reuse the other's objects: `v0.11.0` (`8df10a4`) and this
-release's parent (`17b969d`). `make clean && make POLYVAL_PROFILE=<p>` for
-each of the three profiles.
+Built from scratch in **separate git worktrees**, so no tree could reuse
+another's objects (`BUILD_DIR` is relative, and the `.ca65flags` stamp
+lives under it). `make clean && make POLYVAL_PROFILE=<p>` for each of the
+three profiles, at **three** refs: `v0.11.0` (`8df10a4`), this release's
+parent (`17b969d`), and the release commit itself.
+
+The release commit is included deliberately. It changes
+`src/lib_version.s` (`MINOR` 11 → 12), which the parent does not, so a
+receipt naming only the parent would not cover the tree that gets tagged.
+It produces the same three hashes: `lib_version.s` contributes exported
+absolute equates, which emit no bytes into the PRG.
+
+**Reproducing this against `v0.11.0` requires `rm -rf build-short` first.**
+That tag tracks `build-short/lib/polyval-short.a` in git (issue #99, fixed
+after it), so a fresh checkout arrives with a committed archive already in
+place and a clean `git status`, and make will not rebuild it. It does not
+affect the PRG hashes above — `make POLYVAL_PROFILE=<p>` never consults
+that directory, and the three hashes reproduce with it deleted — but it
+does silently contaminate archive and export-set comparisons against that
+tag, which is where it was found.
 
 | Profile | `v0.11.0` | this release | SHA256 of `build/polyval.prg` |
 |---|---|---|---|
@@ -159,9 +190,19 @@ Six follow-ups remain open and are deliberately not in this release:
 **#104** (the `NO_AES` archives are not link-tested in the composing mode),
 **#106**, **#107**, **#113** (three LOW gaps in the new gates themselves),
 **#109** (`API.md` §4's ZP slot table still uses the pre-v0.3.0 names), and
-**#110** — a ZP slot added as an equate with no table row would be
-unguarded, which is the one live path left to #105's failure mode. None is
-a conformance defect against c64-lib-contract.
+two remaining paths to #105's failure mode: **#110** (a ZP slot added as an
+equate with no table row is unguarded) and **#116** (the `size` column,
+`LIB_POLYVAL_ZP_USAGE_BYTES` and `API.md` §9.2 are three hand-maintained
+copies of one fact with nothing checking they agree — an understated width
+narrows the range the overlap check compares, hiding a real overlap).
+None is a conformance defect against c64-lib-contract.
+
+#116 was filed during this release's own pre-tag review, which also
+corrected the ABI argument above. It is worth being plain about the shape:
+the guard this release ships is sound, and the argument that it cannot move
+the ABI counter is sound, but the argument's premise is a hand-maintained
+number that nothing checks. That is the same class as the nine defects
+closed here, found in the release that closes them.
 
 ## Compatibility
 
@@ -179,8 +220,8 @@ a conformance defect against c64-lib-contract.
 | Field      | Value |
 |------------|-------|
 | Filename   | `c64-polyval-v0.12.0.tar.gz` |
-| **Size**   | 150072 bytes |
-| **SHA256** | `3912bef30c1f1f5ac3809b1a326783c5c1c1f0c6c21462a6ca19166ba5332e33` |
+| **Size**   | 151231 bytes |
+| **SHA256** | `ce21e6eb9fd0df1228af3221deb7e8f66026c7a4c100e52bcc16ad1ef148ff3c` |
 
 Re-running `make dist VERSION=v0.12.0` against this source tree must
 reproduce the recorded hash byte-for-byte: every staged file's mtime is
