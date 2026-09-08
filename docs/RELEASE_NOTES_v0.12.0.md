@@ -76,6 +76,18 @@ input domain, and a guard that only fires outside that domain cannot move
 the counter however its diagnostics read. The same published sentence
 supplies the `$02` floor.
 
+One qualification, because it is a drift risk rather than a hole. **Three
+places now independently assert 45**, and none is derived from another:
+`API.md` §9.2's Width column, the `size` column of `PV_ZP_SLOT_LIST` in
+`src/zp_config.s`, and the hardcoded `LIB_POLYVAL_ZP_USAGE_BYTES = 45` in
+`src/lib_manifest.s`. Nothing checks that any two agree — issue #116. The
+argument above is unaffected, because it rests on the §9.2 table a consumer
+actually reads, whose thirteen widths sum to 45 across pairwise-disjoint
+intervals. But note what the new guard does and does not establish: it
+proves the *table's* intervals stay disjoint under a consumer's overrides.
+It does not prove the table describes the code. Those are different claims
+and this release only ships the first.
+
 Stated carefully because the obvious shorter form is wrong, and the release
 notes carried it through review: *"thirteen widths summing to 45 entails
 non-overlap"* does **not** follow. The widths are library constants
@@ -149,10 +161,14 @@ tag, which is where it was found.
 Two controls, because "the hashes matched" is also what a comparison that
 never ran produces:
 
-1. **The trees genuinely differ.** `diff -rq` over `src/` reports five
-   differing files (`exports.inc`, `lib_manifest.s`, `polyval_api.inc`,
-   `precalc_manifest.s`, `zp_config.s`). The assembler saw different source
-   and emitted the same bytes, which is the claim.
+1. **The trees genuinely differ.** Against `v0.11.0`, `diff -rq` over
+   `src/` reports **six** differing files — `exports.inc`,
+   `lib_manifest.s`, `lib_version.s`, `polyval_api.inc`,
+   `precalc_manifest.s`, `zp_config.s`. (Five of the six differ from the
+   release *parent* as well; the sixth is `lib_version.s`, the version
+   bump, which the parent does not carry. Count against the release
+   commit, since that is the tree being tagged.) The assembler saw
+   different source and emitted the same bytes, which is the claim.
 2. **The build responds to its input.** The three profile hashes are
    mutually distinct, so a harness that had silently built one thing three
    times would not have produced this table.
@@ -163,7 +179,19 @@ No archive hashes appear above, per issue #97.
 
 Unchanged from `v0.11.0`. Values are the declared `LIB_POLYVAL_*` equates a
 consumer links against — safe-direction, measured per archive and rounded
-up to the next 256-byte boundary.
+up to the next 256-byte boundary **from the original derivation basis**,
+which is recorded per row in `src/lib_manifest.s`.
+
+That qualifier matters when checking the arithmetic against the live
+figures below, because one row does not fit the rule as stated: COMPACT
+AEAD declares `COLD_BYTES = 512` while the current guard measures 120, and
+the next 256-boundary above 120 is 256. The rule does hold against that
+row's recorded basis (`src/lib_manifest.s`: `measured 339` → 512). The two
+bases differ — c64-lib-contract PR#200's link-span measurand excludes
+`lib_main`, which the original per-archive measurement included — so the
+live column is not the one the declared values were rounded from. Every row
+remains safe-direction under both, which is the property §5 requires and
+`make check-footprints` enforces.
 
 | Archive | Configuration | `RESIDENT_BYTES` | `COLD_BYTES` |
 |---|---|---:|---:|
@@ -197,8 +225,14 @@ copies of one fact with nothing checking they agree — an understated width
 narrows the range the overlap check compares, hiding a real overlap).
 None is a conformance defect against c64-lib-contract.
 
-#116 was filed during this release's own pre-tag review, which also
-corrected the ABI argument above. It is worth being plain about the shape:
+**#117** is also new from that review: the "162 exported names, zero
+difference" claim above is true and was derived independently twice, but no
+artifact in this repository can regenerate it — no tool computes an export
+set and `make verify` does not pin one. The claim is attested by a
+transcript rather than by a checked-in baseline.
+
+#116 and #117 were both filed during this release's own pre-tag review,
+which also corrected the ABI argument above. It is worth being plain about the shape:
 the guard this release ships is sound, and the argument that it cannot move
 the ABI counter is sound, but the argument's premise is a hand-maintained
 number that nothing checks. That is the same class as the nine defects
@@ -220,8 +254,8 @@ closed here, found in the release that closes them.
 | Field      | Value |
 |------------|-------|
 | Filename   | `c64-polyval-v0.12.0.tar.gz` |
-| **Size**   | 151231 bytes |
-| **SHA256** | `ce21e6eb9fd0df1228af3221deb7e8f66026c7a4c100e52bcc16ad1ef148ff3c` |
+| **Size**   | 151954 bytes |
+| **SHA256** | `fc0e79ea8c8f08a06cb9c3adf58e29d2953c625dec6c1bdfd6955cc31afbb402` |
 
 Re-running `make dist VERSION=v0.12.0` against this source tree must
 reproduce the recorded hash byte-for-byte: every staged file's mtime is
