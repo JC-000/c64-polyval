@@ -586,13 +586,25 @@ Cleared as it lands; empty means S1/S2 are met for the current contract tag.
    matters, because `API.md` is staged into the release tarball while the
    precalc doc is maintainer-facing.
 
-   Swept rather than waiting for a fifth: every tracked `*.md`, `*.s`,
-   `*.inc`, `*.cfg` and the `Makefile`, for lines naming long and short
-   without compact. Everything else that matched is correct in context
-   (`API.md:229` and `:965` name COMPACT on the following line, `:181` is a
-   genuine SHORT-vs-LONG comparison, `:661` is the frozen v0.1.0 `.lib`
-   release) or a historical `CHANGELOG.md` entry, true at its tag and left
-   as written. **Two live instances, both fixed on the #89/#94 branch.**
+   **That sweep was itself truncated, and the correction is the more useful
+   record.** I grepped every tracked `*.md`, `*.s`, `*.inc`, `*.cfg` and the
+   `Makefile` for lines naming long and short without compact, piped it
+   through `head -20`, and reported the result as a completed sweep — then
+   told the implementer "two live instances, do not claim more than that".
+   The real match count is **66 lines, 51 after excluding CHANGELOG**. The
+   implementer found `CLAUDE.md:362` (a brace list past my cut) and
+   `API.md:1300-1301` (an archive list omitting `-gcmsiv-short.a` since
+   v0.7.0 and `-gcmsiv-compact.a` since v0.8.0 — consumer-facing, and the
+   twin of the rows #103 corrected) despite that instruction, and was right
+   to.
+
+   **A truncated observation reported as a complete one, turned into an
+   instruction that capped the fix** — the exact failure this cycle keeps
+   finding, committed by the person auditing for it, inside a note about it.
+   `head -N` on a sweep is the same shape as `tail -2` hiding a FAIL line and
+   `grep -F` matching a prefix: the command ran, and it measured something
+   narrower than the claim built on it. The remaining candidates were handed
+   over unclassified rather than pre-filtered a second time.
 
    The lesson is about where guards go, not about COMPACT: each guard added
    to that paragraph displaced the drift rather than removing it — rows
