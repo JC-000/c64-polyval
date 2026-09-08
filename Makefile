@@ -551,9 +551,15 @@ $(LIB_EXAMPLE_CFG): $(SRC_DIR)/polyval-example.cfg | $(LIB_DIR)
 # invocation cleans build/ first to avoid mixing .o files assembled under
 # different POLYVAL_PROFILE values.
 #
-# `lib` and `lib-polyval-gcmsiv` produce byte-identical archives today;
-# the two names exist because consumers semantically want "the GCM-SIV
-# bundle" rather than "everything we happen to ship". If a future variant
+# `lib` and `lib-polyval-gcmsiv` produce byte-identical archives today --
+# meaning identical CONTENT, one object set archived under two names, not a
+# claim that either is byte-reproducible across builds; it is not, see the
+# issue #97 block above VERIFY_TARGETS. The two DO compare equal to each
+# other however far apart they are archived -- measured 9 s apart, still
+# byte-identical, because they share one object set and ar65 adds no clock;
+# what does not reproduce is a build that REASSEMBLES. The two names exist
+# because consumers semantically want "the GCM-SIV bundle" rather than
+# "everything we happen to ship". If a future variant
 # ever ships more than the AEAD bundle in `lib`, this split lets us widen
 # `lib` without surprising AEAD consumers.
 
@@ -563,10 +569,12 @@ lib-polyval-gcmsiv: $(LIB_DIR)/polyval-gcmsiv.a
 $(LIB_DIR)/polyval.a: $(LIB_AEAD_OBJS) | $(LIB_DIR) $(LIB_SHIPPED)
 	rm -f $@
 	$(AR65) a $@ $(LIB_AEAD_OBJS)
+	$(TOOLS_DIR)/check_archive_members.sh $@ $^
 
 $(LIB_DIR)/polyval-gcmsiv.a: $(LIB_AEAD_OBJS) | $(LIB_DIR) $(LIB_SHIPPED)
 	rm -f $@
 	$(AR65) a $@ $(LIB_AEAD_OBJS)
+	$(TOOLS_DIR)/check_archive_members.sh $@ $^
 
 # Per-profile POLYVAL-only archives. Recursive `make` invocations pin
 # POLYVAL_PROFILE for the .o build so the resulting archive only contains
@@ -608,22 +616,27 @@ lib-polyval-gcmsiv-compact:
 $(LIB_DIR)/polyval-long.a: $(LIB_POLYVAL_LONG_OBJS) | $(LIB_DIR) $(LIB_SHIPPED)
 	rm -f $@
 	$(AR65) a $@ $(LIB_POLYVAL_LONG_OBJS)
+	$(TOOLS_DIR)/check_archive_members.sh $@ $^
 
 $(LIB_DIR)/polyval-short.a: $(LIB_POLYVAL_SHORT_OBJS) | $(LIB_DIR) $(LIB_SHIPPED)
 	rm -f $@
 	$(AR65) a $@ $(LIB_POLYVAL_SHORT_OBJS)
+	$(TOOLS_DIR)/check_archive_members.sh $@ $^
 
 $(LIB_DIR)/polyval-compact.a: $(LIB_POLYVAL_COMPACT_OBJS) | $(LIB_DIR) $(LIB_SHIPPED)
 	rm -f $@
 	$(AR65) a $@ $(LIB_POLYVAL_COMPACT_OBJS)
+	$(TOOLS_DIR)/check_archive_members.sh $@ $^
 
 $(LIB_DIR)/polyval-gcmsiv-short.a: $(LIB_AEAD_OBJS) | $(LIB_DIR) $(LIB_SHIPPED)
 	rm -f $@
 	$(AR65) a $@ $(LIB_AEAD_OBJS)
+	$(TOOLS_DIR)/check_archive_members.sh $@ $^
 
 $(LIB_DIR)/polyval-gcmsiv-compact.a: $(LIB_AEAD_OBJS) | $(LIB_DIR) $(LIB_SHIPPED)
 	rm -f $@
 	$(AR65) a $@ $(LIB_AEAD_OBJS)
+	$(TOOLS_DIR)/check_archive_members.sh $@ $^
 
 # --- Shipped-surface guard (issue #79) -------------------------------------
 # Proves the three files `make lib` puts in build/lib/ are a COMPLETE and
@@ -866,23 +879,43 @@ check-no-tracked-artifacts:
 # DO NOT ADD AN ARCHIVE-HASH REPRODUCIBILITY CHECK TO THIS LIST (issue #97).
 # `build/lib/*.a` and `build/*.o` are NOT byte-reproducible; `build/*.prg` and
 # the release tarball ARE. A gate that hashes an archive across two builds is
-# red or green depending on whether they straddle a wall-clock second, and an
+# red or green depending on when the clock happened to tick, and an
 # intermittent red trains people to re-run until green.
 #
-# Mechanism, measured 2026-09-07 (ca65 V2.18, homebrew cc65):
-#   ca65 writes an OPT_DATETIME option -- the assembly wall-clock second --
-#   into every object header (visible as `Data: <unix time>` in
-#   `od65 --dump-all`). ar65 copies that stamp into each member header and
-#   again into the archive index. So the stamp originates in ca65, not ar65:
-#   the objects are NOT reproducible either, which is the one point issue #97
-#   states the other way round.
+# MECHANISM, measured 2026-09-07 (ca65/ar65/od65 V2.18, homebrew cc65). Both
+# sources of variation are ca65's assembly time; ar65 contributes no clock of
+# its own:
+#   1. ca65 writes OPT_DATETIME -- the assembly wall-clock second -- into
+#      every object, as a 5-byte VARIABLE-LENGTH integer, 7 value bits per
+#      byte, low group first (`od65 --dump-all` prints it as `Data: <unix
+#      time>`). Decoded from build/data.o at 0-based offset 100 it matched
+#      the assembly second exactly in three separate objects.
+#   2. ar65's trailing index stores each member's FILE mtime, which for a
+#      fresh build is when ca65 wrote the object. Demonstrated in isolation:
+#      `touch`ing an unchanged .o and re-archiving changed 3 bytes, all of
+#      them inside the index.
+# ar65 stores and returns member data VERBATIM. Extracting a member 13 s
+# after archiving gave a byte-identical object, and re-archiving unchanged
+# objects 31 s later gave a byte-identical archive. Issue #97 attributes the
+# stamp to ar65 and says the member objects are reproducible; both are wrong,
+# and the second matters -- see the extraction trap below.
+#
+# HOW MANY BYTES DIFFER is set by how many 7-bit groups of the stamp differ,
+# i.e. which 128-second (then 16384-, then 2097152-second) boundaries the two
+# builds straddle. NOT by the elapsed interval. Measured:
 #   - six clean `make lib` runs gave two distinct polyval.a hashes, split
-#     exactly on the second boundary (four runs at t, two at t+1, matching
-#     within each group);
-#   - the t/t+1 pair differs in exactly 20 bytes for polyval.a's 10 members:
-#     one per member header plus one per index entry, each the low byte of the
-#     32-bit stamp. 20 is the ONE-SECOND case, not a constant -- a pair 238 s
-#     apart differs in 40 bytes (two stamp bytes per site);
+#     exactly on a second boundary (four at t=1788828363 matching, two at
+#     t+1 matching);
+#   - that t/t+1 pair differs in exactly 20 bytes for polyval.a's 10 members
+#     -- one low group byte per member's OPT_DATETIME plus one per index
+#     mtime -- with every byte going 0313 -> 0314 octal, i.e. 0x4B|0x80 ->
+#     0x4C|0x80, and 1788828363 mod 128 = 75 = 0x4B;
+#   - 20 is not a constant and does not track the interval. A pair 238 s
+#     apart differs in 40 bytes because it crosses a 128-boundary twice; a
+#     synthetic single-member pair only 2 s apart, straddling one, likewise
+#     differs in two stamp bytes rather than one. So "tolerate <= 20 differing
+#     bytes for builds within a second" is NOT a workaround -- two builds one
+#     second apart can straddle a group boundary too.
 #   - `build/polyval.prg` and `build/lib_main.prg` were identical across six
 #     clean builds spanning five second boundaries: ld65 does not propagate
 #     the stamp. `make dist` was byte-identical across three runs spanning two
@@ -891,15 +924,20 @@ check-no-tracked-artifacts:
 #     PRG and tarball hashes; an archive hash in a receipt will not reproduce
 #     and will look like a regression.
 #
-# If an archive comparison is ever genuinely wanted, compare the member SET
-# (`ar65 t`) plus per-member content, and note two traps that were measured,
-# not guessed:
-#   - `ar65 x` re-materialises the stamp into the extracted file, so hashing
-#     extracted members does NOT compare equal either (measured: each
-#     extracted .o differed in exactly the one OPT_DATETIME byte);
+# WHAT IS SAFE TO CHECK, and what this repo does check: the member NAME LIST
+# carries no timestamp. `tools/check_archive_members.sh` runs from every
+# archive recipe below and asserts `ar65 t` equals that rule's own
+# prerequisite list. It is timestamp-immune, so it cannot flake.
+#
+# If per-member CONTENT comparison is ever wanted on top of that, two traps,
+# both measured rather than guessed:
+#   - hashing EXTRACTED members does not compare equal across differently
+#     timed builds. Not because extraction adds anything -- it does not --
+#     but because the objects already differ: the OPT_DATETIME is inside the
+#     member data ar65 stored verbatim;
 #   - `od65 --dump-all` prints both that stamp and the *source* files'
-#     modification times, which are checkout-dependent; a dump comparison must
-#     filter both.
+#     modification times, which are checkout-dependent; a dump comparison
+#     must filter both.
 # Any such check must also fail loudly when `ar65`/`od65` are missing or the
 # member list comes back empty -- an empty member set otherwise compares equal
 # to an empty member set and the gate passes vacuously (the #86/#91 shape).

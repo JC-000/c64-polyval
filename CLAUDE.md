@@ -539,9 +539,10 @@ as historical reference and must not be edited. The active ABI is now
 
    **A byte-identity receipt may hash PRGs and the tarball, never a `.a`
    or a `.o`.** ca65 stamps the assembly wall-clock second into every
-   object header and ar65 copies it into the archive members and index,
-   so archives and objects are not byte-reproducible while the PRGs and
-   the tarball are (measured; issue #97). An archive hash in a receipt
+   object; ar65 stores members verbatim (so the stamp rides along) and
+   its index additionally records each object file's mtime. Archives and
+   objects are therefore not byte-reproducible, while the PRGs and the
+   tarball are (measured; issue #97). An archive hash in a receipt
    will fail to reproduce and will read as a regression. The measurement,
    and the traps in comparing archives some other way, are recorded in
    the `Makefile` block above `VERIFY_TARGETS`.
