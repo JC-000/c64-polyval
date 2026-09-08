@@ -706,6 +706,19 @@ Cleared as it lands; empty means S1/S2 are met for the current contract tag.
    PR#128 (#119) plus their earlier #126. Nobody coordinated the remedy; the
    findings propagated as *questions* and each repo measured its own answer.
 
+   **nist#170 asked here and already answered — by our own review, before
+   they filed it.** Their finding: twelve "links against that archive" rows
+   pull **zero** archive members, because their stub only `.include`s the
+   header and ca65 drops unreferenced imports, so every row would print
+   identically against an empty archive. Ours does not have that shape:
+   `test/consumer_stub_shipped.s` carries **21 unresolved imports** after
+   assembly and fails to link against a one-member archive. That is not a
+   lucky escape — it is the exact sabotage the #89/#94 reviewer ran when it
+   broke the first version of our composing-mode link test, which linked
+   loose objects and never put the archive on the command line at all. The
+   fix made the archive load-bearing; #170 is the same defect, found
+   independently in a sibling.
+
    **x25519#130/PR#147 asked here and answered N/A — structurally, not by
    luck.** Their defect: the public header used `.import` for names an
    APP_OWNED consumer defines, and `.import` of a name the including TU also
