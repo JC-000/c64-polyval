@@ -16,6 +16,16 @@ So this asserts the agreement instead of documenting it: every mktemp /
 mkdtemp call in tools/ must mint under a prefix that SCRATCH_TREES sweeps.
 It is a source scan, which cannot see a tree minted by some other means -- but
 it catches the drift that actually happened, twice.
+
+THIRD SHAPE, added for #87: a repo-root scratch path built by hand from `$$`
+rather than by mktemp -- `VAR=".${OUT}.tmp.$$"` is how build_release.sh's first
+cut named its temp tarball. It is the same defect (SIGKILL leaves it, `make
+clean` does not match it) and this scan was structurally blind to it, printing
+"all swept" while the file it could not see went unswept. The prefix such a
+name can be swept by is the LITERAL text before its first `$`: everything after
+is a runtime value, so a pattern can only key on what comes before. A name that
+begins with a variable expansion therefore has prefix "" and can never be
+covered, which is the correct answer -- it is unsweepable by construction.
 """
 import re, sys
 from pathlib import Path
@@ -43,7 +53,13 @@ def minting_sites():
             m = re.search(r'mktemp\s+-d\s+"\$ROOT/([A-Za-z0-9._-]+?)\.?X{3,}"', line)
             if m: sites.append((f.name, i, m.group(1) + ".")); continue
             m = re.search(r'mkdtemp\(\s*prefix\s*=\s*"([^"]+)"\s*,\s*dir\s*=\s*str\(ROOT\)', line)
-            if m: sites.append((f.name, i, m.group(1)))
+            if m: sites.append((f.name, i, m.group(1))); continue
+            # Hand-rolled `VAR="...$$..."` scratch path, repo-root-relative
+            # (a '/' means it is somewhere else and not ours to sweep).
+            m = re.match(r'\s*[A-Za-z_]\w*="([^"/]*\$\$[^"/]*)"\s*(?:#.*)?$', line)
+            if m:
+                literal = m.group(1)
+                sites.append((f.name, i, literal.split("$", 1)[0]))
     return sites
 
 def covered(prefix, pats):
@@ -60,7 +76,8 @@ def main():
             "using one; an empty result must not read as 'all covered'")
     bad = [(f,i,p) for f,i,p in sites if not covered(p, pats)]
     for f,i,p in sites:
-        print(f"  {f}:{i} mints {p}XXXXXX  {'swept' if covered(p,pats) else 'NOT SWEPT'}")
+        print(f"  {f}:{i} mints {p or '<no literal prefix>'}*  "
+              f"{'swept' if covered(p,pats) else 'NOT SWEPT'}")
     if bad:
         die(f"{len(bad)} scratch prefix(es) are minted but not in SCRATCH_TREES ({' '.join(pats)}) -- "
             f"a run killed with SIGKILL would leave a tree nothing removes")

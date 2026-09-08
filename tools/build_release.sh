@@ -64,10 +64,14 @@
 # Ordering (issue #87): every check runs before any write to a tracked
 #   file. The placeholder reset is applied to the STAGED copy of the
 #   notes, the tarball is built to a temp path, and the working-tree
-#   notes + c64-polyval-<tag>.tar.gz are written only at the very bottom,
-#   after the stamper is satisfied. A refused run therefore leaves the
-#   working tree exactly as it found it -- which is what "fail-closed"
-#   has to mean for a guard whose whole job is to refuse.
+#   notes + c64-polyval-<tag>.tar.gz are written only in the publish
+#   block at the very bottom, after the stamper is satisfied. A refused
+#   run therefore leaves the working tree exactly as it found it -- which
+#   is what "fail-closed" has to mean for a guard whose whole job is to
+#   refuse. The publish block itself is ordered placeholder-notes ->
+#   tarball -> stamped-notes so that an interruption inside it leaves a
+#   loudly unfinished state rather than a plausible-looking release; see
+#   the comment on that block.
 #
 # Make convenience target: `make dist VERSION=v0.2.0`.
 
@@ -230,28 +234,47 @@ MTIME="${RELEASE_DATE}T00:00:00Z"
 #      M docs/RELEASE_NOTES_v0.12.0.md
 #
 # The fix is ORDERING, not restoration: the placeholder reset rewrites the
-# STAGED copy and never the working-tree file, the placeholder-count guard
+# STAGED copy rather than the working-tree file, the placeholder-count guard
 # runs at reset time (before a tarball exists at all), and the tarball is
 # built to a temp path renamed onto $OUT only once every check has passed.
 # The #85 tag-drift guard's "a refusal touches nothing" property now holds
-# for the script as a whole.
+# for the script as a whole. The working-tree notes are still put through
+# placeholder form, but in the publish block at the bottom, where it is a
+# deliberate crash-visible marker rather than a pre-check mutation.
 STAGE_DIR="$(mktemp -d "/tmp/c64-polyval-release-XXXXXX")"
 
 # Temp tarball path. In the repo root rather than $STAGE_DIR so the final
 # publish is a same-directory rename, not a cross-filesystem copy.
-OUT_TMP=".${OUT}.tmp.$$"
+#
+# The NAME is load-bearing and must keep the `build-scratch.` prefix. This is
+# scratch state minted in the repo root, i.e. exactly #93's shape, and SIGKILL
+# catches no trap -- so it has to be a name `make clean` already sweeps
+# (SCRATCH_TREES = build-scratch.*). The first cut of this fix used
+# `.${OUT}.tmp.$$`, which nothing swept: `make clean` did not match it and
+# `make check-scratch-prefix` printed "all swept" because its scan only knew
+# the `mktemp -d "$ROOT/..."` and `mkdtemp(dir=ROOT)` shapes. Adversarial
+# review caught both halves. check_scratch_prefix.py now recognises this
+# `VAR="literal...$$..."` shape too, so the agreement is asserted rather than
+# described -- rename this and that gate goes red.
+OUT_TMP="build-scratch.release.$$.tar.gz"
 
 # EXIT alone leaves scratch state behind on a catchable signal. Bash does run
 # an EXIT trap on SIGINT, but SIGTERM was measured leaving the tree behind in
 # 1 of 2 attempts in the sibling case (#93, check_knob_staleness.sh); the #87
 # comment asks for the same closure here. INT TERM HUP closes the catchable
-# half. SIGKILL cannot be closed and would leave $OUT_TMP behind as an
-# untracked file -- visible in `git status` on purpose, not .gitignore'd.
+# half; SIGKILL cannot be closed, which is what the swept name is for.
+#
+# Each signal handler re-raises rather than `exit`ing: `exit 143` makes the
+# script look like it terminated NORMALLY with status 143, so a caller's
+# WIFSIGNALED/`$?` == -15 test can no longer tell a killed release from a
+# script that chose to fail. Clear the trap and kill ourselves with the same
+# signal instead, which is the portable idiom and preserves the exit status a
+# supervisor expects.
 cleanup() { rm -rf "$STAGE_DIR"; rm -f "$OUT_TMP"; }
 trap 'cleanup' EXIT
-trap 'cleanup; exit 130' INT
-trap 'cleanup; exit 143' TERM
-trap 'cleanup; exit 129' HUP
+trap 'cleanup; trap - INT ; kill -INT  $$' INT
+trap 'cleanup; trap - TERM; kill -TERM $$' TERM
+trap 'cleanup; trap - HUP ; kill -HUP  $$' HUP
 
 STAGE_ROOT="${STAGE_DIR}/${PREFIX}"
 mkdir -p "$STAGE_ROOT/src/include" "$STAGE_ROOT/docs"
@@ -415,15 +438,35 @@ text = text.replace('SIZE_PLACEHOLDER', size)
 pathlib.Path(dst).write_text(text)
 PY
 
-# --- Publish: the only two writes to tracked files ----------------------
-# Both happen after every check, back to back, with nothing between them that
-# can fail. `cp` onto the existing notes keeps that file's mode; `mv` within
-# the repo root is a rename. A signal landing exactly between the two would
-# leave a stamped-notes/old-tarball pair -- visible in `git status` and fixed
-# by re-running -- which is the residual this ordering cannot remove without a
-# journal, and is strictly smaller than the window it replaces.
-cp "$STAMPED" "$NOTES_REL"
+# --- Publish: the only writes to tracked files, and their ORDER ---------
+# All three happen after every check has passed. The order is chosen so that
+# an interruption anywhere inside this block leaves a LOUD state, not a state
+# that reads as a finished release.
+#
+# The first cut of this fix wrote the stamped notes and then renamed the
+# tarball. Adversarial review widened that gap with a `sleep 4` and sent
+# SIGTERM: the notes came out fully stamped with ZERO placeholder tokens, the
+# on-disk tarball was still the PREVIOUS run's, and the correct tarball had
+# been deleted by the TERM handler -- `git status` then showed exactly what a
+# successful release shows, with an Attestation describing an artifact that no
+# longer existed. That is a smaller window than the one it replaced, but a
+# SILENT one, and the old window was always loud. Trading loud for silent is
+# a regression in failure-mode quality however much smaller the window gets.
+#
+# So: reset the working-tree notes to the STAGED placeholder form FIRST, then
+# rename the tarball, then stamp. `$SIZE`/`$SHA` were computed from
+# `$OUT_TMP` above, so the values stamped in step 3 describe exactly the bytes
+# step 2 published. Interrupted after step 1 or step 2, the notes carry
+# SHA256_PLACEHOLDER / SIZE_PLACEHOLDER -- the same unmistakable signature the
+# pre-fix window left, and one a re-run consumes cleanly (the reset step finds
+# exactly one of each and proceeds). There is no interruption point in this
+# block that yields a plausible-looking release.
+#
+# `cp` onto the existing notes keeps that file's mode; `mv` within the repo
+# root is a rename.
+cp "$STAGE_ROOT/$NOTES_REL" "$NOTES_REL"
 mv "$OUT_TMP" "$OUT"
+cp "$STAMPED" "$NOTES_REL"
 
 echo "Built ${OUT}"
 echo "  Path:   ${REPO_ROOT}/${OUT}"
