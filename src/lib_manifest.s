@@ -87,6 +87,21 @@
 ; entry-point label and the next top-level label in the -Ln label file
 ; (for COMPACT, whose cold code is placed last in its segment on
 ; purpose, the delta runs to the segment end from the -m map instead).
+;
+; BASIS NOTE (issue #95). tools/check_footprints.py now asserts these
+; values on every `make verify`, and its measurand is the SUM OF THE
+; PLACED SPANS of the LIB_POLYVAL_* `ro` segments -- c64-lib-contract
+; PR#200's basis -- linking the archive member set with a consumer stub
+; as the driver. That is NOT identical to the spans quoted below, which
+; were taken with lib_main.o linked in and therefore include its 114 B
+; LIB_POLYVAL_VERIFY_CODE: 6609/16063/2774 there against 6495/15949/2660
+; from the guard, on the AEAD arms. The guard's figure is the right one
+; for §6.4 (it measures the archive's members and nothing else); the
+; spans below are kept as the historical record of how the declared
+; values were first derived. Every declared value bounds BOTH, so the
+; difference changes no number here -- but do not "reconcile" the two by
+; editing a declared value to match the larger span, which would loosen
+; a bound for no reason.
 ; =============================================================================
 
 .ifndef LIB_MANIFEST_S_INCLUDED
