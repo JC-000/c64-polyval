@@ -43,6 +43,13 @@ below anchors OUTSIDE the manifest, in two directions:
     correct.
   * DEPTH, as a cross-check. An invocation not inside any `.if` (the include
     guard aside) must be present in ALL SIX arms.
+  * THE PROSE under the table, not only its rows. The paragraph restating the
+    AES tables' archive membership in English carried exactly the same #103
+    staleness the rows did, and reverting only it left this check green -- so
+    the row grammar was proving nothing about the prose, which is now the
+    likelier drift site precisely because the rows are watched. Its two
+    archive lists and its count word are reconciled against the same
+    lib-polyval-* target set.
 
 The residual gap, stated rather than papered over: the doc is a human artifact
 in the same commit, so a change made to BOTH sides at once reconciles by
@@ -220,6 +227,48 @@ def doc_tables():
         die(f"{DOC.name}: parsed no rows out of '## Enumerated tables' -- an empty anchor must not "
             f"read as 'everything reconciles'")
     return rows
+
+NUMWORD = {"one":1,"two":2,"three":3,"four":4,"five":5,"six":6,"seven":7,"eight":8}
+
+def doc_prose_archives():
+    """The archive lists in the PROSE below the table, as two sets and a count.
+
+    doc_tables() reads ONLY the `## Enumerated tables` rows. The paragraph
+    under them restates the same archive membership in English, and it carried
+    exactly the same #103 staleness the rows did -- "all three AEAD archives",
+    and a two-item POLYVAL-only list. Reverting only that paragraph left this
+    check green, so the row grammar proved nothing about the prose; and the
+    prose is now the LIKELIER drift site precisely because the rows are
+    watched. Hence this leg.
+
+    Mechanical, like doc_arms(): a count word, and the backticked `*.a`
+    basenames inside each of the two parentheticals. No other prose is
+    interpreted. Either sentence going missing is a hard failure -- a check
+    that silently skips the thing it watches is the shape being fixed here.
+    """
+    m = re.search(r"^##\s*Enumerated tables\s*$(.*?)^##\s", DOC.read_text(), re.M | re.S)
+    if not m: die(f"{DOC.name}: no '## Enumerated tables' section -- the outside anchor is gone")
+    body = m.group(1)
+    a = re.search(r"member of all\s+([a-z]+)\s+AEAD archives\s*\(([^)]*)\)", body)
+    if not a:
+        die(f"{DOC.name}: no 'member of all <count> AEAD archives (...)' sentence under "
+            f"'## Enumerated tables' -- the prose half of the archive-membership claim "
+            f"cannot be reconciled, and must not be skipped")
+    n = re.search(r"POLYVAL-only archives\s*\(([^)]*)\)", body)
+    if not n:
+        die(f"{DOC.name}: no 'POLYVAL-only archives (...)' sentence under "
+            f"'## Enumerated tables' -- the prose half of the archive-membership claim "
+            f"cannot be reconciled, and must not be skipped")
+    if a.group(1) not in NUMWORD:
+        die(f"{DOC.name}: 'all {a.group(1)} AEAD archives' -- {a.group(1)!r} is not a count word "
+            f"this check knows, so the count cannot be reconciled")
+    aead  = set(re.findall(r"`([a-z0-9.-]+\.a)`", a.group(2)))
+    noaes = set(re.findall(r"`([a-z0-9.-]+\.a)`", n.group(1)))
+    for what, s in (("AEAD", aead), ("POLYVAL-only", noaes)):
+        if not s:
+            die(f"{DOC.name}: the {what} parenthetical names no `*.a` archive -- an empty list "
+                f"must not read as 'reconciles'")
+    return NUMWORD[a.group(1)], aead, noaes
 
 def const_vals():
     """PRECALC_REGION_* / PRECALC_SHARED_* numeric values from the canonical macro."""
@@ -401,6 +450,26 @@ def main():
                 f"{sorted(got)} -- missing from {sorted(want-got)}, unexpected in {sorted(got-want)}")
     print(f"  §8.4 arm sets       every enumerated table appears in exactly the arms "
           f"{DOC.name} says it does")
+
+    # (6) the PROSE half of the same claim. The rows above are watched; the
+    # paragraph restating them in English was not, and carried the identical
+    # #103 staleness. Reverting only that paragraph used to leave this green.
+    count, prose_aead, prose_noaes = doc_prose_archives()
+    want_aead  = {a for a, lbl in by_archive.items() if lbl.endswith("AEAD")}
+    want_noaes = {a for a, lbl in by_archive.items() if lbl.endswith("NO_AES")}
+    if prose_aead != want_aead:
+        die(f"{DOC.name}: the prose calls the AEAD archives {sorted(prose_aead)}, but the "
+            f"lib-polyval-* targets build {sorted(want_aead)} -- missing "
+            f"{sorted(want_aead - prose_aead)}, unexpected {sorted(prose_aead - want_aead)}")
+    if prose_noaes != want_noaes:
+        die(f"{DOC.name}: the prose calls the POLYVAL-only archives {sorted(prose_noaes)}, but "
+            f"the lib-polyval-* targets build {sorted(want_noaes)} -- missing "
+            f"{sorted(want_noaes - prose_noaes)}, unexpected {sorted(prose_noaes - want_noaes)}")
+    if count != len(want_aead):
+        die(f"{DOC.name}: the prose says 'all {count} AEAD archives' but names {len(prose_aead)} "
+            f"and the Makefile builds {len(want_aead)}")
+    print(f"  §8.4 prose          the paragraph's archive lists match the "
+          f"lib-polyval-* targets ({count} AEAD, {len(want_noaes)} POLYVAL-only)")
     if bad: die(f"{bad} assertion(s) failed -- see the rows above")
     print(f"check_composing_mode: suppression removes every bare name and keeps every prefixed one, "
           f"all 6 arms; {len(doc)} enumerated table(s) reconcile with {DOC.name}; "

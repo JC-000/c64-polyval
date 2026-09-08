@@ -416,16 +416,17 @@ $(LIB_DIR): | $(BUILD_DIR)
 # preserves incremental builds.
 #
 # `$(strip)` normalises whitespace so a differently-spaced but equivalent
-# invocation does not force a rebuild. The `clean` goal is excluded so a
-# `make clean` does not recreate build/ just to drop a stamp in it -- which
-# also covers the recursive `$(MAKE) clean` in the lib-polyval-* targets.
+# invocation does not force a rebuild. The `clean` and `clean-build` goals are
+# both excluded so a clean does not recreate build/ just to drop a stamp in it
+# -- which also covers the recursive `$(MAKE) clean-build` in the
+# lib-polyval-* and consumer-check-noaes targets.
 #
 # Limitation: the stamp round-trips through the shell, so a define containing
 # a single quote would not compare correctly. ca65 -D values are symbols and
 # integers, so this does not arise in practice.
 CONTRACT_STAMP = $(BUILD_DIR)/.ca65flags
 
-ifeq ($(filter clean,$(MAKECMDGOALS)),)
+ifeq ($(filter clean clean-build,$(MAKECMDGOALS)),)
   CONTRACT_FLAGS_NOW := $(strip $(CA65FLAGS))
   CONTRACT_FLAGS_WAS := $(strip $(shell cat $(CONTRACT_STAMP) 2>/dev/null))
   ifneq ($(CONTRACT_FLAGS_NOW),$(CONTRACT_FLAGS_WAS))
@@ -571,22 +572,30 @@ $(LIB_DIR)/polyval-gcmsiv.a: $(LIB_AEAD_OBJS) | $(LIB_DIR) $(LIB_SHIPPED)
 
 # Per-profile POLYVAL-only archives. Recursive `make` invocations pin
 # POLYVAL_PROFILE for the .o build so the resulting archive only contains
-# the matching primitive. `make clean` happens first to avoid mixing .o
+# the matching primitive. `make clean-build` happens first to avoid mixing .o
 # files from a prior `make` (which may have been built under the other
 # profile or against a stale POLYVAL_PROFILE_OBJ set).
+#
+# `clean-build`, NOT `clean`: `clean` also sweeps the repo-wide
+# $(SCRATCH_TREES) glob, so these recipes deleted every OTHER tool's
+# build-scratch.* -- including the private tree of whichever tool INVOKED
+# them. Fixing only the tools' own `make ... clean` call (which is what the
+# first cut of this did) left the hazard live, because the arm targets they
+# invoke recurse into `clean` themselves. All eight recursive sites are
+# `clean-build`; see the `clean-build` target below.
 lib-polyval-long:
-	$(MAKE) clean
+	$(MAKE) clean-build
 	$(MAKE) POLYVAL_PROFILE=long POLYVAL_NO_AES=1 $(LIB_DIR)/polyval-long.a
 
 lib-polyval-short:
-	$(MAKE) clean
+	$(MAKE) clean-build
 	$(MAKE) POLYVAL_PROFILE=short POLYVAL_NO_AES=1 $(LIB_DIR)/polyval-short.a
 
 # The memory-bound configuration (issue #51). Same clean-and-pin shape; the
 # archive ships the rolled 4-bit Shoup multiply and the same 256-byte
 # polyval_htable as SHORT.
 lib-polyval-compact:
-	$(MAKE) clean
+	$(MAKE) clean-build
 	$(MAKE) POLYVAL_PROFILE=compact POLYVAL_NO_AES=1 $(LIB_DIR)/polyval-compact.a
 
 # SHORT full-AEAD archive (SPEC §6.1 target for the SHORT+AEAD member-set
@@ -599,11 +608,11 @@ lib-polyval-compact:
 # POLYVAL_NO_AES is deliberately NOT set here — this variant ships AES and
 # the GCM-SIV glue, so the manifest must enumerate aes_sbox / aes_inv_sbox.
 lib-polyval-gcmsiv-short:
-	$(MAKE) clean
+	$(MAKE) clean-build
 	$(MAKE) POLYVAL_PROFILE=short $(LIB_DIR)/polyval-gcmsiv-short.a
 
 lib-polyval-gcmsiv-compact:
-	$(MAKE) clean
+	$(MAKE) clean-build
 	$(MAKE) POLYVAL_PROFILE=compact $(LIB_DIR)/polyval-gcmsiv-compact.a
 
 $(LIB_DIR)/polyval-long.a: $(LIB_POLYVAL_LONG_OBJS) | $(LIB_DIR) $(LIB_SHIPPED)
@@ -687,20 +696,24 @@ $(CONSUMER_PRG): $(BUILD_DIR)/consumer_stub.o $(LIB_OBJECTS) $(LIB_CFG) | $(BUIL
 #
 # Runs against EVERY POLYVAL-only archive because data.o is archived into
 # each of them; a leak can regress on any profile independently.
+#
+# `clean-build`, not `clean` -- see the `clean-build` target below. These
+# three sites are the ones that shipped the hazard to master: a
+# consumer-check-noaes run deleted every sibling tool's build-scratch.*.
 consumer-check-noaes:
-	$(MAKE) clean
+	$(MAKE) clean-build
 	$(MAKE) POLYVAL_PROFILE=long POLYVAL_NO_AES=1 $(LIB_DIR)/polyval-long.a
 	$(CA65) -I $(SRC_DIR) -D POLYVAL_PROFILE=2 -D LIB_POLYVAL_NO_AES=1 \
 	    -o $(BUILD_DIR)/consumer_stub_noaes.o $(TEST_DIR)/consumer_stub_noaes.s
 	$(LD65) -C $(LIB_CFG) -o $(BUILD_DIR)/consumer_stub_noaes_long.prg \
 	    $(BUILD_DIR)/consumer_stub_noaes.o $(LIB_DIR)/polyval-long.a
-	$(MAKE) clean
+	$(MAKE) clean-build
 	$(MAKE) POLYVAL_PROFILE=short POLYVAL_NO_AES=1 $(LIB_DIR)/polyval-short.a
 	$(CA65) -I $(SRC_DIR) -D POLYVAL_PROFILE=1 -D LIB_POLYVAL_NO_AES=1 \
 	    -o $(BUILD_DIR)/consumer_stub_noaes.o $(TEST_DIR)/consumer_stub_noaes.s
 	$(LD65) -C $(LIB_CFG) -o $(BUILD_DIR)/consumer_stub_noaes_short.prg \
 	    $(BUILD_DIR)/consumer_stub_noaes.o $(LIB_DIR)/polyval-short.a
-	$(MAKE) clean
+	$(MAKE) clean-build
 	$(MAKE) POLYVAL_PROFILE=compact POLYVAL_NO_AES=1 $(LIB_DIR)/polyval-compact.a
 	$(CA65) -I $(SRC_DIR) -D POLYVAL_PROFILE=3 -D LIB_POLYVAL_NO_AES=1 \
 	    -o $(BUILD_DIR)/consumer_stub_noaes.o $(TEST_DIR)/consumer_stub_noaes.s
@@ -748,6 +761,19 @@ clean:
 # call THIS, which removes only the tree they own. Plain `clean` keeps
 # sweeping SCRATCH_TREES -- that is the backstop for a run killed with
 # SIGKILL, and it must stay repo-wide to do that job.
+#
+# THE TOOLS' OWN CALL IS NOT THE WHOLE STORY, and the first cut of this
+# stopped there. Those tools invoke the lib-polyval-* arm targets, and
+# consumer-check-noaes runs the same shape -- all of which recursed into
+# plain `clean` themselves and reached the repo-wide glob one level down.
+# Measured against a TOOL INVOCATION rather than against the call that had
+# been changed: with a planted build-scratch.SIBLING/keepme,
+# `python3.13 tools/check_composing_mode.py` exited 0 and the planted tree
+# was gone; likewise check_footprints.py and `make consumer-check-noaes`,
+# the last of which is on master. So ALL EIGHT recursive sites take
+# `clean-build`: the five lib-polyval-* targets and the three in
+# consumer-check-noaes. Anything added here that recurses into `make` must
+# do the same.
 clean-build:
 	rm -rf $(BUILD_DIR)
 
