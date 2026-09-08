@@ -578,6 +578,24 @@ Cleared as it lands; empty means S1/S2 are met for the current contract tag.
    span-basis and object-sum basis agree here; adopters whose ro segments are
    aligned will see the two diverge, which is the point of the clause.
 
+   **Method note, 2026-09-08 — assert the BRANCH before committing watch work.**
+   A watch-cycle commit went onto a detached HEAD and was orphaned: an agent's
+   worktree had vanished, its git commands resolved against the main checkout,
+   and it left that checkout detached at a feature branch's head. The cycle
+   then committed there. `git push origin master` pushed the *unchanged*
+   master ref and exited 0, while `git log --oneline -1` printed the new
+   commit — so it read as a successful push. Found only because a later
+   `git rev-parse` showed master one commit behind where it had been left, and
+   recovered by cherry-picking the orphan (`87c8352` → `92c49ff`).
+
+   Two lessons. **A push that succeeds is not evidence your commit was
+   pushed** — `git push` reports on the ref it was given, not on HEAD. And
+   `git log -1` after a push describes HEAD, which is exactly the wrong thing
+   to look at. Verify with `git rev-list --left-right --count
+   origin/master...master`, or check `git rev-parse --abbrev-ref HEAD` before
+   committing. Same shape as every fixture failure this cycle: the check ran,
+   and it was measuring something other than what it claimed.
+
    *(Method note: the first attempt to check for fill printed "no fill"
    from an `awk` that had parsed **zero** rows — the placed-segment lines
    break column assumptions when a segment name is long. Count the rows
