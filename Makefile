@@ -164,9 +164,10 @@ endif
 # default, a silent mismatch. The nist#104 explicit-pattern-rule caveat
 # (ZP TU built by a generic pattern rule missing the scoped variable) is
 # therefore inapplicable: the pattern rule delivering to everything is the
-# point. The lib-polyval-{long,short,compact} recursive $(MAKE) invocations inherit
-# both variables automatically (command-line-origin variables propagate to
-# sub-makes; measured — see API.md §9.5).
+# point. All FIVE recursive $(MAKE) wrappers inherit both variables
+# automatically — lib-polyval-long, -short, -compact, -gcmsiv-short and
+# -gcmsiv-compact (command-line-origin variables propagate to sub-makes;
+# measured per wrapper, in both directions — see API.md §9.5).
 CONTRACT_DEFINES    ?=
 CONTRACT_ZP_DEFINES ?=
 CA65FLAGS += $(CONTRACT_DEFINES) $(CONTRACT_ZP_DEFINES)

@@ -295,11 +295,27 @@ BRACE = re.compile(r"lib-polyval-(gcmsiv-)?\{([a-z,]+)\}")
 # HAND-MAINTAINED, and that is a real limitation: a new file naming targets is
 # unwatched until someone adds it here. Scanning every tracked file instead is a
 # different change, and it would have to cope with the forms this grammar does
-# NOT read -- the Makefile's own comments (a brace list there can sit near a
-# POLYVAL_NO_AES mention while correctly naming a different set), the pipe form
-# `polyval_(long|short)` in src/exports.inc, and the archive brace
-# `polyval-{long,short,compact}.a` in src/lib_manifest.s. Those four files were
-# corrected by hand in the same sweep and are NOT guarded by anything.
+# NOT read -- the pipe form `polyval_(long|short)` in src/exports.inc, and the
+# archive brace `polyval-{long,short,compact}.a` in src/lib_manifest.s. Those
+# files were corrected by hand in the same sweep and are NOT guarded by
+# anything.
+#
+# The Makefile is not in the list either, and the reason first written here was
+# WRONG -- it said a Makefile brace list "can sit near a POLYVAL_NO_AES mention
+# while correctly naming a different set", so the file "would fail on a true
+# statement". Measured, adding "Makefile" gives the OPPOSITE failure:
+#   Makefile: mentions POLYVAL_NO_AES but has no `lib-polyval-{...}` list
+#   within 150 characters of it
+# None of its three grammar-matched lists is anywhere near any of its 24
+# POLYVAL_NO_AES mentions -- NEAR would have to rise from 150 to 221 before one
+# of them read as the claim. (Its one five-target list is not matched at all:
+# the character class above is [a-z,] and `gcmsiv-short` has a hyphen.)
+#
+# The second, more useful reason: guarding the Makefile would not have caught
+# the defect that motivated this note. The expansion leg below only asserts the
+# names are REAL TARGETS, never that the set is COMPLETE, so a comment naming
+# three of the five recursive $(MAKE) wrappers passes it. Both limits are
+# honest; neither is a proximity accident.
 BRACE_FILES = ("docs/precalc-tables.md", "API.md", "README.md", "CLAUDE.md",
                "src/precalc_manifest.s")
 NEAR = 150
