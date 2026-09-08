@@ -9,8 +9,11 @@
 # then computed incorrect POLYVAL. Wrong results from a green build.
 #
 # src/zp_config.s now asserts, at ASSEMBLY time, that every slot lies inside
-# $00-$ff and that no two slots' byte ranges overlap. This script is the pin
-# on those assertions. It has to exist because the assertions' normal state is
+# $02-$ff and that no two slots' byte ranges overlap. ($02, not $00: $00/$01
+# are the 6510 data-direction register and processor port, so a slot parked
+# there re-banks the machine on every store -- the same silent-corruption
+# class, found by review of the first fix.) This script is the pin on those
+# assertions. It has to exist because the assertions' normal state is
 # "silent": a green `make` says nothing about whether they were evaluated.
 #
 # What it drives:
@@ -27,11 +30,18 @@
 #                     first fix, which had an `addr >= 0` floor.
 #   GREEN cases       the default build and every CONTRACT_ZP_DEFINES example
 #                     in CLAUDE.md must still assemble.
+#   MAKE LEG          `make lib` with an aliased override must fail too. Every
+#                     leg above invokes ca65 on src/zp_config.s itself, which
+#                     proves the assertions work but NOT that the build still
+#                     routes CONTRACT_ZP_DEFINES to the TU carrying them. This
+#                     leg is the only one that would go red if it stopped.
 #
 # Assembly time, not link time: `make lib CONTRACT_ZP_DEFINES=...` runs ca65
 # and ar65 and never ld65, so a `.assert ..., lderror` would not fire on the
-# build that mints the bad archive. Hence `error`, and hence this script
-# invokes ca65 directly rather than going through a link.
+# build that mints the bad archive. Hence `error` severity, and hence the
+# assertion legs above drive ca65 directly instead of going through a link --
+# the one leg that does build (MAKE LEG) is checking the build wiring, not
+# the assertions.
 set -e
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
