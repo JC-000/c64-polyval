@@ -51,6 +51,11 @@ them yourself from the change's own prose and say which ones you chose.
   create there. Any tracked file you modify must be restored **from a copy you
   took first**, never `git checkout`, and you must say that you did. Leave
   `git status` clean and rebuild `build/` if you dirtied it.
+- **Do not put those copies under `build-scratch.*` or any path `make clean`
+  sweeps.** `SCRATCH_TREES` matches that prefix, so a reproduction that runs
+  `make clean` destroys its own backups — measured, by an agent mid-repro who
+  then had to reverse two edits by hand. Put them in the session scratchpad,
+  outside the swept prefixes. These two rules read as compatible and are not.
 - **Never** `pkill -f x64sc`, `killall x64sc`, or any broad-pattern process
   kill — this machine is shared with other agents' test VICE instances. Kill
   by PID or not at all. Most reviews need no VICE.
