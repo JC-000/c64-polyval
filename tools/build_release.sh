@@ -212,19 +212,22 @@ elif git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
       fi
     else
       if [[ "$INTERRUPTED" == "1" ]]; then
-        echo "error: $NOTES_REL carries placeholder Attestation rows and is the" >&2
-        echo "       only file that differs from tag '$TAG'. That is the" >&2
-        echo "       signature of a 'make dist' interrupted mid-publish (#87):" >&2
-        echo "       the notes were reset for staging and never stamped back." >&2
-        echo "       Restore them, then re-run -- this is the first remedy:" >&2
-        echo "         git checkout $TAG -- $NOTES_REL && make dist VERSION=$TAG" >&2
+        # Remedy first, caveat second, override last. This is read at 2am by
+        # someone whose release just died mid-publish; the line they need is
+        # the first one, not the ninth.
+        echo "error: a 'make dist' was interrupted mid-publish (#87)." >&2
+        echo "       FIX:  git checkout $TAG -- $NOTES_REL && make dist VERSION=$TAG" >&2
+        echo "       THEN: check $OUT -- an interrupt after the tarball rename" >&2
+        echo "             leaves the NEW tarball in place, which the restored" >&2
+        echo "             Attestation may no longer describe." >&2
+        echo "" >&2
+        echo "       Why: $NOTES_REL carries placeholder Attestation rows and is" >&2
+        echo "       the only file differing from tag '$TAG' -- it was reset for" >&2
+        echo "       staging and never stamped back." >&2
         echo "       ALLOW_TAG_DRIFT=1 also repairs it and reproduces the same" >&2
-        echo "       bytes, because the tarball stages the notes in placeholder" >&2
-        echo "       form regardless; its warning about the artifact not" >&2
-        echo "       matching the release does not apply to this case." >&2
-        echo "       Check $OUT too: an interrupt after the rename leaves the" >&2
-        echo "       NEW tarball in place, one an unstamped Attestation does" >&2
-        echo "       not describe." >&2
+        echo "       bytes (the tarball stages the notes in placeholder form" >&2
+        echo "       either way); its warning about the artifact not matching" >&2
+        echo "       the release does not apply here." >&2
         exit 1
       fi
       echo "error: tag '$TAG' exists, but staged files differ from it." >&2
