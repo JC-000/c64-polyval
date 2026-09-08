@@ -322,9 +322,15 @@ Cleared as it lands; empty means S1/S2 are met for the current contract tag.
    `MAX_PT_LEN` is correctly absent from the three NO_AES archives, which
    ship no `gcm_siv.o`. All seven values are unchanged from v0.11.0.
 
+   **Version-bump sites verified consistent 2026-09-08**, so the bump is a
+   clean 11 → 12 in exactly three places and nothing needs reconciling first:
+   `VERSION` says `0.11.0`, `src/lib_version.s` builds an object exporting
+   `MAJOR 0 / MINOR 11 / PATCH 0 / ABI 1`, and `API.md` §9.1's value table
+   rows read the same. Checked because v0.4.1 bumped the file and left the
+   table stale, and v0.3.0 forgot the file entirely for a whole cycle.
+
    Release gate, in order: board cleared → version bump in `VERSION`,
-   `src/lib_version.s` **and `API.md` §9.1's value table** (v0.4.1 bumped the
-   file and left the table stale) → notes with the seven rows → `make clean &&
+   `src/lib_version.s` **and `API.md` §9.1's value table** → notes with the seven rows → `make clean &&
    make dist` → reproducibility re-run → full VICE suite on all three profiles
    → a U64E confirmation run (JC-000 offered the hardware; it is confirmatory,
    not diagnostic, since the PRGs are byte-identical) → release PR →
