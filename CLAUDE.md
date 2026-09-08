@@ -368,6 +368,16 @@ invisibility exactly. So: add it in both places. This cannot be automated by
 asserting the two lists are equal, which would restore the tautology for a
 two-place delete.
 
+**Only members COMMON TO ALL SEVEN ARCHIVES belong in the floor.** It is
+asserted on every archive, so an AEAD-only member put there breaks the
+POLYVAL-only builds: adding `tables.o` to `LIB_CONTRACT_MEMBERS` leaves
+`make lib` green and then fails `make lib-polyval-long` with
+`MISSING (required by LIB_CONTRACT_MEMBERS): tables.o` (measured). An
+AEAD-only member belongs in `LIB_AEAD_OBJS`, not the floor. This is a clause
+rather than a check because the failure is loud, immediate and
+self-correcting — the wrong choice cannot ship quietly, it just costs a
+build — whereas the omission the floor exists to catch is silent.
+
 **Flag-set staleness — handled since issue #58; the manual `make clean` between
 profile switches is no longer required.** `data.o` and `lib_manifest.o` contents
 are conditional on `POLYVAL_PROFILE` (and `lib_manifest.o` additionally on

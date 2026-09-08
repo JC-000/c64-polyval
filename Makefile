@@ -213,7 +213,10 @@ LIB_CORE_OBJS = $(BUILD_DIR)/lib_version.o \
 # list is the point rather than the defect -- see #93/#95/#99 for the usual
 # case. It is a FLOOR, not an inventory: adding a member here without adding
 # it to LIB_CORE_OBJS goes red, adding one there without adding it here
-# merely leaves it uncovered.
+# merely leaves it uncovered. And only members COMMON TO ALL SEVEN ARCHIVES
+# belong here -- the floor is asserted on every one, so an AEAD-only member
+# put here fails the POLYVAL-only builds (measured with tables.o: `make lib`
+# green, `make lib-polyval-long` red). AEAD-only members go in LIB_AEAD_OBJS.
 #
 # Each name earns its place from the contract, not from convenience:
 #   lib_version.o       SPEC §1  version + ABI equates
