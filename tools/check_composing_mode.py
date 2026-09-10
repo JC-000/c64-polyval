@@ -446,6 +446,29 @@ def selftest():
             "conditional would be excused as one")
     checks += 1
 
+    # 3b. The BARE/PREFIXED families themselves, over the real export names.
+    #     Both sides of the prefixed comparison come from ONE pattern, so a
+    #     collapsed pattern gives {} == {} -- the shape the d_pre guard now
+    #     anchors. This proves the patterns still match what they are for.
+    for obj, name, fam in (
+        ("lib_version.o",      "LIB_VERSION_MAJOR",              "BARE"),
+        ("lib_version.o",      "LIB_POLYVAL_VERSION_MAJOR",      "PREFIXED"),
+        ("lib_version.o",      "LIB_POLYVAL_ABI_VERSION",        "PREFIXED"),
+        ("precalc_manifest.o", "LIB_PRECALC_aes_sbox_SIZE",      "BARE"),
+        ("precalc_manifest.o", "LIB_POLYVAL_PRECALC_aes_sbox_SIZE", "PREFIXED"),
+    ):
+        pat = (BARE if fam == "BARE" else PREFIXED)[obj]
+        if not pat.match(name):
+            die(f"POSITIVE CONTROL FAILED: {fam}[{obj!r}] does not match {name!r}, a real "
+                f"export of that object. A family pattern that has stopped matching makes its "
+                f"whole comparison vacuous -- and the prefixed one compares two sets built "
+                f"from itself, so it would read as 'unchanged'")
+    # and the two families must not overlap, or suppression would look partial
+    if BARE["lib_version.o"].match("LIB_POLYVAL_VERSION_MAJOR"):
+        die("NEGATIVE CONTROL FAILED: the BARE pattern matches a PREFIXED name, so a correctly "
+            "suppressed build would report bare names surviving")
+    checks += 1
+
     # 4. doc_arms' two disjoint grammars. A cell read as the WRONG kind
     #    reconciles against the wrong arm set and still passes.
     if doc_arms("`polyval-gcmsiv.a`, `polyval-gcmsiv-short.a`", "<control>") != \
@@ -511,6 +534,23 @@ def main():
                 if not d_bare:
                     notes.append("NO BARE NAMES IN THE DEFAULT BUILD -- nothing to suppress, so the "
                                  "suppression assertion below would pass vacuously")
+                # The other half of that guard, and it was missing. `d_pre !=
+                # n_pre` compares two sets built from the SAME pattern, so a
+                # PREFIXED[obj] that matches nothing gives {} == {} and passes
+                # -- while the summary line goes on claiming the run "keeps
+                # every prefixed one".
+                #
+                # Measured: collapsing PREFIXED["lib_version.o"] to a pattern
+                # matching nothing printed "prefixed  0 ->  0   ok" for all six
+                # arms and exited 0. precalc_manifest.o is anchored downstream
+                # (its prefixed names feed `union`, and leg (4)'s
+                # `never = set(doc) - union` goes red), but lib_version.o's
+                # prefixed set feeds NOTHING -- two definitions, one
+                # self-comparison and a print. This is that anchor.
+                if not d_pre:
+                    notes.append("NO PREFIXED NAMES IN THE DEFAULT BUILD -- the prefixed-surface "
+                                 "comparison below is {} == {}, which passes without checking "
+                                 "anything; the pattern has stopped matching")
                 if n_bare:  notes.append(f"{len(n_bare)} bare name(s) SURVIVED suppression: {sorted(n_bare)[:3]}")
                 if d_pre != n_pre:
                     notes.append(f"prefixed surface CHANGED: {len(d_pre)} -> {len(n_pre)}, "
