@@ -116,6 +116,42 @@ WORK=$(mktemp -d "${TMPDIR:-/tmp}/archmembers.XXXXXX") || \
 cleanup() { rm -rf "$WORK"; }
 trap cleanup EXIT INT TERM HUP
 
+# --- POSITIVE CONTROL ------------------------------------------------------
+# Both assertions below are string comparisons. A string comparison that has
+# quietly stopped comparing passes exactly like a correct archive, and no
+# mutation of the LIBRARY can reveal that -- the code under test here is
+# `grep -qxF` and `cmp`. So drive both over synthetic member lists first, and
+# refuse to report on the real archive if either fails to notice a defect.
+#
+# Arms 2 and 3 are this script's own MEASURED regressions, promoted from
+# comments into assertions: an archive holding lib_versionXo once satisfied a
+# floor asking for lib_version.o (missing -F), and the declared-set comparison
+# is the half that caught a member silently not archived.
+SELF=$WORK/selftest
+mkdir -p "$SELF"
+printf 'a.o\nb.o\n' > "$SELF/actual"
+
+# 1. a name that is ABSENT must be reported absent.
+if grep -qxF -- "c.o" "$SELF/actual"; then
+  fail "POSITIVE CONTROL: the floor matcher found 'c.o' in a list that does not contain it -- it is not comparing, so 'contract floor present' below would mean nothing"
+fi
+# 2. '.' must not match any character (the -F property, measured).
+printf 'lib_versionXo\n' > "$SELF/dotted"
+if grep -qxF -- "lib_version.o" "$SELF/dotted"; then
+  fail "POSITIVE CONTROL: 'lib_version.o' matched 'lib_versionXo' -- the floor is being matched as a regex, so a wrongly-named member would satisfy it"
+fi
+# 3. a name that IS present must be found (a matcher that always fails would
+#    pass arms 1 and 2 while asserting nothing).
+if ! grep -qxF -- "a.o" "$SELF/actual"; then
+  fail "POSITIVE CONTROL: the floor matcher did not find 'a.o' in a list containing it -- it always fails, so arms 1 and 2 prove nothing"
+fi
+# 4. the declared-set comparison must notice a surplus member.
+printf 'a.o\n' > "$SELF/expected"
+if cmp -s "$SELF/expected" "$SELF/actual"; then
+  fail "POSITIVE CONTROL: cmp called a 1-member list equal to a 2-member list -- the declared-set assertion is dead"
+fi
+rm -rf "$SELF"
+
 # ar65 t is the actual member list. Capture its exit status explicitly: a
 # failing ar65 that printed nothing must not be read as "the archive is empty".
 if ! ar65 t "$ARCHIVE" > "$WORK/actual.raw" 2> "$WORK/err"; then
@@ -164,4 +200,4 @@ if ! cmp -s "$WORK/expected" "$WORK/actual"; then
   exit 1
 fi
 
-echo "check_archive_members: $ARCHIVE -- $(wc -l < "$WORK/actual" | tr -d ' ') members, as declared, contract floor present"
+echo "check_archive_members: $ARCHIVE -- $(wc -l < "$WORK/actual" | tr -d ' ') members, as declared, contract floor present, 4 positive controls fired"
