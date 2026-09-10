@@ -89,20 +89,67 @@ def _assigned(line, py):
     return m.group(1) if m else None
 
 
+# Repo-root variables a tool may name. build_release.sh uses REPO_ROOT, the
+# python tools use ROOT; both denote this repo's root, so both are ours to
+# sweep. rev-120 D6: keying on `$ROOT` alone made `"$REPO_ROOT/..."` invisible.
+ROOTVAR = r'(?:ROOT|REPO_ROOT)'
+# Tokens that make a name per-RUN. `$$` was the only one recognised, so
+# `$RANDOM` (and $BASHPID, and a pid interpolated in python) walked past.
+PERRUN = r'(?:\$\$|\$RANDOM|\$BASHPID|\$\{RANDOM\})'
+
+
 def scan_text(name, text):
-    """(file, line, var, prefix) for every repo-root scratch tree *text* mints."""
+    """(file, line, var, prefix) for every repo-root scratch tree *text* mints.
+
+    THE SHAPE LIST IS THE WHOLE GATE, and it is not adversary-proof -- stated
+    plainly because the alternative is a gate that reads as one. Adversarial
+    review (rev-120 D6) enumerated ten shapes the first three patterns missed;
+    those are covered below. A scratch path minted in some ELEVENTH shape,
+    under a name not in EXPECTED_SITES, is still invisible.
+
+    Two things bound that residue. Any site this scan DOES recognise is
+    prefix-checked regardless of its variable name, so a new unswept path in a
+    known shape is caught without being declared anywhere. And every name in
+    EXPECTED_SITES must be bound exactly once on a line this scan recognised,
+    so an existing site cannot be rewritten into an unrecognised shape.
+
+    What remains is a genuinely NEW path in a NEW shape. This is a drift
+    detector, and both incidents it was built from (#93, #99) were drift.
+    """
     sites, py = [], name.endswith(".py")
     for i, line in enumerate(text.splitlines(), 1):
         if line.lstrip().startswith("#"): continue
-        m = re.search(r'mktemp\s+-d\s+"\$ROOT/([A-Za-z0-9._-]+?)\.?X{3,}"', line)
+
+        # --- shell: mktemp -d "<root>/PREFIX.XXXX" (either quote style) -----
+        m = re.search(r'mktemp\s+(?:-d|--directory)\s+["\']?\$\{?%s\}?/'
+                      r'([A-Za-z0-9._-]+?)\.?X{3,}["\']?' % ROOTVAR, line)
         if m: sites.append((name, i, _assigned(line, py), m.group(1) + ".")); continue
-        m = re.search(r'mkdtemp\(\s*prefix\s*=\s*"([^"]+)"\s*,\s*dir\s*=\s*str\(ROOT\)', line)
+
+        # --- shell: mktemp -d -p "<root>" PREFIX.XXXX ----------------------
+        m = re.search(r'mktemp\s+(?:[^\n]*?\s)?(?:-p|--tmpdir=?)\s*["\']?\$\{?%s\}?["\']?\s+'
+                      r'["\']?([A-Za-z0-9._-]+?)\.?X{3,}["\']?' % ROOTVAR, line)
+        if m: sites.append((name, i, _assigned(line, py), m.group(1) + ".")); continue
+
+        # --- python: mkdtemp / TemporaryDirectory, kwargs in either order ---
+        if re.search(r'(?:mkdtemp|TemporaryDirectory)\s*\(', line) and \
+           re.search(r'dir\s*=\s*str\(ROOT\)|dir\s*=\s*ROOT\b', line):
+            mp = re.search(r'prefix\s*=\s*"([^"]+)"', line)
+            sites.append((name, i, _assigned(line, py), mp.group(1) if mp else ""))
+            continue
+
+        # --- python: ROOT / f"prefix.{...}" --------------------------------
+        m = re.search(r'ROOT\s*/\s*f?"([^"/{]*)\{', line)
         if m: sites.append((name, i, _assigned(line, py), m.group(1))); continue
-        # Hand-rolled `VAR="...$$..."` scratch path, repo-root-relative
-        # (a '/' means it is somewhere else and not ours to sweep).
-        m = re.match(r'\s*([A-Za-z_]\w*)="([^"/]*\$\$[^"/]*)"\s*(?:#.*)?$', line)
+
+        # --- shell: hand-rolled per-run path, repo-root-relative ------------
+        # Quoted or bare, with or without a leading './'. A '/' elsewhere means
+        # it lives somewhere else and is not ours to sweep. The sweepable
+        # prefix is the literal text before the first '$'.
+        m = re.match(r'\s*(?:export\s+|local\s+|readonly\s+|declare\s+|typeset\s+)?'
+                     r'([A-Za-z_]\w*)=("?)(?:\./)?([^"/\s]*%s[^"/\s]*)\2\s*(?:#.*)?$'
+                     % PERRUN, line)
         if m:
-            sites.append((name, i, m.group(1), m.group(2).split("$", 1)[0]))
+            sites.append((name, i, m.group(1), m.group(3).split("$", 1)[0]))
     return sites
 
 
@@ -129,10 +176,27 @@ def assignments(name, text, py):
     EXACTLY ONCE, and that binding is a minting site the scan recognised". A
     rebinding in any shape -- seen or unseen -- now has to be deliberate.
     """
-    pat = (re.compile(r"^\s*%s\s*=(?!=)" % re.escape(name)) if py
-           else re.compile(r"^\s*(?:export\s+|local\s+|readonly\s+)?%s=" % re.escape(name)))
-    return [i for i, line in enumerate(text.splitlines(), 1)
-            if not line.lstrip().startswith("#") and pat.match(line)]
+    n = re.escape(name)
+    if py:
+        pats = [re.compile(r"^\s*%s\s*=(?!=)" % n)]
+    else:
+        # rev-120 N2 enumerated six shell shapes the first cut missed, each
+        # verified to rebind the variable while the gate stayed green:
+        # declare/typeset, printf -v, read, eval, and the := default.
+        pats = [
+            re.compile(r"^\s*(?:export\s+|local\s+|readonly\s+|declare\s+|typeset\s+)?%s=" % n),
+            re.compile(r"\bprintf\b[^\n]*?\s-v\s+%s\b" % n),
+            re.compile(r"\bread\b[^\n#]*\b%s\b" % n),
+            re.compile(r"\beval\b[^\n#]*\b%s=" % n),
+            re.compile(r":\s*\$\{%s:?=" % n),
+            re.compile(r"\bmapfile\b[^\n#]*\b%s\b|\breadarray\b[^\n#]*\b%s\b" % (n, n)),
+        ]
+    out = []
+    for i, line in enumerate(text.splitlines(), 1):
+        if line.lstrip().startswith("#"): continue
+        if any(p.search(line) if p.pattern[0] != "^" else p.match(line) for p in pats):
+            out.append(i)
+    return out
 
 
 def minting_sites():
@@ -172,6 +236,47 @@ SELFTEST_FIXTURES = [
     ("selftest.py",
      'sd = Path(tempfile.mkdtemp(prefix="unswept-selftest.", dir=str(%s)))\n' % _R,
      "sd", "unswept-selftest."),
+    # --- shapes added for rev-120 D6; one fixture per pattern, so a narrowed
+    # --- pattern names itself rather than hiding behind a working sibling.
+    ("selftest.sh",
+     'SELFTEST_P=%s(mktemp -d -p "%s%s" unswept-selftest.XXXXXX)\n' % (_D, _D, _R),
+     "SELFTEST_P", "unswept-selftest."),
+    ("selftest.sh",
+     'SELFTEST_L=%s(mktemp --directory "%s%s/unswept-selftest.XXXXXX")\n' % (_D, _D, _R),
+     "SELFTEST_L", "unswept-selftest."),
+    ("selftest.sh",
+     'SELFTEST_R=%s(mktemp -d "%sREPO_ROOT/unswept-selftest.XXXXXX")\n' % (_D, _D),
+     "SELFTEST_R", "unswept-selftest."),
+    ("selftest.sh",
+     'SELFTEST_U=unswept-selftest.%s%s.tmp\n' % (_D, _D),
+     "SELFTEST_U", "unswept-selftest."),
+    ("selftest.sh",
+     'SELFTEST_DOT="./unswept-selftest.%s%s.tmp"\n' % (_D, _D),
+     "SELFTEST_DOT", "unswept-selftest."),
+    ("selftest.sh",
+     'SELFTEST_RND="unswept-selftest.%sRANDOM"\n' % _D,
+     "SELFTEST_RND", "unswept-selftest."),
+    ("selftest.py",
+     'td = tempfile.TemporaryDirectory(prefix="unswept-selftest.", dir=str(%s))\n' % _R,
+     "td", "unswept-selftest."),
+    ("selftest.py",
+     'rd = Path(tempfile.mkdtemp(dir=str(%s), prefix="unswept-selftest."))\n' % _R,
+     "rd", "unswept-selftest."),
+]
+
+# rev-120 N2: six shell shapes that REBIND a variable, each verified to keep
+# the gate green before assignments() was extended. One control arm each, for
+# the same reason as above.
+_N = "SELFTEST_BIND"
+ASSIGN_FIXTURES = [
+    ('plain',      '%s="x.%s%s"' % (_N, _D, _D)),
+    ('export',     'export %s="x"' % _N),
+    ('declare',    'declare %s="x"' % _N),
+    ('typeset',    'typeset %s="x"' % _N),
+    ('printf -v',  'printf -v %s "%%s" "x"' % _N),
+    ('read',       'read %s <<< "x"' % _N),
+    ('eval',       'eval "%s=x"' % _N),
+    (':= default', ': %s{%s:=x}' % (_D, _N)),
 ]
 
 
@@ -195,7 +300,26 @@ def selftest(pats):
             die(f"POSITIVE CONTROL FAILED: `{prefix}*` is an unswept prefix but covered() called it "
                 f"swept against SCRATCH_TREES ({' '.join(pats)}). The coverage test is dead, so "
                 "'all swept' below means nothing")
-    return len(SELFTEST_FIXTURES)
+
+    # Every binding shape must be seen by assignments(), or a rebinding in that
+    # shape silently points the real scratch path somewhere unswept.
+    if not ASSIGN_FIXTURES:
+        die("the assignment-shape corpus is empty -- a positive control that asserts nothing "
+            "certifies nothing")
+    for label, line in ASSIGN_FIXTURES:
+        if _N not in line:
+            die(f"POSITIVE CONTROL FAILED: the {label} fixture did not reconstruct a binding of "
+                f"{_N} -- a runtime split has stopped producing the shape it must test")
+        if assignments(_N, line + "\n", False) != [1]:
+            die(f"POSITIVE CONTROL FAILED: assignments() did not see the {label} binding "
+                f"`{line}`. A rebinding in that shape would point the real scratch path "
+                f"somewhere unswept while every name check below still passed (#107 round 2)")
+    # and it must not see a binding that is not there
+    if assignments(_N, 'echo "%s is not bound here"\n' % _N, False):
+        die("NEGATIVE CONTROL FAILED: assignments() reported a binding in a line that only "
+            "mentions the name -- it would refuse every correct script")
+
+    return len(SELFTEST_FIXTURES) + len(ASSIGN_FIXTURES)
 
 
 def main():

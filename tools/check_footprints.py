@@ -38,6 +38,37 @@ def run(cmd, what, env=None):
         die(f"{what} failed (exit {r.returncode}): {tail[0]}")
     return r.stdout
 
+# The `ro` segments that carry shipped bytes. Independent of the classifier,
+# which is the point -- see the N1 note in segments_from_cfg().
+RO_FLOOR = {
+    "LIB_POLYVAL_AES_RODATA",
+    "LIB_POLYVAL_AES_CODE",
+    "LIB_POLYVAL_GCMSIV_CODE",
+    "LIB_POLYVAL_LONG_CODE",
+    "LIB_POLYVAL_SHORT_CODE",
+    "LIB_POLYVAL_COMPACT_CODE",
+}
+
+
+def classify_segments(txt):
+    """(ro, bss, seen) for every LIB_POLYVAL_* segment declared in *txt*.
+
+    Pure, so the self-test drives the same classifier the real run does.
+    """
+    body = txt[txt.index("SEGMENTS"):] if "SEGMENTS" in txt else txt
+    ro, bss, seen = set(), set(), set()
+    for decl in body.split(";"):
+        m = re.search(r"(LIB_POLYVAL_[A-Z0-9_]+)\s*:", decl)
+        if not m: continue
+        name = m.group(1); seen.add(name)
+        t = re.search(r"type\s*=\s*([a-z]+)", decl)
+        if not t:
+            die(f"segment {name} has no readable `type` -- refusing to guess; "
+                f"an unclassified segment is the one that silently leaves the sum")
+        (ro if t.group(1) == "ro" else bss).add(name)
+    return ro, bss, seen
+
+
 def segments_from_cfg():
     """Classify EVERY LIB_POLYVAL_* segment in lib_only.cfg by its `type`.
 
@@ -48,20 +79,29 @@ def segments_from_cfg():
     declaration whose type cannot be read is fatal: an unclassifiable segment
     is exactly the one that would go missing from the sum.
     """
-    txt = CFG.read_text()
-    body = txt[txt.index("SEGMENTS"):] if "SEGMENTS" in txt else txt
-    ro, bss, seen = set(), set(), set()
-    for decl in body.split(";"):
-        m = re.search(r"(LIB_POLYVAL_[A-Z0-9_]+)\s*:", decl)
-        if not m: continue
-        name = m.group(1); seen.add(name)
-        t = re.search(r"type\s*=\s*([a-z]+)", decl)
-        if not t:
-            die(f"segment {name} in {CFG.name} has no readable `type` -- refusing to guess; "
-                f"an unclassified segment is the one that silently leaves the sum")
-        (ro if t.group(1) == "ro" else bss).add(name)
+    ro, bss, seen = classify_segments(CFG.read_text())
     if not seen: die(f"parsed no LIB_POLYVAL_* segments from {CFG} -- the cfg format changed")
     if not ro:   die(f"parsed no `type = ro` LIB_POLYVAL_* segments from {CFG}")
+
+    # rev-120 N1. The `lost` cross-check in measure() is `n in ro and n not in
+    # parsed_names` -- so it SHRINKS WITH `ro`. Narrowing the classifier here
+    # instead of the map parser reproduced the D5 damage byte for byte:
+    # classifying RODATA as bss gave "6 ro, 7 bss", LONG AEAD resident
+    # 6495 -> 5973, every row `ok`, exit 0. A check whose expectation is
+    # derived from the thing it checks cannot see that.
+    #
+    # So the ro membership of the segments that carry the bytes is asserted
+    # against a NAMED FLOOR, which does not move when the classifier does.
+    # A floor, not an equality: adding a new `ro` segment is fine, losing one
+    # of these is not. LIB_POLYVAL_VERIFY_CODE is deliberately absent -- it is
+    # lib-verify scaffolding, not shipped surface.
+    missing_ro = sorted(RO_FLOOR - ro)
+    if missing_ro:
+        die(f"these segments are not classified `ro` in {CFG.name}: {', '.join(missing_ro)}. "
+            f"They carry the bytes RESIDENT is the sum of, so misclassifying one silently "
+            f"REMOVES it from the measurement -- and a smaller measurement makes "
+            f"'declared >= measured' easier to satisfy. Either the cfg changed deliberately "
+            f"(update RO_FLOOR) or the type classifier has narrowed")
     return ro, bss, seen
 
 def parse_map(text):
@@ -258,6 +298,22 @@ def selftest():
         die(f"POSITIVE CONTROL FAILED: parse_map returned {rows} for a known ld65 -m "
             "fixture. A narrowed row parser reports a SMALLER resident footprint, which "
             "'declared >= measured' is happier to satisfy, not less")
+    checks += 1
+
+    # 2c. the cfg type classifier (rev-120 N1). Narrowing HERE rather than in
+    #     parse_map reproduced D5 exactly, because the `lost` cross-check is
+    #     built from `ro` and shrinks with it. The RO_FLOOR assertion is the
+    #     real anchor; this proves the classifier still reads both types.
+    c_ro, c_bss, c_seen = classify_segments(
+        "SEGMENTS {\n"
+        "    LIB_POLYVAL_AES_RODATA: load = MAIN, type = ro, align = $100;\n"
+        "    LIB_POLYVAL_BSS:        load = MAIN, type = bss;\n"
+        "}\n")
+    if c_ro != {"LIB_POLYVAL_AES_RODATA"} or c_bss != {"LIB_POLYVAL_BSS"} or len(c_seen) != 2:
+        die(f"POSITIVE CONTROL FAILED: classify_segments returned ro={c_ro}, bss={c_bss} for a "
+            "known two-segment cfg. A classifier that moves a segment out of `ro` removes its "
+            "bytes from RESIDENT silently, and the map cross-check cannot see it because that "
+            "check is built from `ro` itself")
     checks += 1
 
     # 3. default-segment emission. The gate asserts no member emits into the
