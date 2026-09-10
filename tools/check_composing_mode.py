@@ -381,7 +381,66 @@ PREFIXED = {
 }
 SUFFIXES = ("SIZE","REGION","SHARED")
 
+def selftest():
+    """Positive control over the four matchers this gate's verdict rests on.
+
+    This file is unusually well guarded against an EMPTY parse -- ~18 explicit
+    dies, each earned by a review. What none of them can catch is a matcher
+    that still matches SOMETHING but no longer matches the shape that matters:
+    a narrowed regex reconciles a smaller set against a smaller set and every
+    row still prints. Rebuilding the library cannot reveal that, because the
+    code under test is a regex over source and prose.
+
+    Drives the same module-level patterns and the same doc_arms() the real run
+    uses, over synthetic inputs in the real formats.
+    """
+    checks = 0
+
+    # 1. The brace lists. D11 is the precedent: `lib-polyval-{long,short}` sat
+    #    four lines from a corrected sentence, claiming two NO_AES targets
+    #    against the Makefile's three, and every other leg was green on it.
+    got = [(m.group(1), m.group(2)) for m in BRACE.finditer(
+        "lib-polyval-{long,short,compact} and lib-polyval-gcmsiv-{short,compact}")]
+    if got != [(None, "long,short,compact"), ("gcmsiv-", "short,compact")]:
+        die(f"POSITIVE CONTROL FAILED: BRACE parsed {got} out of a known pair of brace "
+            "lists. A narrowed pattern reconciles fewer claims against fewer targets and "
+            "still prints a row for each (D11)")
+    checks += 1
+
+    # 2. The §8.4 invocation parse. `parsed no LIB_PRECALC_TABLE invocation`
+    #    covers zero; it does not cover a pattern that has stopped seeing SOME.
+    m = INVOKE.match('LIB_PRECALC_TABLE "aes_sbox", 256, aes_sbox, polyval,')
+    if not m or m.groups()[:3] != ("aes_sbox", "256", "aes_sbox"):
+        die(f"POSITIVE CONTROL FAILED: INVOKE did not parse a well-formed "
+            f"LIB_PRECALC_TABLE line (got {m.groups() if m else None}) -- the "
+            "enumeration this gate reconciles is built by this pattern")
+    checks += 1
+
+    # 3. The include-guard exclusion, both directions. Over-matching here marks
+    #    a real invocation conditional and drops it from the enumeration.
+    if not GUARD.match(".ifndef PRECALC_TABLE_INCLUDED"):
+        die("POSITIVE CONTROL FAILED: GUARD did not match a real include guard -- "
+            "guarded blocks would be read as genuine conditionals")
+    if GUARD.match(".ifdef LIB_POLYVAL_NO_AES"):
+        die("NEGATIVE CONTROL FAILED: GUARD matched `.ifdef LIB_POLYVAL_NO_AES`, "
+            "which is a genuine conditional, not an include guard -- a real "
+            "conditional would be excused as one")
+    checks += 1
+
+    # 4. doc_arms' two disjoint grammars. A cell read as the WRONG kind
+    #    reconciles against the wrong arm set and still passes.
+    if doc_arms("`polyval-gcmsiv.a`, `polyval-gcmsiv-short.a`", "<control>") != \
+       ("archives", {"polyval-gcmsiv.a", "polyval-gcmsiv-short.a"}):
+        die("POSITIVE CONTROL FAILED: doc_arms misread a backticked archive cell")
+    if doc_arms("LONG and COMPACT", "<control>") != ("profiles", {"long", "compact"}):
+        die("POSITIVE CONTROL FAILED: doc_arms misread an uppercase profile cell")
+    checks += 1
+
+    return checks
+
+
 def main():
+    controls = selftest()
     for tool in ("ca65","ld65","od65","make"):
         if not shutil.which(tool): die(f"{tool} not on PATH")
 
@@ -584,7 +643,8 @@ def main():
     if bad: die(f"{bad} assertion(s) failed -- see the rows above")
     print(f"check_composing_mode: suppression removes every bare name and keeps every prefixed one, "
           f"all 6 arms; {len(doc)} enumerated table(s) reconcile with {DOC.name}; "
-          f"the shipped surface links against each AEAD archive in the composing mode")
+          f"the shipped surface links against each AEAD archive in the composing mode; "
+          f"{controls} positive control group(s) fired")
 
 if __name__ == "__main__":
     main()
