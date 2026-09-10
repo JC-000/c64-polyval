@@ -106,6 +106,35 @@ def scan_text(name, text):
     return sites
 
 
+def assignments(name, text, py):
+    """Every line that BINDS *name*, in any shape at all.
+
+    Deliberately broad and independent of the three minting-shape regexes
+    above. That independence is the point: it is what lets this see a binding
+    the minting scan cannot.
+
+    #107 ROUND 2. Keying the expectation on the variable NAME was not enough,
+    and the first fix's claim -- "a count is restorable by a decoy, a name is
+    not" -- was FALSE. A decoy under the SAME name restores it:
+
+        OUT_TMP="build-scratch.decoy.$$.txt"                  <- swept, seen
+        OUT_TMP=$(printf %s "unswept-real.$RANDOM.tar.gz")    <- real, unseen
+
+    Measured: "6 minting site(s), all swept ... 3 positive control(s) fired",
+    exit 0, while the real temp tarball was neither swept nor seen. The name
+    was present, so the name check passed; the LAST binding is what the script
+    actually uses, and it was invisible.
+
+    So the invariant is no longer "the name appears" but "the name is bound
+    EXACTLY ONCE, and that binding is a minting site the scan recognised". A
+    rebinding in any shape -- seen or unseen -- now has to be deliberate.
+    """
+    pat = (re.compile(r"^\s*%s\s*=(?!=)" % re.escape(name)) if py
+           else re.compile(r"^\s*(?:export\s+|local\s+|readonly\s+)?%s=" % re.escape(name)))
+    return [i for i, line in enumerate(text.splitlines(), 1)
+            if not line.lstrip().startswith("#") and pat.match(line)]
+
+
 def minting_sites():
     """(file, line, var, prefix) for every scratch tree tools/ creates in the repo root."""
     sites = []
@@ -196,6 +225,31 @@ def main():
             "-- update EXPECTED_SITES deliberately -- or it now mints in a shape this scan cannot see, which "
             "is how this gate passes without ever looking at the file it must sweep (#87 round-2 review, D6). "
             "A site under a NEW name does not substitute for a missing one (#107)")
+    # #107 round 2: every expected name must be bound EXACTLY ONCE, and that
+    # binding must be the minting site the scan saw. A same-name decoy binds it
+    # twice; the original #107 attack binds it once in a shape the scan cannot
+    # see. Both are caught here, and this scan is independent of the three
+    # minting-shape regexes, so it does not shrink when they do.
+    for fname, want in sorted(EXPECTED_SITES.items()):
+        fp = ROOT/"tools"/fname
+        if not fp.is_file():
+            die(f"{fname} is named in EXPECTED_SITES but does not exist -- update it deliberately")
+        text, py = fp.read_text(), fname.endswith(".py")
+        seen_lines = {(v, i) for f, i, v, _p in sites if f == fname}
+        for var in sorted(want):
+            binds = assignments(var, text, py)
+            if len(binds) != 1:
+                die(f"{fname}: `{var}` is bound on {len(binds)} line(s) {binds}, expected exactly 1. "
+                    f"The LAST binding is the one the script uses, so a second one -- in any shape, "
+                    f"seen by this scan or not -- can point the real scratch path somewhere "
+                    f"unswept while the first keeps this gate green (#107 round 2)")
+            if (var, binds[0]) not in seen_lines:
+                die(f"{fname}:{binds[0]}: `{var}` is bound here, but this scan did not recognise "
+                    f"that line as a scratch-minting site. Either it stopped minting -- update "
+                    f"EXPECTED_SITES deliberately -- or it now mints in a shape this scan cannot "
+                    f"see, which is exactly how a gate reports 'all swept' about a path it never "
+                    f"looked at (#87 round-2 review D6, #107)")
+
     bad = [(f,i,p) for f,i,_v,p in sites if not covered(p, pats)]
     for f,i,var,p in sites:
         print(f"  {f}:{i} {var or '<unbound>'} mints {p or '<no literal prefix>'}*  "

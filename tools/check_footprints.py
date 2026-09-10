@@ -163,10 +163,30 @@ def measure(bd, driver, defines, ro):
     run(["ca65","-I","src",*defines,"-o",str(bd/"_fp_drv.o"),driver], f"ca65 {driver}")
     run(["ld65","-C","src/lib_only.cfg","-m",str(bd/"_fp_map.txt"),"-Ln",str(bd/"_fp_lbl.txt"),
          "-o",str(bd/"_fp.prg"),str(bd/"_fp_drv.o"),*[str(bd/o) for o in objs]], "ld65")
-    rows = parse_map((bd/"_fp_map.txt").read_text())
+    raw_map = (bd/"_fp_map.txt").read_text()
+    rows = parse_map(raw_map)
     if not rows: die("parsed 0 segment rows from the ld65 map -- an empty parse must never read as a zero footprint")
     hits = [(n,a,s) for n,a,s in rows if n in ro]
     if not hits: die(f"no `ro` LIB_POLYVAL_* segment in the link (saw {len(rows)} rows) -- a zero here would be a false pass")
+
+    # rev-120 D5. `hits` being non-empty is NOT enough: a parse_map that
+    # narrowed to drop some rows still leaves others, so `hits` is truthy, no
+    # guard fires, and RESIDENT is simply SMALLER -- which "declared >=
+    # measured" is happier to satisfy, not less. Measured: excluding RODATA
+    # rows from the parser took LONG AEAD from 6495 to 5973, silently losing
+    # LIB_POLYVAL_AES_RODATA's 522 B, and all six arms printed `ok`.
+    #
+    # So cross-check the parse against the RAW TEXT, which is independent of
+    # the row regex: a segment the cfg declares `ro`, whose name appears in the
+    # map, must have parsed into a row.
+    parsed_names = {n for n, _a, _s in rows}
+    lost = sorted(n for n in ro if n in raw_map and n not in parsed_names)
+    if lost:
+        die(f"these `ro` segments appear in the ld65 map but did not parse into rows: "
+            f"{', '.join(lost)} -- the map parser has narrowed, and every byte in them is "
+            f"silently missing from RESIDENT. A smaller measurement makes 'declared >= "
+            f"measured' EASIER to satisfy, so this cannot be left to the comparison")
+
     resident = sum(s for _,_,s in hits)
 
     labs = parse_labels((bd/"_fp_lbl.txt").read_text())
@@ -222,6 +242,22 @@ def selftest():
         die(f"POSITIVE CONTROL FAILED: parse_labels returned {labs}. Either the "
             "-Ln format stopped being recognised or the `@` cheap-local exclusion "
             "broke -- COLD is measured off these labels")
+    checks += 1
+
+    # 2b. ld65 -m segment-row parsing (rev-120 D5). The gate's own docstring
+    #     names this failure and the first cut did not cover it. A RODATA row
+    #     is in the fixture on purpose: excluding exactly those was the
+    #     mutation that silently dropped 522 B while every row printed `ok`.
+    rows = parse_map(
+        "Name                   Start     End    Size  Align\n"
+        "----------------------------------------------------\n"
+        "LIB_POLYVAL_CODE      00A000  00A3FF  000400  00001\n"
+        "LIB_POLYVAL_AES_RODATA 00A400  00A609  00020A  00001\n")
+    if rows != [("LIB_POLYVAL_CODE", 0xA000, 0x400),
+                ("LIB_POLYVAL_AES_RODATA", 0xA400, 0x20A)]:
+        die(f"POSITIVE CONTROL FAILED: parse_map returned {rows} for a known ld65 -m "
+            "fixture. A narrowed row parser reports a SMALLER resident footprint, which "
+            "'declared >= measured' is happier to satisfy, not less")
     checks += 1
 
     # 3. default-segment emission. The gate asserts no member emits into the

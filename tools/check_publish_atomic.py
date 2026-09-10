@@ -172,35 +172,63 @@ def command_substitutions(text):
     they run inside double quotes too. Only single quotes suppress them, so
     single-quoted runs are skipped rather than descended into.
     """
-    out, i, n, sq = [], 0, len(text), False
+    ROUND2 = None  # see the two corrections below
+    out, i, n, sq, dq = [], 0, len(text), False, False
     while i < n:
         c = text[i]
-        if c == "'":
+        # ROUND-2 CORRECTION (a). This used to toggle `sq` unconditionally.
+        # A single quote INSIDE double quotes is a literal character, and the
+        # substitution around it still runs, so
+        #     echo "'$(cp "$STAMPED" "$NOTES_REL")'"
+        # made the scanner treat the whole region as single-quoted and skip
+        # it -- and that shape really does write the file under bash. Quote
+        # state now mirrors segments(), which had it right all along.
+        if c == "'" and not dq:
             sq = not sq; i += 1; continue
+        if c == '"' and not sq:
+            dq = not dq; i += 1; continue
         if sq:
             i += 1; continue
         if c == "\\":
             i += 2; continue
-        if text.startswith("$(", i):
+        # ROUND-2 CORRECTION (b): process substitution. `>(tee "$NOTES_REL")`
+        # and `<(...)` run commands exactly as `$( )` does, and
+        #     echo x > >(tee "$NOTES_REL")
+        # went green -- the round-5 "an allowed prefix launders a write"
+        # family again, through a construct the first cut did not model.
+        opener = None
+        for tok in ("$(", ">(", "<("):
+            if text.startswith(tok, i):
+                opener = tok; break
+        if opener:
             depth, j = 1, i + 2
             start = j
+            isq = idq = False
             while j < n:
-                if text[j] == "'":
+                ch = text[j]
+                if ch == "'" and not idq:
+                    isq = not isq
+                elif ch == '"' and not isq:
+                    idq = not idq
+                elif ch == "\\":
                     j += 1
-                    while j < n and text[j] != "'":
-                        j += 1
-                elif text[j] == "\\":
-                    j += 1
-                elif text.startswith("$(", j):
-                    depth += 1; j += 1
-                elif text[j] == ")":
-                    depth -= 1
-                    if depth == 0:
-                        break
+                elif not isq:
+                    if text.startswith("$(", j) or text.startswith(">(", j) or text.startswith("<(", j):
+                        depth += 1; j += 1
+                    elif ch == "(":
+                        depth += 1
+                    elif ch == ")":
+                        depth -= 1
+                        if depth == 0:
+                            break
                 j += 1
             if j < n and depth == 0:
                 out.append(text[start:j]); i = j + 1; continue
-            i += 2; continue
+            # An UNTERMINATED substitution is not a pass. It means the command
+            # continues onto the next line (a line-continued `$(`), which this
+            # line-at-a-time scan cannot see the end of.
+            out.append(text[i + 2:])
+            i = n; continue
         if c == "`":
             j = text.find("`", i + 1)
             if j == -1:
@@ -310,6 +338,26 @@ SELFTEST_MUST_FLAG = [
      "round 5 -- an allowed cp-as-source as the prefix"),
     ('echo done > "$NOTES_REL"',
      "redirection into a tracked path"),
+    # --- round 2, all found by adversarial review of the first cut ---------
+    ("""echo "'$(cp "$STAMPED" "$NOTES_REL")'\"""",
+     "round 2 -- a literal ' inside double quotes; the substitution still runs"),
+    ('echo x > >(tee "$NOTES_REL")',
+     "round 2 -- process substitution"),
+    ('cat "$STAMPED" > >(dd of="$NOTES_REL")',
+     "round 2 -- process substitution behind a redirect"),
+    # D4: ALLOWED could be loosened by ADDING a shape, and no entry above used
+    # an in-place editor -- so `(r'sed\\s.*', ...)` let the pre-#87 in-place
+    # stamper straight through while the self-test still reported all controls
+    # firing. These four are the in-place writers that matter; a new ALLOWED
+    # shape that admits any of them now goes red.
+    ('sed -i "" "s/SHA256_PLACEHOLDER/$SHA/" "$NOTES_REL"',
+     "D4 -- in-place sed, the pre-#87 stamper"),
+    ('perl -i -pe "s/X/Y/" "$NOTES_REL"',
+     "D4 -- in-place perl"),
+    ('python3 -c "open(\'x\',\'w\')" "$NOTES_REL"',
+     "D4 -- a tracked path handed to an interpreter"),
+    ('dd if="$STAMPED" of="$NOTES_REL"',
+     "D4 -- dd writing the tracked path"),
 ]
 
 SELFTEST_MUST_PASS = [
