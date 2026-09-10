@@ -389,7 +389,8 @@ endif
         lib-polyval-gcmsiv-compact consumer-check \
         consumer-check-noaes consumer-check-shipped run clean dist verify \
         check-no-tracked-artifacts check-footprints check-scratch-prefix \
-        check-composing-mode clean-build check-zp-slots check-publish-atomic
+        check-composing-mode clean-build check-zp-slots check-publish-atomic \
+        check-harness-routing
 .DEFAULT_GOAL := all
 
 all: $(PRG) $(LABELS)
@@ -945,6 +946,18 @@ check-zp-slots:
 check-publish-atomic:
 	@python3.13 $(TOOLS_DIR)/check_publish_atomic.py
 
+# --- every device request goes through the harness (2026-09-10 audit) ------
+# Source scan, no build. The harness is the single chokepoint where chunking,
+# /Temp hygiene and DeviceLock live, so a fleet-wide mitigation lands in one
+# repo instead of six. A direct transport.write_memory()/load_code() call, an
+# upload verb, or a hardware-dispatching manager reaches around all three at
+# once. Nothing else here can observe it: the suite passes identically
+# whether a write was routed or not, and the damage (a wedged shared C64U,
+# ~2 weeks to recover) lands on a device this repo never touches in CI.
+# Carries its own positive control -- see the header of the script.
+check-harness-routing:
+	@sh $(TOOLS_DIR)/check_harness_routing.sh
+
 check-no-tracked-artifacts:
 	@files=$$(git ls-files) || { \
 	  echo "check-no-tracked-artifacts: 'git ls-files' failed" >&2; exit 1; }; \
@@ -1080,6 +1093,7 @@ check-no-tracked-artifacts:
 # member list comes back empty -- an empty member set otherwise compares equal
 # to an empty member set and the gate passes vacuously (the #86/#91 shape).
 VERIFY_TARGETS = check-no-tracked-artifacts check-scratch-prefix check-zp-slots check-publish-atomic \
+                 check-harness-routing \
                  all lib-verify consumer-check \
                  consumer-check-shipped lib-polyval-gcmsiv \
                  lib-polyval-gcmsiv-short lib-polyval-gcmsiv-compact \
