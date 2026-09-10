@@ -48,10 +48,23 @@ MK   = ROOT / "Makefile"
 # class this repo dislikes -- but it drifts in the SAFE direction: adding a
 # site is fine (the test is >=), and removing or disguising one is exactly what
 # must not pass silently. Update it deliberately when a tool stops minting.
+# ISSUE #107 CHANGED THIS FROM COUNTS TO NAMES. It used to be a per-file
+# count, and a count is restorable by a DECOY: disguise the real site into a
+# shape the scan cannot see, add a swept-looking one beside it, and the total
+# is unchanged --
+#     OUT_TMP="$(mktemp "$REPO_ROOT/unswept-c.XXXXXX")"   # real, unswept, unseen
+#     DECOY_TMP="build-scratch.decoy.$$.txt"              # swept-looking, seen
+# -- "4 minting site(s), all swept", exit 0, while the real temp tarball was
+# neither swept nor seen. Keying on the VARIABLE NAME makes a disguised site a
+# missing NAME, which no decoy under a different name can restore.
+#
+# Still a hand-maintained list, and still drifting in the SAFE direction:
+# adding a site is fine, removing or disguising an expected one is exactly what
+# must not pass silently. Update it deliberately when a tool stops minting.
 EXPECTED_SITES = {
-    "build_release.sh":        2,   # OUT_TMP + NOTES_TMP
-    "check_footprints.py":     1,
-    "check_knob_staleness.sh": 1,
+    "build_release.sh":        {"OUT_TMP", "NOTES_TMP"},
+    "check_footprints.py":     {"bd"},
+    "check_knob_staleness.sh": {"SCRATCH"},
 }
 
 def die(msg):
@@ -64,23 +77,41 @@ def swept_patterns():
     if not pats: die("SCRATCH_TREES is empty")
     return pats
 
+# The variable a minting line assigns to. `None` when the line mints without
+# binding a name -- such a site can satisfy no expectation, which is the safe
+# answer: it is exactly as invisible as a disguised one.
+ASSIGN_SH = re.compile(r'\s*([A-Za-z_]\w*)=')
+ASSIGN_PY = re.compile(r'\s*([A-Za-z_]\w*)\s*=')
+
+
+def _assigned(line, py):
+    m = (ASSIGN_PY if py else ASSIGN_SH).match(line)
+    return m.group(1) if m else None
+
+
+def scan_text(name, text):
+    """(file, line, var, prefix) for every repo-root scratch tree *text* mints."""
+    sites, py = [], name.endswith(".py")
+    for i, line in enumerate(text.splitlines(), 1):
+        if line.lstrip().startswith("#"): continue
+        m = re.search(r'mktemp\s+-d\s+"\$ROOT/([A-Za-z0-9._-]+?)\.?X{3,}"', line)
+        if m: sites.append((name, i, _assigned(line, py), m.group(1) + ".")); continue
+        m = re.search(r'mkdtemp\(\s*prefix\s*=\s*"([^"]+)"\s*,\s*dir\s*=\s*str\(ROOT\)', line)
+        if m: sites.append((name, i, _assigned(line, py), m.group(1))); continue
+        # Hand-rolled `VAR="...$$..."` scratch path, repo-root-relative
+        # (a '/' means it is somewhere else and not ours to sweep).
+        m = re.match(r'\s*([A-Za-z_]\w*)="([^"/]*\$\$[^"/]*)"\s*(?:#.*)?$', line)
+        if m:
+            sites.append((name, i, m.group(1), m.group(2).split("$", 1)[0]))
+    return sites
+
+
 def minting_sites():
-    """(file, line, prefix) for every scratch tree tools/ creates in the repo root."""
+    """(file, line, var, prefix) for every scratch tree tools/ creates in the repo root."""
     sites = []
     for f in sorted((ROOT/"tools").glob("*")):
         if not f.is_file() or f.suffix not in (".py",".sh"): continue
-        for i, line in enumerate(f.read_text().splitlines(), 1):
-            if line.lstrip().startswith("#"): continue
-            m = re.search(r'mktemp\s+-d\s+"\$ROOT/([A-Za-z0-9._-]+?)\.?X{3,}"', line)
-            if m: sites.append((f.name, i, m.group(1) + ".")); continue
-            m = re.search(r'mkdtemp\(\s*prefix\s*=\s*"([^"]+)"\s*,\s*dir\s*=\s*str\(ROOT\)', line)
-            if m: sites.append((f.name, i, m.group(1))); continue
-            # Hand-rolled `VAR="...$$..."` scratch path, repo-root-relative
-            # (a '/' means it is somewhere else and not ours to sweep).
-            m = re.match(r'\s*[A-Za-z_]\w*="([^"/]*\$\$[^"/]*)"\s*(?:#.*)?$', line)
-            if m:
-                literal = m.group(1)
-                sites.append((f.name, i, literal.split("$", 1)[0]))
+        sites.extend(scan_text(f.name, f.read_text()))
     return sites
 
 def covered(prefix, pats):
@@ -89,35 +120,91 @@ def covered(prefix, pats):
         if p == prefix.rstrip("."): return True
     return False
 
+# Positive control. Each fixture is a synthetic tool file that MUST produce a
+# site the scan sees, with the variable name and prefix given. Without this,
+# every green is equally consistent with a scanner whose regexes match nothing
+# -- and the three minting shapes below are precisely what round-2 review broke
+# by rewriting a site into a shape the scan could not see.
+# ASSEMBLED AT RUNTIME, NOT WRITTEN OUT. This file lives in tools/, so the real
+# scan reads it too -- fixtures written literally here would be found as
+# genuine minting sites and reported NOT SWEPT (measured while writing this).
+# Splitting the giveaway tokens keeps this file clean to the scanner while the
+# constructed strings are byte-for-byte the shapes it must recognise. The
+# assertions below would fail loudly if a split ever stopped reconstructing
+# them, so this cannot rot into a fixture that tests nothing.
+_D, _R = "$", "ROOT"
+SELFTEST_FIXTURES = [
+    ("selftest.sh",
+     'SELFTEST_TMP="unswept-selftest.%s%s.tar.gz"\n' % (_D, _D),
+     "SELFTEST_TMP", "unswept-selftest."),
+    ("selftest.sh",
+     'SELFTEST_DIR=%s(mktemp -d "%s%s/unswept-selftest.XXXXXX")\n' % (_D, _D, _R),
+     "SELFTEST_DIR", "unswept-selftest."),
+    ("selftest.py",
+     'sd = Path(tempfile.mkdtemp(prefix="unswept-selftest.", dir=str(%s)))\n' % _R,
+     "sd", "unswept-selftest."),
+]
+
+
+def selftest(pats):
+    """Prove the scanner still sees each minting shape, and still calls an
+    unswept prefix unswept. Runs on every invocation; the green line says so."""
+    if not SELFTEST_FIXTURES:
+        die("the self-test corpus is empty -- a positive control that asserts nothing certifies nothing")
+    for name, text, want_var, want_prefix in SELFTEST_FIXTURES:
+        found = scan_text(name, text)
+        if not found:
+            die(f"POSITIVE CONTROL FAILED: the scan did not see the minting site in `{text.strip()}`. "
+                "A minting shape stopped being recognised, which is how this gate reports 'all swept' "
+                "about a file it never looked at (#87 round-2 review, D6)")
+        _f, _i, var, prefix = found[0]
+        if var != want_var:
+            die(f"POSITIVE CONTROL FAILED: expected the site to bind `{want_var}`, scan bound `{var}`. "
+                "Name-keying is what makes a disguised site a missing NAME rather than a restorable "
+                "count (issue #107)")
+        if covered(prefix, pats):
+            die(f"POSITIVE CONTROL FAILED: `{prefix}*` is an unswept prefix but covered() called it "
+                f"swept against SCRATCH_TREES ({' '.join(pats)}). The coverage test is dead, so "
+                "'all swept' below means nothing")
+    return len(SELFTEST_FIXTURES)
+
+
 def main():
     pats  = swept_patterns()
+    controls = selftest(pats)
     sites = minting_sites()
     if not sites:
         die("found no mktemp/mkdtemp scratch-tree site in tools/ -- either the scan broke or a tool stopped "
             "using one; an empty result must not read as 'all covered'")
 
     # A site the scan can no longer SEE is indistinguishable from a site that
-    # is swept, and the failure is silent in the direction that matters.
+    # is swept, and the failure is silent in the direction that matters. Keyed
+    # on NAMES since #107: a decoy site under a different name no longer
+    # restores a disguised one.
     seen = {}
-    for f, _i, _p in sites:
-        seen[f] = seen.get(f, 0) + 1
-    missing = [(f, n, seen.get(f, 0)) for f, n in sorted(EXPECTED_SITES.items())
-               if seen.get(f, 0) < n]
+    for f, _i, var, _p in sites:
+        if var is not None:
+            seen.setdefault(f, set()).add(var)
+    missing = [(f, sorted(want - seen.get(f, set())))
+               for f, want in sorted(EXPECTED_SITES.items())
+               if want - seen.get(f, set())]
     if missing:
-        for f, want, got in missing:
-            print(f"  {f}: expected at least {want} scratch-minting site(s), scan found {got}",
-                  file=sys.stderr)
+        for f, gone in missing:
+            print(f"  {f}: expected scratch-minting site(s) bound to {', '.join(gone)}; the scan found "
+                  f"{', '.join(sorted(seen.get(f, set()))) or '<none>'}", file=sys.stderr)
         die("a scratch-minting site went MISSING from the scan (see above). Either the tool stopped minting "
             "-- update EXPECTED_SITES deliberately -- or it now mints in a shape this scan cannot see, which "
-            "is how this gate passes without ever looking at the file it must sweep (#87 round-2 review, D6)")
-    bad = [(f,i,p) for f,i,p in sites if not covered(p, pats)]
-    for f,i,p in sites:
-        print(f"  {f}:{i} mints {p or '<no literal prefix>'}*  "
+            "is how this gate passes without ever looking at the file it must sweep (#87 round-2 review, D6). "
+            "A site under a NEW name does not substitute for a missing one (#107)")
+    bad = [(f,i,p) for f,i,_v,p in sites if not covered(p, pats)]
+    for f,i,var,p in sites:
+        print(f"  {f}:{i} {var or '<unbound>'} mints {p or '<no literal prefix>'}*  "
               f"{'swept' if covered(p,pats) else 'NOT SWEPT'}")
     if bad:
         die(f"{len(bad)} scratch prefix(es) are minted but not in SCRATCH_TREES ({' '.join(pats)}) -- "
             f"a run killed with SIGKILL would leave a tree nothing removes")
-    print(f"check_scratch_prefix: {len(sites)} minting site(s), all swept by SCRATCH_TREES ({' '.join(pats)})")
+    print(f"check_scratch_prefix: {len(sites)} minting site(s), all swept by SCRATCH_TREES "
+          f"({' '.join(pats)}), {controls} positive control(s) fired")
 
 if __name__ == "__main__":
     main()

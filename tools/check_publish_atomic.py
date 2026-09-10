@@ -157,16 +157,85 @@ def segments(line):
     return [s.strip() for s in out if s.strip()]
 
 
-def main():
-    if not SCRIPT.is_file():
-        die(f"{SCRIPT} does not exist -- an empty scan must not read as a pass")
-    raw = SCRIPT.read_text().splitlines()
+def command_substitutions(text):
+    """Inner text of every `$( )` and backtick run in *text*, recursively.
 
+    Issue #113, hole 1. A write nested in a command substitution rode in
+    unexamined, because the segment CONTAINING it fullmatched an allowed
+    shape:
+
+        echo "$(cp "$STAMPED" "$NOTES_REL")"      <- passed, exit 0
+        printf %s "$(tee "$NOTES_REL" < "$STAMPED")"
+
+    That is the round-5 family -- "an allowed prefix launders a write" -- one
+    level down. A substitution's contents are simple commands that RUN, and
+    they run inside double quotes too. Only single quotes suppress them, so
+    single-quoted runs are skipped rather than descended into.
+    """
+    out, i, n, sq = [], 0, len(text), False
+    while i < n:
+        c = text[i]
+        if c == "'":
+            sq = not sq; i += 1; continue
+        if sq:
+            i += 1; continue
+        if c == "\\":
+            i += 2; continue
+        if text.startswith("$(", i):
+            depth, j = 1, i + 2
+            start = j
+            while j < n:
+                if text[j] == "'":
+                    j += 1
+                    while j < n and text[j] != "'":
+                        j += 1
+                elif text[j] == "\\":
+                    j += 1
+                elif text.startswith("$(", j):
+                    depth += 1; j += 1
+                elif text[j] == ")":
+                    depth -= 1
+                    if depth == 0:
+                        break
+                j += 1
+            if j < n and depth == 0:
+                out.append(text[start:j]); i = j + 1; continue
+            i += 2; continue
+        if c == "`":
+            j = text.find("`", i + 1)
+            if j == -1:
+                break
+            out.append(text[i + 1:j]); i = j + 1; continue
+        i += 1
+    return out
+
+
+def deep_segments(line):
+    """`segments()`, plus the segments of every command substitution inside.
+
+    Recursive, so a substitution nested in a substitution is reached too.
+    """
+    out = []
+    for seg in segments(line):
+        out.append(seg)
+        for inner in command_substitutions(seg):
+            out.extend(deep_segments(inner))
+    return out
+
+
+def analyze(lines):
+    """(violations, counts, unterminated_heredoc_line, examined_segments).
+
+    The real scan AND the self-test both call this. That is deliberate: a
+    self-test that exercised a reimplementation would certify code the release
+    path does not run.
+    """
     violations = []
     counts = {k: 0 for k in REQUIRED_RENAMES}
     in_heredoc = None
+    examined = 0
 
-    for i, line in enumerate(raw, 1):
+    for i, line in enumerate(lines, 1):
         stripped = line.strip()
 
         if in_heredoc is not None:
@@ -182,12 +251,22 @@ def main():
         if stripped.startswith("#") or not stripped:
             continue
 
-        for name, (pat, _want) in REQUIRED_RENAMES.items():
-            counts[name] += len(pat.findall(stripped))
+        segs = deep_segments(stripped)
 
-        for seg in segments(stripped):
+        # Issue #113, hole 2: this used to be `len(pat.findall(stripped))` over
+        # the RAW LINE, so a quoted mention satisfied the count --
+        #     echo 'mv "$NOTES_TMP" "$NOTES_REL"' >/dev/null
+        # kept the required-rename total at 2 and passed, defeating the very
+        # property the positive half exists for. Count only segments that
+        # FULLMATCH the rename, which is what "the script performs this
+        # rename" actually means.
+        for name, (pat, _want) in REQUIRED_RENAMES.items():
+            counts[name] += sum(1 for s in segs if pat.fullmatch(s))
+
+        for seg in segs:
             if not MENTION.search(STAGED.sub("", seg)):
                 continue
+            examined += 1
             if REDIRECT.search(seg):
                 violations.append((i, seg,
                                    "redirects into a tracked path -- build to a temp and rename it over"))
@@ -201,8 +280,103 @@ def main():
         if stripped.endswith("<<'PY'") or stripped.endswith("<<PY"):
             in_heredoc = i
 
+    return violations, counts, in_heredoc, examined
+
+
+# Every shape a review has walked past this gate, plus the two from #113, as
+# executable assertions. MUST_FLAG lines have to produce a violation; MUST_PASS
+# lines must not, so that tightening the matcher cannot quietly start refusing
+# the real script's legitimate reads.
+#
+# This is contract-watch.md item 4 made concrete: the question is not "does the
+# gate pass" but "has it ever been observed to fail?". Every entry below is a
+# shape that DID pass some earlier revision of this file.
+SELFTEST_MUST_FLAG = [
+    ('echo "$(cp "$STAMPED" "$NOTES_REL")"',
+     "#113 hole 1 -- write nested in a command substitution"),
+    ('printf %s "$(tee "$NOTES_REL" < "$STAMPED")"',
+     "#113 hole 1 -- tee nested in a command substitution"),
+    ('cp "$STAMPED" "${NOTES_REL}"',
+     "round 3 -- braced spelling"),
+    ('install -m 644 "$STAMPED" "$NOTES_REL"',
+     "round 3 -- a different command name"),
+    ('tee "$NOTES_REL" < "$STAMPED"',
+     "round 3 -- tee"),
+    ('grep -q SHA256 "$NOTES_REL" && cp "$STAMPED" "$NOTES_REL"',
+     "round 5 -- an allowed read as the prefix, the write in the suffix"),
+    ('echo "publishing" && cp "$STAMPED" "$NOTES_REL"',
+     "round 5 -- an allowed echo as the prefix"),
+    ('cp "$NOTES_REL" "$NOTES_TMP" && cp "$STAMPED" "$NOTES_REL"',
+     "round 5 -- an allowed cp-as-source as the prefix"),
+    ('echo done > "$NOTES_REL"',
+     "redirection into a tracked path"),
+]
+
+SELFTEST_MUST_PASS = [
+    'mv "$NOTES_TMP" "$NOTES_REL"',
+    'mv "$OUT_TMP" "$OUT"',
+    'cp "$NOTES_REL" "$NOTES_TMP"',
+    'RELEASE_DATE="$(grep -oE \'[0-9]{4}\' "$NOTES_REL" | head -1 || true)"',
+]
+
+
+def selftest():
+    """Positive control: prove the scanner still catches what it exists to catch.
+
+    Without this, every green below is consistent with a matcher that matches
+    nothing -- the failure mode that a mutation of the CODE UNDER TEST can
+    never reveal, because the code under test is a regex. Runs on every
+    invocation; the success line says it fired.
+    """
+    if not SELFTEST_MUST_FLAG or not SELFTEST_MUST_PASS:
+        die("the self-test corpus is empty -- a positive control that asserts "
+            "nothing certifies nothing")
+
+    for line, why in SELFTEST_MUST_FLAG:
+        violations, _c, _h, _e = analyze([line])
+        if not violations:
+            die(f"POSITIVE CONTROL FAILED: the scanner did not flag `{line}` ({why}). "
+                "The matcher is dead or has been loosened -- a clean result from it "
+                "proves nothing. Do not weaken this corpus to go green")
+
+    for line in SELFTEST_MUST_PASS:
+        violations, _c, _h, _e = analyze([line])
+        if violations:
+            die(f"NEGATIVE CONTROL FAILED: the scanner flagged `{line}`, which the "
+                "release script legitimately does. The matcher has been tightened "
+                "past the real script and would refuse a correct release")
+
+    # Hole 2 is a counting defect, not a violation, so it needs its own arm.
+    decoy = """echo 'mv "$NOTES_TMP" "$NOTES_REL"' >/dev/null"""
+    _v, counts, _h, _e = analyze([decoy])
+    if any(counts.values()):
+        die("POSITIVE CONTROL FAILED: a quoted mention still counts as a publish "
+            f"rename ({counts}) -- issue #113 hole 2 has regressed")
+
+    return len(SELFTEST_MUST_FLAG) + len(SELFTEST_MUST_PASS) + 1
+
+
+def main():
+    if not SCRIPT.is_file():
+        die(f"{SCRIPT} does not exist -- an empty scan must not read as a pass")
+    raw = SCRIPT.read_text().splitlines()
+    if not raw:
+        die(f"{SCRIPT} is empty -- an empty scan must not read as a pass")
+
+    controls = selftest()
+
+    violations, counts, in_heredoc, examined = analyze(raw)
+
     if in_heredoc is not None:
         die(f"unterminated heredoc opened at line {in_heredoc} -- a partial scan must not read as a pass")
+
+    # Vacuity guard. The whole gate is about how tracked-file variables are
+    # used; if the scan found none, it examined nothing and its silence is not
+    # evidence (#86/#91 shape).
+    if examined == 0:
+        die("no segment of build_release.sh mentions $NOTES_REL or $OUT -- the scan "
+            "examined nothing, so a clean result is vacuous. Either the script stopped "
+            "publishing or the scanner stopped seeing it")
 
     missing = [(n, w, counts[n]) for n, (_p, w) in REQUIRED_RENAMES.items() if counts[n] != w]
 
@@ -221,9 +395,10 @@ def main():
             "shape this scan cannot see, which is how a gate passes without checking anything (#87)")
 
     total = sum(w for _p, w in REQUIRED_RENAMES.values())
-    print("check_publish_atomic: split every line of build_release.sh into simple commands; every segment "
-          f"mentioning $NOTES_REL/$OUT fully matched an allowed read or a publish rename, {total} required "
-          "rename(s) present, no heredoc body names a tracked path")
+    print("check_publish_atomic: split every line of build_release.sh into simple commands (command "
+          f"substitutions included); {examined} segment(s) mentioning $NOTES_REL/$OUT fully matched an "
+          f"allowed read or a publish rename, {total} required rename(s) present, no heredoc body names a "
+          f"tracked path, {controls} positive/negative control(s) fired")
 
 
 if __name__ == "__main__":
