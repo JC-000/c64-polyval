@@ -361,6 +361,25 @@ def brace_targets():
             die(f"{rel}: mentions {NOAES} but has no `lib-polyval-{{...}}` list within "
                 f"{NEAR} characters of it -- the claim naming which targets suppress the "
                 f"AES rows cannot be reconciled, and must not be skipped")
+
+    # BOTH of these are needed, and neither is implied by the per-file guard
+    # above, which fires only when the NOAES literal APPEARS in a file.
+    #
+    # Measured: renaming NOAES alone -- the shape a rename of the define in the
+    # docs produces -- gave "12 brace list(s) in 5 file(s) ... 0 of them the
+    # NO_AES claim" and exit 0, with all four positive controls firing. Leg (7)
+    # never executed. That is the D11 leg, the one this gate's own comments
+    # call the precedent, switched off by a string literal. The controls test
+    # the PATTERN; they cannot test the gate around it.
+    if not out:
+        die(f"no `lib-polyval-{{...}}` list found in any of {len(BRACE_FILES)} scanned file(s) -- "
+            f"the brace reconciliation examined nothing, and an empty result must not read "
+            f"as 'every claim matches'")
+    if not any(is_noaes for _rel, _names, is_noaes in out):
+        die(f"not one `lib-polyval-{{...}}` list in {len(BRACE_FILES)} scanned file(s) sits within "
+            f"{NEAR} characters of {NOAES} -- so the leg that reconciles WHICH targets suppress "
+            f"the AES rows never executes. Either the define was renamed (update NOAES) or the "
+            f"docs stopped stating the claim in the reconcilable form; both must be deliberate")
     return out
 
 def const_vals():
