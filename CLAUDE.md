@@ -339,6 +339,13 @@ make consumer-check-noaes             # link test/consumer_stub_noaes.s (owns it
                                       #   aes_state/gcmsiv_tag) against polyval-long.a,
                                       #   polyval-short.a AND polyval-compact.a —
                                       #   issue #47 regression guard
+make check-harness-routing            # every host→C64 request must be routed by
+                                      #   c64-test-harness — bans direct
+                                      #   transport.write_memory / load_code, the
+                                      #   upload verbs, hardware-dispatching
+                                      #   managers, raw REST and pattern-kills in
+                                      #   tools/ and test/. See "Do not wedge the
+                                      #   C64U" below; part of `make verify`
 make dist VERSION=v0.8.0              # reproducible source-tarball release
 ```
 Assembler: ca65/ld65/ar65 (cc65 toolchain). Single canonical toolchain as of
