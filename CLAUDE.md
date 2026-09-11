@@ -339,6 +339,13 @@ make consumer-check-noaes             # link test/consumer_stub_noaes.s (owns it
                                       #   aes_state/gcmsiv_tag) against polyval-long.a,
                                       #   polyval-short.a AND polyval-compact.a —
                                       #   issue #47 regression guard
+make check-harness-routing            # every host→C64 request must be routed by
+                                      #   c64-test-harness — bans direct
+                                      #   transport.write_memory / load_code, the
+                                      #   upload verbs, hardware-dispatching
+                                      #   managers, raw REST and pattern-kills in
+                                      #   tools/ and test/. See "Do not wedge the
+                                      #   C64U" below; part of `make verify`
 make dist VERSION=v0.8.0              # reproducible source-tarball release
 ```
 Assembler: ca65/ld65/ar65 (cc65 toolchain). Single canonical toolchain as of
@@ -493,8 +500,12 @@ The victim agent then sees mysterious test failures and may waste hours
 chasing bugs that don't exist in their code or in VICE.
 
 **How to clean up correctly:**
-- `c64-test-harness`'s `UnifiedManager` / `ViceInstanceManager` owns VICE
-  lifecycle. Use it. Don't reach around it.
+- `c64-test-harness`'s `ViceInstanceManager` owns VICE lifecycle. Use it.
+  Don't reach around it. (`UnifiedManager` also owns it, but it is the
+  backend-*dispatching* manager: with `C64_BACKEND=u64` it selects real
+  hardware. Do not reach for it in this repo without reading "Do not wedge
+  the C64U" below — every tool here uses `ViceInstanceManager` directly and
+  that is deliberate.)
 - If you spawn `x64sc` directly (rare; almost always wrong), keep the PID
   from the `subprocess.Popen` object and kill by PID, not by pattern.
 - If you genuinely think a stale instance from a prior session needs
@@ -504,6 +515,81 @@ chasing bugs that don't exist in their code or in VICE.
   leave them alone and let the user reap them.
 
 This rule applies to all Claude sessions in this multi-project workspace.
+
+## Do not wedge the C64U (standing clause, in force until its firmware increments)
+
+**This repo is VICE-only today and nothing in it can reach hardware. That is
+a property to preserve, not a reason to skip this section** — the exposure
+here is entirely in what a future agent is told to do.
+
+The C64 Ultimate (`10.53.21.158`, fw 1.1.0, **CBM** generation) is a shared
+remote device with nobody physically present. Its firmware predates
+GideonZ/1541ultimate#686, so it never collects the managed `/Temp`
+attachments left by every body-carrying REST call — `POST
+/v1/machine:writemem`, `runners:run_prg` / `load_prg` / `run_crt` /
+`sidplay` / `modplay`, multipart `mount_disk`, `drives:load_rom`. About
+**fifteen** PRG-sized uploads fill `/Temp`; REST and the UCI bridge then
+wedge together and **only a physical power-cycle recovers it**. The
+2026-08/09 wedge cost about two weeks of a shared device.
+
+**The two device lines are not interchangeable, and this repo's docs name
+both.** `_ULTIMATE_WRITEMEM_FIXED_FROM = (3, 15)` — an Ultimate-line U64E on
+fw **3.15 or later has the fix** and does not leak. `_CBM_WRITEMEM_FIXED_FROM
+= None` — the **C64U line has no fixed firmware at all**, so
+`writemem_post_safe` is permanently `False` and its PUT/POST threshold stays
+at 128 bytes. Both constants are in `u64_capabilities.py`. Never act on a
+doc that says "hardware" without resolving *which device and which firmware*.
+
+Rules, in force for every agent working in this repo:
+
+- **Route every device request through the harness.** It is the single
+  chokepoint where chunking, `/Temp` hygiene and `DeviceLock` live, so a
+  fleet-wide mitigation lands in one repo instead of six. Use
+  `write_bytes()` / `read_bytes()`, never `transport.write_memory()` and
+  never `load_code()` (a bare alias for the raw write despite the name —
+  it does **not** chunk). `make check-harness-routing` is the pin.
+- **Do not hand-roll cleanup.** `/Temp` hygiene belongs in the harness,
+  below your test. If a test needs a manual GC call to be safe, the guard
+  is missing one layer down — fix it there.
+- **Prefer the non-leaking paths.** A routed `write_bytes()` chunks at 84
+  bytes, under the C64U's 128-byte inclusive boundary (128 B costs zero
+  attachments, 129 B costs exactly one), so it goes out as `PUT ?data=` and
+  leaves nothing behind. REST POST is the leaking path; a bulk write that
+  falls back to it is the one to watch.
+- **Never loop an upload.** A parametrised test, a retry loop, or a
+  multi-speed benchmark sweep that re-uploads a PRG is the exact ~15-cycle
+  shape that wedged the device. Note that a many-operation loop driven from
+  host Python costs a POST per operation, while the same work driven
+  C64-side inside one uploaded PRG costs only the upload.
+- **If anyone ever ports this suite to a U64 backend, the PRG load is the
+  hazard — not the writes.** Every tool here passes `prg_path` to
+  `ViceConfig`, and it reaches VICE as **argv**
+  (`vice_lifecycle.py:741-742`, `args += ["-autostart", cfg.prg_path]`).
+  That is not a `write_memory` call, so it is invisible to
+  `check-harness-routing` and to any audit that greps for writes. **A U64
+  has no argv.** The natural substitution is `client.run_prg()` — a
+  body-carrying POST, one `/Temp` attachment per call. The safe one is
+  `run_prg_via_sys` (`execute.py:1006`), which sends the body through
+  `write_bytes`. The loop is already written: `tools/run_all_tests.py:233`
+  is `insts = [mgr.acquire() for _ in range(3)]`, and `--profile all` runs
+  that for three profiles — **nine machine loads**, against a ~15-upload
+  wedge threshold. A naive port wedges the device in a single run.
+- **Hold the `DeviceLock` across the whole run**, hygiene included.
+- **Never `poweroff()`.** `reboot()` is the recovery verb, and it does not
+  clear a UCI STATE-bit wedge.
+- **Do not reach for the health check when you suspect a wedge — it makes
+  one.** `liveness_probe()` deliberately exercises the POST writemem path
+  and costs **two `/Temp` attachments per call**; `assert_healthy()` wraps
+  it. Measured on the C64U 2026-09-10 by the harness lane (their issue
+  #250, unmerged at time of writing). Neither is reachable from this repo
+  today (`grep` for both in `tools/`+`test/` returns zero) — this is a rule
+  for whoever ports first. Diagnose with `read_mem`, which costs nothing.
+- **Do not touch the device at all** when the C64U is not the point of the
+  task. Live gates stay unset by default — keep them that way.
+
+Full statement, and the switch that retires this clause
+(`DeviceCapabilities.writemem_post_safe`), in `c64-test-harness`'s CLAUDE.md
+§ "Standing hardware-safety clause" and `docs/u64_recovery.md`.
 
 ## Layout (v0.10.0)
 ```
