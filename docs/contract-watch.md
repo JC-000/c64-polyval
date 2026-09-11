@@ -351,7 +351,8 @@ Cleared as it lands; empty means S1/S2 are met for the current contract tag.
    adversarial review → **then** the tag. Never the tag first: that is how
    v0.10.0 shipped four defects.
 
-4. **Audit this repo's own checks for the #194 form — OPEN, not yet done.**
+4. **Audit this repo's own checks for the #194 form — THIRD PASS DONE
+   2026-09-10; the five gates that had no positive control now have one.**
    Filed here 2026-09-07 off contract#194 and nist-curves#142. The question
    is not "do our checks pass" but **"has each one ever been observed to
    fail?"** Candidates, in rough order of exposure: `make
@@ -379,6 +380,38 @@ Cleared as it lands; empty means S1/S2 are met for the current contract tag.
    c64-x25519#133, filed the same day, is #86's exact twin in another repo,
    and contract PR#197 is the fix for the same class — read both before
    fixing ours.
+
+   **Third pass, 2026-09-10 — the remaining five gates.** The first two
+   passes covered the guards that were *absence* assertions. This one asked
+   the same question of the gates that are regex matchers and string
+   comparisons, where no mutation of the library can reveal a dead check:
+   `check_publish_atomic`, `check_scratch_prefix`, `check_footprints`,
+   `check_archive_members`, `check_composing_mode`. All five now run a
+   positive control on every invocation and report the count in their
+   success line. Control counts: 21, 19, 6 groups, 5, 5.
+
+   Vacuity was **already closed** in three of them, recorded so it is not
+   re-audited: `check_footprints` (`len(arms) != 6`, `not seen`, `not ro`,
+   0 labels, missing cold entry), `check_archive_members` (blank `--require`
+   word-split, empty declared list, failing `ar65`, zero members), and
+   `check_composing_mode` (~18 dies). Two new guards were still needed —
+   `brace_targets` had none, and the prefixed-surface comparison had no
+   non-empty assertion.
+
+   Two issues closed on the way: **#107** (`check_scratch_prefix`'s per-file
+   count satisfiable by a decoy) and **#113** (`check_publish_atomic`: a
+   write inside `$( )`, and a quoted mention counting as a publish rename).
+
+   **Four adversarial-review rounds, every one of which broke something**,
+   including two defects in the fixes from the round before. The findings
+   worth carrying to the next repo that does this: a control that models one
+   case and certifies many is the same vacuous-pass shape it was meant to
+   prevent; a control that runs its own copy of the comparator certifies the
+   copy; and a cross-check written as `n in ro and n not in parsed_names`
+   shrinks with `ro`, so the expectation was derived from the thing it
+   checked. The generalized rule is now in `CLAUDE.md`'s working standard,
+   and `c64-test-harness` adopted the same two self-checks as an axis in its
+   own reviewer brief (their commit `6e9feb2`), credited here.
 
    **Second pass, same day, from contract#198 + x25519#139 + chacha#119 —
    one question, asked three ways across the fleet: *is the gate checked in
