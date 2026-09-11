@@ -361,6 +361,25 @@ def brace_targets():
             die(f"{rel}: mentions {NOAES} but has no `lib-polyval-{{...}}` list within "
                 f"{NEAR} characters of it -- the claim naming which targets suppress the "
                 f"AES rows cannot be reconciled, and must not be skipped")
+
+    # BOTH of these are needed, and neither is implied by the per-file guard
+    # above, which fires only when the NOAES literal APPEARS in a file.
+    #
+    # Measured: renaming NOAES alone -- the shape a rename of the define in the
+    # docs produces -- gave "12 brace list(s) in 5 file(s) ... 0 of them the
+    # NO_AES claim" and exit 0, with all four positive controls firing. Leg (7)
+    # never executed. That is the D11 leg, the one this gate's own comments
+    # call the precedent, switched off by a string literal. The controls test
+    # the PATTERN; they cannot test the gate around it.
+    if not out:
+        die(f"no `lib-polyval-{{...}}` list found in any of {len(BRACE_FILES)} scanned file(s) -- "
+            f"the brace reconciliation examined nothing, and an empty result must not read "
+            f"as 'every claim matches'")
+    if not any(is_noaes for _rel, _names, is_noaes in out):
+        die(f"not one `lib-polyval-{{...}}` list in {len(BRACE_FILES)} scanned file(s) sits within "
+            f"{NEAR} characters of {NOAES} -- so the leg that reconciles WHICH targets suppress "
+            f"the AES rows never executes. Either the define was renamed (update NOAES) or the "
+            f"docs stopped stating the claim in the reconcilable form; both must be deliberate")
     return out
 
 def const_vals():
@@ -381,7 +400,89 @@ PREFIXED = {
 }
 SUFFIXES = ("SIZE","REGION","SHARED")
 
+def selftest():
+    """Positive control over the four matchers this gate's verdict rests on.
+
+    This file is unusually well guarded against an EMPTY parse -- ~18 explicit
+    dies, each earned by a review. What none of them can catch is a matcher
+    that still matches SOMETHING but no longer matches the shape that matters:
+    a narrowed regex reconciles a smaller set against a smaller set and every
+    row still prints. Rebuilding the library cannot reveal that, because the
+    code under test is a regex over source and prose.
+
+    Drives the same module-level patterns and the same doc_arms() the real run
+    uses, over synthetic inputs in the real formats.
+    """
+    checks = 0
+
+    # 1. The brace lists. D11 is the precedent: `lib-polyval-{long,short}` sat
+    #    four lines from a corrected sentence, claiming two NO_AES targets
+    #    against the Makefile's three, and every other leg was green on it.
+    got = [(m.group(1), m.group(2)) for m in BRACE.finditer(
+        "lib-polyval-{long,short,compact} and lib-polyval-gcmsiv-{short,compact}")]
+    if got != [(None, "long,short,compact"), ("gcmsiv-", "short,compact")]:
+        die(f"POSITIVE CONTROL FAILED: BRACE parsed {got} out of a known pair of brace "
+            "lists. A narrowed pattern reconciles fewer claims against fewer targets and "
+            "still prints a row for each (D11)")
+    checks += 1
+
+    # 2. The §8.4 invocation parse. `parsed no LIB_PRECALC_TABLE invocation`
+    #    covers zero; it does not cover a pattern that has stopped seeing SOME.
+    m = INVOKE.match('LIB_PRECALC_TABLE "aes_sbox", 256, aes_sbox, polyval,')
+    if not m or m.groups()[:3] != ("aes_sbox", "256", "aes_sbox"):
+        die(f"POSITIVE CONTROL FAILED: INVOKE did not parse a well-formed "
+            f"LIB_PRECALC_TABLE line (got {m.groups() if m else None}) -- the "
+            "enumeration this gate reconciles is built by this pattern")
+    checks += 1
+
+    # 3. The include-guard exclusion, both directions. Over-matching here marks
+    #    a real invocation conditional and drops it from the enumeration.
+    if not GUARD.match(".ifndef PRECALC_TABLE_INCLUDED"):
+        die("POSITIVE CONTROL FAILED: GUARD did not match a real include guard -- "
+            "guarded blocks would be read as genuine conditionals")
+    if GUARD.match(".ifdef LIB_POLYVAL_NO_AES"):
+        die("NEGATIVE CONTROL FAILED: GUARD matched `.ifdef LIB_POLYVAL_NO_AES`, "
+            "which is a genuine conditional, not an include guard -- a real "
+            "conditional would be excused as one")
+    checks += 1
+
+    # 3b. The BARE/PREFIXED families themselves, over the real export names.
+    #     Both sides of the prefixed comparison come from ONE pattern, so a
+    #     collapsed pattern gives {} == {} -- the shape the d_pre guard now
+    #     anchors. This proves the patterns still match what they are for.
+    for obj, name, fam in (
+        ("lib_version.o",      "LIB_VERSION_MAJOR",              "BARE"),
+        ("lib_version.o",      "LIB_POLYVAL_VERSION_MAJOR",      "PREFIXED"),
+        ("lib_version.o",      "LIB_POLYVAL_ABI_VERSION",        "PREFIXED"),
+        ("precalc_manifest.o", "LIB_PRECALC_aes_sbox_SIZE",      "BARE"),
+        ("precalc_manifest.o", "LIB_POLYVAL_PRECALC_aes_sbox_SIZE", "PREFIXED"),
+    ):
+        pat = (BARE if fam == "BARE" else PREFIXED)[obj]
+        if not pat.match(name):
+            die(f"POSITIVE CONTROL FAILED: {fam}[{obj!r}] does not match {name!r}, a real "
+                f"export of that object. A family pattern that has stopped matching makes its "
+                f"whole comparison vacuous -- and the prefixed one compares two sets built "
+                f"from itself, so it would read as 'unchanged'")
+    # and the two families must not overlap, or suppression would look partial
+    if BARE["lib_version.o"].match("LIB_POLYVAL_VERSION_MAJOR"):
+        die("NEGATIVE CONTROL FAILED: the BARE pattern matches a PREFIXED name, so a correctly "
+            "suppressed build would report bare names surviving")
+    checks += 1
+
+    # 4. doc_arms' two disjoint grammars. A cell read as the WRONG kind
+    #    reconciles against the wrong arm set and still passes.
+    if doc_arms("`polyval-gcmsiv.a`, `polyval-gcmsiv-short.a`", "<control>") != \
+       ("archives", {"polyval-gcmsiv.a", "polyval-gcmsiv-short.a"}):
+        die("POSITIVE CONTROL FAILED: doc_arms misread a backticked archive cell")
+    if doc_arms("LONG and COMPACT", "<control>") != ("profiles", {"long", "compact"}):
+        die("POSITIVE CONTROL FAILED: doc_arms misread an uppercase profile cell")
+    checks += 1
+
+    return checks
+
+
 def main():
+    controls = selftest()
     for tool in ("ca65","ld65","od65","make"):
         if not shutil.which(tool): die(f"{tool} not on PATH")
 
@@ -433,6 +534,23 @@ def main():
                 if not d_bare:
                     notes.append("NO BARE NAMES IN THE DEFAULT BUILD -- nothing to suppress, so the "
                                  "suppression assertion below would pass vacuously")
+                # The other half of that guard, and it was missing. `d_pre !=
+                # n_pre` compares two sets built from the SAME pattern, so a
+                # PREFIXED[obj] that matches nothing gives {} == {} and passes
+                # -- while the summary line goes on claiming the run "keeps
+                # every prefixed one".
+                #
+                # Measured: collapsing PREFIXED["lib_version.o"] to a pattern
+                # matching nothing printed "prefixed  0 ->  0   ok" for all six
+                # arms and exited 0. precalc_manifest.o is anchored downstream
+                # (its prefixed names feed `union`, and leg (4)'s
+                # `never = set(doc) - union` goes red), but lib_version.o's
+                # prefixed set feeds NOTHING -- two definitions, one
+                # self-comparison and a print. This is that anchor.
+                if not d_pre:
+                    notes.append("NO PREFIXED NAMES IN THE DEFAULT BUILD -- the prefixed-surface "
+                                 "comparison below is {} == {}, which passes without checking "
+                                 "anything; the pattern has stopped matching")
                 if n_bare:  notes.append(f"{len(n_bare)} bare name(s) SURVIVED suppression: {sorted(n_bare)[:3]}")
                 if d_pre != n_pre:
                     notes.append(f"prefixed surface CHANGED: {len(d_pre)} -> {len(n_pre)}, "
@@ -584,7 +702,8 @@ def main():
     if bad: die(f"{bad} assertion(s) failed -- see the rows above")
     print(f"check_composing_mode: suppression removes every bare name and keeps every prefixed one, "
           f"all 6 arms; {len(doc)} enumerated table(s) reconcile with {DOC.name}; "
-          f"the shipped surface links against each AEAD archive in the composing mode")
+          f"the shipped surface links against each AEAD archive in the composing mode; "
+          f"{controls} positive control group(s) fired")
 
 if __name__ == "__main__":
     main()

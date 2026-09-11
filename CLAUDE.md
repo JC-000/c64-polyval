@@ -68,6 +68,40 @@ tooling returned a confident wrong answer without one; the v1.2.0 member-
 isolation verdict in the §3 ledger is what a red/green link probe looks like
 when it is done right.
 
+**A gate must carry its own positive control, and the control must cover
+every case the gate does.** A check that scans, greps, globs or compares a
+generated artifact has a failure mode no mutation of the code under test can
+reveal: it goes green because it examined an empty set, a renamed path, or a
+pattern that stopped matching. So every such gate here runs its control on
+every invocation and says so in its success line — the evidence belongs in
+the run, not in a transcript nobody rereads. Three rules, each paid for:
+
+- **One control arm per case.** `check_harness_routing.sh` shipped a control
+  that planted one violation and certified fifteen bans; a reviewer killed
+  thirteen of them, left three real violations in the tree, and got
+  "positive control caught", exit 0. The ban list and the control corpus are
+  now one list.
+- **The control must drive the code the real path runs**, not a copy.
+  `check_archive_members.sh` ran its own `grep -qxF` beside the assertion it
+  was certifying; mutating the real one left all four arms green.
+- **A control is not a vacuity guard.** It tests the matcher, not the gate
+  around it, and it only covers the shapes its own fixtures name. Assert
+  something about the RESULT as well: a named floor, an expected count, a
+  cross-check against an independent witness. Two instances in one branch —
+  `check_composing_mode`'s NO_AES leg could be switched off by renaming a
+  string literal while all four controls still fired, and `check_footprints`'
+  map cross-check was written as `n in ro and ...`, so narrowing `ro`
+  shrank the check with it. **If the expectation is derived from the thing
+  it checks, it is not a check.**
+
+When a gate's fixtures must live in a file the gate itself scans, assemble
+them at runtime rather than writing them literally — `check_scratch_prefix`'s
+fixtures were read by the real scan as genuine minting sites, and
+`check_harness_routing` had to exclude itself (exactly one file, with a guard
+asserting the exclusion cannot widen). Note also that `check_composing_mode`
+parses brace lists in `CLAUDE.md`, `API.md` and `README.md` as real claims,
+so an illustrative one written into prose fails the gate.
+
 **Shell checks: `||` in a `;`-chain does not propagate.**
 `X || (echo "FAIL"; exit 1)` inside a longer chain prints FAIL and exits 0 —
 the leg is structurally incapable of failing. Write

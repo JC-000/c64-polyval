@@ -116,6 +116,71 @@ WORK=$(mktemp -d "${TMPDIR:-/tmp}/archmembers.XXXXXX") || \
 cleanup() { rm -rf "$WORK"; }
 trap cleanup EXIT INT TERM HUP
 
+# --- POSITIVE CONTROL ------------------------------------------------------
+# Both assertions below are string comparisons. A string comparison that has
+# quietly stopped comparing passes exactly like a correct archive, and no
+# mutation of the LIBRARY can reveal that -- the code under test here is
+# `grep -qxF` and `cmp`. So drive both over synthetic member lists first, and
+# refuse to report on the real archive if either fails to notice a defect.
+#
+# Arms 2 and 3 are this script's own MEASURED regressions, promoted from
+# comments into assertions: an archive holding lib_versionXo once satisfied a
+# floor asking for lib_version.o (missing -F), and the declared-set comparison
+# is the half that caught a member silently not archived.
+# THE COMPARATORS, SHARED BY THE CONTROL AND THE REAL ASSERTIONS.
+# rev-120 D2: the first cut of this control ran its own literal `grep -qxF`
+# and `cmp`, so it certified a COPY. Mutating the real floor check to
+# `grep -q` left all four controls green and an archive holding
+# `xlib_version.oy` reported "4 members, as declared, contract floor present,
+# 5 positive controls fired", exit 0 -- the exact regression the control's
+# comment cites. Both now go through these functions, so a control green means
+# the code the real path runs was exercised.
+floor_missing() {   # $1 = file holding the actual member list; rest = required
+  _actual=$1; shift
+  _missing=""
+  for _want in "$@"; do
+    if ! grep -qxF -- "$_want" "$_actual"; then
+      _missing="$_missing $_want"
+    fi
+  done
+  printf '%s' "$_missing"
+}
+
+sets_differ() {     # $1 = expected file, $2 = actual file; 0 when they DIFFER
+  if cmp -s "$1" "$2"; then return 1; fi
+  return 0
+}
+
+SELF=$WORK/selftest
+mkdir -p "$SELF"
+printf 'a.o\nb.o\n' > "$SELF/actual"
+
+# 1. a name that is ABSENT must be reported absent.
+if [ -z "$(floor_missing "$SELF/actual" c.o)" ]; then
+  fail "POSITIVE CONTROL: floor_missing() did not report 'c.o' absent from a list that does not contain it -- it is not comparing, so 'contract floor present' below would mean nothing"
+fi
+# 2. '.' must not match any character (the -F property, measured).
+printf 'lib_versionXo\n' > "$SELF/dotted"
+if [ -z "$(floor_missing "$SELF/dotted" lib_version.o)" ]; then
+  fail "POSITIVE CONTROL: 'lib_version.o' matched 'lib_versionXo' -- the floor is being matched as a regex, so a wrongly-named member would satisfy it"
+fi
+# 3. a name that IS present must be found (a matcher that always fails would
+#    pass arms 1 and 2 while asserting nothing).
+if [ -n "$(floor_missing "$SELF/actual" a.o)" ]; then
+  fail "POSITIVE CONTROL: floor_missing() reported 'a.o' absent from a list containing it -- it always fails, so arms 1 and 2 prove nothing"
+fi
+# 4. the declared-set comparison must notice a surplus member.
+printf 'a.o\n' > "$SELF/expected"
+if ! sets_differ "$SELF/expected" "$SELF/actual"; then
+  fail "POSITIVE CONTROL: sets_differ() called a 1-member list equal to a 2-member list -- the declared-set assertion is dead"
+fi
+# 5. and must NOT report a difference where there is none (a comparator that
+#    always differs would pass arm 4 while refusing every correct archive).
+if sets_differ "$SELF/actual" "$SELF/actual"; then
+  fail "POSITIVE CONTROL: sets_differ() called a list different from itself -- it always differs, so arm 4 proves nothing"
+fi
+rm -rf "$SELF"
+
 # ar65 t is the actual member list. Capture its exit status explicitly: a
 # failing ar65 that printed nothing must not be read as "the archive is empty".
 if ! ar65 t "$ARCHIVE" > "$WORK/actual.raw" 2> "$WORK/err"; then
@@ -132,15 +197,11 @@ if [ ! -s "$WORK/actual" ]; then
 fi
 
 # --- assertion 1: the required floor ---------------------------------------
-missing=""
-for want in $REQUIRED; do
-  # -F: the names contain '.', which a BRE would match against any character.
-  # Measured: without -F, an archive holding lib_versionXo satisfied a floor
-  # asking for lib_version.o.
-  if ! grep -qxF -- "$want" "$WORK/actual"; then
-    missing="$missing $want"
-  fi
-done
+# -F lives in floor_missing() above, which the controls drive: the names
+# contain '.', which a BRE would match against any character. Measured:
+# without -F, an archive holding lib_versionXo satisfied a floor asking for
+# lib_version.o.
+missing=$(floor_missing "$WORK/actual" $REQUIRED)
 if [ -n "$missing" ]; then
   echo "check_archive_members: FAIL -- $ARCHIVE is missing a member every archive MUST ship" >&2
   for m in $missing; do
@@ -155,7 +216,7 @@ for obj in "$@"; do
   basename "$obj"
 done | sort > "$WORK/expected"
 
-if ! cmp -s "$WORK/expected" "$WORK/actual"; then
+if sets_differ "$WORK/expected" "$WORK/actual"; then
   echo "check_archive_members: FAIL -- $ARCHIVE does not contain the members its rule declares" >&2
   comm -23 "$WORK/expected" "$WORK/actual" | sed 's/^/  MISSING from the archive:   /' >&2
   comm -13 "$WORK/expected" "$WORK/actual" | sed 's/^/  UNEXPECTED in the archive: /' >&2
@@ -164,4 +225,4 @@ if ! cmp -s "$WORK/expected" "$WORK/actual"; then
   exit 1
 fi
 
-echo "check_archive_members: $ARCHIVE -- $(wc -l < "$WORK/actual" | tr -d ' ') members, as declared, contract floor present"
+echo "check_archive_members: $ARCHIVE -- $(wc -l < "$WORK/actual" | tr -d ' ') members, as declared, contract floor present, 5 positive controls fired"
