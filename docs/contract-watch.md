@@ -346,10 +346,29 @@ Cleared as it lands; empty means S1/S2 are met for the current contract tag.
    Release gate, in order: board cleared → version bump in `VERSION`,
    `src/lib_version.s` **and `API.md` §9.1's value table** → notes with the seven rows → `make clean &&
    make dist` → reproducibility re-run → full VICE suite on all three profiles
-   → a U64E confirmation run (JC-000 offered the hardware; it is confirmatory,
-   not diagnostic, since the PRGs are byte-identical) → release PR →
+   → an **optional** U64E confirmation run (JC-000 offered the hardware; it is
+   confirmatory, not diagnostic, since the PRGs are byte-identical — so skip
+   it rather than improvise) → release PR →
    adversarial review → **then** the tag. Never the tag first: that is how
    v0.10.0 shipped four defects.
+
+   **If that confirmation run happens, it is a U64E on firmware >= 3.15,
+   under `DeviceLock`, and nothing else.** Pinned 2026-09-10; before this the
+   step said only "a U64E confirmation run", naming no host and no firmware,
+   while the only hardware this repo otherwise discusses is the **C64U**
+   (nine deferred "optional C64U 16/48/64 MHz hardware sweep" release-notes
+   files, v0.4.1 through v0.8.0, the carry-forward chain stopping at v0.9.0
+   — count with `git grep -lE "C64U" -- docs/RELEASE_NOTES_\*.md`, since the
+   phrase wraps in v0.4.1 and a "hardware sweep" grep silently returns
+   eight). The two are not
+   interchangeable: the Ultimate line is fixed from fw 3.15
+   (`_ULTIMATE_WRITEMEM_FIXED_FROM`), the C64U line has **no** fixed firmware
+   (`_CBM_WRITEMEM_FIXED_FROM = None`) and never collects the `/Temp`
+   attachments that body-carrying REST calls leave behind — ~15 PRG uploads
+   wedge it, physical power-cycle only, ~2 weeks lost the last time. A
+   confirmatory run is never worth that risk: **skip it** if the U64E is not
+   available and its firmware not confirmed. CLAUDE.md § "Do not wedge the
+   C64U" is binding here.
 
 4. **Audit this repo's own checks for the #194 form — THIRD PASS DONE
    2026-09-10; the five gates that had no positive control now have one.**

@@ -128,6 +128,15 @@ python3.13 tools/benchmark_polyval.py     # CIA-timer cycle benchmarks
 python3.13 tools/polyval_reference.py     # Python reference self-test (no VICE)
 ```
 
+The test suite runs on VICE only. Every host→C64 request goes through
+`c64-test-harness`, which is the single place chunking, cleanup and
+device locking live; `make check-harness-routing` (part of `make verify`)
+asserts nothing in `tools/` or `test/` reaches around it. If you point
+this suite at real hardware, read the "Do not wedge the C64U" section of
+`CLAUDE.md` first — the C64 Ultimate line has firmware that never
+reclaims the temporary files a REST upload leaves behind, and roughly
+fifteen uploads wedge it until someone power-cycles it physically.
+
 ## Library contract
 
 c64-polyval implements [c64-lib-contract](https://github.com/JC-000/c64-lib-contract)
