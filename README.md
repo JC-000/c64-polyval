@@ -33,7 +33,11 @@ decides the question.
 - [VICE](https://vice-emu.sourceforge.io/) emulator (for testing) with
   `x64sc`
 - Python 3.10+ with
-  [c64-test-harness](https://github.com/JC-000/c64-test-harness)
+  [c64-test-harness](https://github.com/JC-000/c64-test-harness) (and
+  `cryptography` for the GCM-SIV cross-checks). The commands below say
+  `python3`; substitute whichever interpreter has those packages. The
+  `make verify` gates need only the standard library and run under
+  `$(PYTHON)`, default `python3` — override with `make verify PYTHON=...`.
 
 ## Build
 
@@ -79,7 +83,7 @@ archive hash.
 ## Test
 
 ```bash
-python3.13 tools/run_all_tests.py [--seed N|random] [--iterations N] \
+python3 tools/run_all_tests.py [--seed N|random] [--iterations N] \
     [--fuzz-iterations N] [--profile long|short|compact|all] [--verbose]
 ```
 
@@ -119,13 +123,13 @@ Individual suites can be run directly (each builds the profile it is
 given; `--seed random` samples and prints a fresh seed):
 
 ```bash
-python3.13 tools/test_polyval_direct.py   # POLYVAL unit tests
-python3.13 tools/test_gcmsiv_polyval.py   # AES-256-GCM-SIV end-to-end
-python3.13 tools/test_gcmsiv_bounds.py    # #69/#70 regression tests
-python3.13 tools/test_hazmat_fuzz.py      # differential fuzz vs hazmat_oracle.py
-python3.13 tools/hazmat_oracle.py         # oracle self-check (no VICE)
-python3.13 tools/benchmark_polyval.py     # CIA-timer cycle benchmarks
-python3.13 tools/polyval_reference.py     # Python reference self-test (no VICE)
+python3 tools/test_polyval_direct.py   # POLYVAL unit tests
+python3 tools/test_gcmsiv_polyval.py   # AES-256-GCM-SIV end-to-end
+python3 tools/test_gcmsiv_bounds.py    # #69/#70 regression tests
+python3 tools/test_hazmat_fuzz.py      # differential fuzz vs hazmat_oracle.py
+python3 tools/hazmat_oracle.py         # oracle self-check (no VICE)
+python3 tools/benchmark_polyval.py     # CIA-timer cycle benchmarks
+python3 tools/polyval_reference.py     # Python reference self-test (no VICE)
 ```
 
 The test suite runs on VICE only. Every host→C64 request goes through

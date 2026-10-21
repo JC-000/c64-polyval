@@ -483,18 +483,31 @@ Caught in review of PR #63 before tagging.
 
 ## Test
 ```
-python3.13 tools/run_all_tests.py --seed 8452                 # all three profiles (~3.5 min)
-python3.13 tools/run_all_tests.py --profile short             # one profile (~70 s)
-python3.13 tools/run_all_tests.py --seed random --fuzz-iterations 20
-python3.13 tools/test_polyval_direct.py [--seed N|random] [--iterations N]
-python3.13 tools/test_gcmsiv_polyval.py [--seed N|random] [--iterations N]
-python3.13 tools/test_gcmsiv_bounds.py  [--seed N|random] [--profile P]   # regression: #69, #70
-python3.13 tools/test_hazmat_fuzz.py    [--seed N|random] [--iterations N] [--profile P]
-python3.13 tools/hazmat_oracle.py                            # oracle self-check, no VICE
+$PY tools/run_all_tests.py --seed 8452                 # all three profiles (~3.5 min)
+$PY tools/run_all_tests.py --profile short             # one profile (~70 s)
+$PY tools/run_all_tests.py --seed random --fuzz-iterations 20
+$PY tools/test_polyval_direct.py [--seed N|random] [--iterations N]
+$PY tools/test_gcmsiv_polyval.py [--seed N|random] [--iterations N]
+$PY tools/test_gcmsiv_bounds.py  [--seed N|random] [--profile P]   # regression: #69, #70
+$PY tools/test_hazmat_fuzz.py    [--seed N|random] [--iterations N] [--profile P]
+$PY tools/hazmat_oracle.py                            # oracle self-check, no VICE
 ```
-**Use `python3.13` explicitly** — system `python3` is 3.9 on this machine,
-and `c64-test-harness` requires 3.10+. Tests need `x64sc` (VICE) on PATH and
-the `c64-test-harness` Python package installed. `cryptography` is required
+**`$PY` is the shared harness venv: `~/.local/share/c64-harness/venv/bin/python`**
+(brew Python 3.15 + `c64-test-harness` master + `cryptography`, managed by
+the `new-computer-setup` session). Brew `python3` has neither package, and
+host policy is no repo venvs, no `pip install` into brew Python, and no
+version pins — ask that session when a shared test package is needed. (The
+earlier "use `python3.13`" line was the previous Mac's workaround for a 3.9
+system `python3`; the `make` gates no longer name an interpreter version
+either — they are stdlib-only and run under `$(PYTHON)`, default `python3`,
+overridable as `make verify PYTHON=...`. `make dist` passes it on to
+`build_release.sh`'s stamper.) `$PY` is not the only interpreter a test run
+uses: every suite's build step calls plain `make`, whose `all` target runs
+`vice_label_shim.py` under `$(PYTHON)` — so a bare `python3` must also be on
+PATH. That script is stdlib-only, so brew's suffices. `c64-test-harness`
+requires 3.10+.
+Tests need `x64sc` (VICE) on PATH and the `c64-test-harness` Python package
+installed. `cryptography` is required
 by the reference cross-check and the GCM-SIV suite; `test_hazmat_fuzz.py`
 alone treats it as optional (its hazmat cross-checks become counted SKIPs).
 

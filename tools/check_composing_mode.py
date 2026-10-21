@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.13
+#!/usr/bin/env python3
 """check_composing_mode.py -- exercise the mode a composing consumer builds in.
 
 Issues #89 and #94. `-D LIB_NO_BARE_EXPORTS=1` is what a consumer linking two

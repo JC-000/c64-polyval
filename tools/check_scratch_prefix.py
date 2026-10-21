@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.13
+#!/usr/bin/env python3
 """check_scratch_prefix.py -- every scratch tree a tool mints must be one
 `make clean` sweeps.
 
