@@ -28,7 +28,7 @@ Sections (mirrors the 2026-08 hazmat audit driver):
      convention and the dec_buf wipe
 
 Usage:
-    python3.13 tools/test_hazmat_fuzz.py [--seed N|random] [--iterations N]
+    python3 tools/test_hazmat_fuzz.py [--seed N|random] [--iterations N]
                                          [--profile long|short|compact]
 
 Requires: Python 3.10+, c64_test_harness, VICE x64sc.  `cryptography` optional.

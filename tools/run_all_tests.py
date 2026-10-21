@@ -19,7 +19,7 @@ No `make clean` between profiles: the parse-time flag stamp (issue #58)
 evicts objects assembled under a different POLYVAL_PROFILE.
 
 Usage:
-    python3.13 tools/run_all_tests.py [--seed S|random] [--iterations N]
+    python3 tools/run_all_tests.py [--seed S|random] [--iterations N]
         [--fuzz-iterations N] [--profile long|short|compact|all] [--verbose]
 
 Requires: Python 3.10+, c64_test_harness, VICE x64sc

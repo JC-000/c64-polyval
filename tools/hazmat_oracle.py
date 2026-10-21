@@ -28,7 +28,7 @@ key/nonce ones), FIPS-197 AES-256 vector, the GHASH relation from
 Appendix A, plus the hazmat cross-checks when available.
 
 Run standalone:
-    python3.13 tools/hazmat_oracle.py
+    python3 tools/hazmat_oracle.py
 """
 
 import random

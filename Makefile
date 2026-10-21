@@ -893,7 +893,7 @@ clean-build:
 # exact set of arms each table appears in. Reconciling the manifest against
 # ITSELF cannot see a table deleted from every arm at once.
 check-composing-mode:
-	@python3.13 $(TOOLS_DIR)/check_composing_mode.py
+	@$(PYTHON) $(TOOLS_DIR)/check_composing_mode.py
 
 # --- §5 footprint equates still bound reality (issue #95) ------------------
 # LIB_POLYVAL_RESIDENT_BYTES / _COLD_BYTES are hand-maintained constants,
@@ -903,7 +903,7 @@ check-composing-mode:
 # shipped this defect in the UNSAFE direction on one day. Placed LAST because
 # it rebuilds all six configurations; ~6 s against ~1 s for everything above.
 check-footprints:
-	@python3.13 $(TOOLS_DIR)/check_footprints.py
+	@$(PYTHON) $(TOOLS_DIR)/check_footprints.py
 
 # --- every minted scratch tree is one `make clean` sweeps (issue #93) ------
 # Cheap source scan, no build. It exists because #93's own fix shipped with a
@@ -911,7 +911,7 @@ check-footprints:
 # that enumerated two trees and missed a third: two places that must agree,
 # with nothing checking they do.
 check-scratch-prefix:
-	@python3.13 $(TOOLS_DIR)/check_scratch_prefix.py
+	@$(PYTHON) $(TOOLS_DIR)/check_scratch_prefix.py
 
 # --- §2 ZP slots stay distinct under CONTRACT_ZP_DEFINES (issue #105) ------
 # src/zp_config.s asserts at ASSEMBLY time that no two slots' byte ranges
@@ -944,7 +944,7 @@ check-zp-slots:
 # an edit back to `cp`, and the damage shows up only under a process-group
 # SIGKILL at the right microsecond.
 check-publish-atomic:
-	@python3.13 $(TOOLS_DIR)/check_publish_atomic.py
+	@$(PYTHON) $(TOOLS_DIR)/check_publish_atomic.py
 
 # --- every device request goes through the harness (2026-09-10 audit) ------
 # Source scan, no build. The harness is the single chokepoint where chunking,

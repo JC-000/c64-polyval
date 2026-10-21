@@ -22,7 +22,7 @@ that is RED on the code as audited and turns GREEN once the fix lands:
     pt_len=64 must keep working.
 
 Usage:
-    python3.13 tools/test_gcmsiv_bounds.py [--seed N|random]
+    python3 tools/test_gcmsiv_bounds.py [--seed N|random]
                                            [--profile long|short|compact]
 
 Requires: Python 3.10+, c64_test_harness, VICE x64sc

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.13
+#!/usr/bin/env python3
 """check_publish_atomic.py -- build_release.sh must PUBLISH by rename only.
 
 Issue #87. The release script writes exactly two tracked files,

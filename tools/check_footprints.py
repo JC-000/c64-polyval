@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.13
+#!/usr/bin/env python3
 """check_footprints.py -- assert the §5 footprint equates still bound reality.
 
 Issue #95. LIB_POLYVAL_RESIDENT_BYTES and LIB_POLYVAL_COLD_BYTES were
