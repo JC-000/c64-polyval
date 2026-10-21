@@ -359,7 +359,7 @@ cp "$NOTES_REL" "$STAGE_ROOT/$NOTES_REL"
 # sentinel and had check_publish_atomic.py police what the body did with it;
 # round-5 review defeated that by renaming one variable inside the body. Not
 # receiving the path is the property. Policing its use was only the shadow.
-if ! python3 - "$STAGE_ROOT/$NOTES_REL" <<'PY'
+if ! "${PYTHON:-python3}" - "$STAGE_ROOT/$NOTES_REL" <<'PY'
 import re, sys, pathlib
 p = pathlib.Path(sys.argv[1])   # staged copy -- the only thing rewritten here
 text = p.read_text()
@@ -481,7 +481,7 @@ SHA=$(shasum -a 256 "$OUT_TMP" | cut -d' ' -f1)
 STAMPED="${STAGE_DIR}/notes.stamped.md"
 # Same discipline as the reset step: this heredoc sees the staged copy and the
 # scratch destination, never the working-tree path.
-if ! python3 - "$STAGE_ROOT/$NOTES_REL" "$STAMPED" "$SIZE" "$SHA" <<'PY'
+if ! "${PYTHON:-python3}" - "$STAGE_ROOT/$NOTES_REL" "$STAMPED" "$SIZE" "$SHA" <<'PY'
 import sys, pathlib
 src, dst, size, sha = sys.argv[1:5]
 text = pathlib.Path(src).read_text()

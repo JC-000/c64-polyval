@@ -1140,4 +1140,4 @@ dist: verify
 	  echo "usage: make dist VERSION=vX.Y.Z" >&2; \
 	  exit 1; \
 	fi
-	@$(TOOLS_DIR)/build_release.sh $(VERSION)
+	@PYTHON="$(PYTHON)" $(TOOLS_DIR)/build_release.sh $(VERSION)

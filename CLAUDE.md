@@ -500,7 +500,12 @@ version pins — ask that session when a shared test package is needed. (The
 earlier "use `python3.13`" line was the previous Mac's workaround for a 3.9
 system `python3`; the `make` gates no longer name an interpreter version
 either — they are stdlib-only and run under `$(PYTHON)`, default `python3`,
-overridable as `make verify PYTHON=...`.) `c64-test-harness` requires 3.10+.
+overridable as `make verify PYTHON=...`. `make dist` passes it on to
+`build_release.sh`'s stamper.) `$PY` is not the only interpreter a test run
+uses: every suite's build step calls plain `make`, whose `all` target runs
+`vice_label_shim.py` under `$(PYTHON)` — so a bare `python3` must also be on
+PATH. That script is stdlib-only, so brew's suffices. `c64-test-harness`
+requires 3.10+.
 Tests need `x64sc` (VICE) on PATH and the `c64-test-harness` Python package
 installed. `cryptography` is required
 by the reference cross-check and the GCM-SIV suite; `test_hazmat_fuzz.py`
